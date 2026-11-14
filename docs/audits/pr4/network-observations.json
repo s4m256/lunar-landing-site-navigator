@@ -1,0 +1,14 @@
+[
+  {
+    "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de421.bsp",
+    "utc": "2026-11-14T14:55:57.845895+00:00",
+    "error_type": "URLError",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710%27&CENTER=%27coord%40301%27&MAKE_EPHEM=%27YES%27",
+    "utc": "2026-11-14T14:55:57.859771+00:00",
+    "error_type": "URLError",
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  }
+]

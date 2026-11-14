@@ -1,4 +1,4 @@
-"""Scientific integration boundary; no scientific algorithms yet."""
+"""Legacy integration status retained independently of the geometric engine."""
 
 
 def get_status() -> dict[str, str]:
