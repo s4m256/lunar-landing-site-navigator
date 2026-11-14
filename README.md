@@ -1,6 +1,6 @@
 # Lunar Landing Site Navigator
 
-Base de desenvolvimento para o NASA Space Apps 2026. Aplicação React + TypeScript e módulo Python independentes, preparados para trabalho paralelo. Este repositório ainda **não executa análises científicas**, não contém dados NASA e não pressupõe vínculo oficial com a NASA.
+Base de desenvolvimento para o NASA Space Apps 2026. Aplicação React + TypeScript e módulo Python independentes, preparados para trabalho paralelo. O pacote Python calcula direções geométricas aparentes com SPICE; não calcula energia, enlace, topografia ou segurança de pouso. O exemplo histórico usa dados JPL/NAIF obtidos de um espelho documentado. O projeto não pressupõe vínculo oficial com a NASA.
 
 ## Estrutura e responsabilidades
 
@@ -54,3 +54,7 @@ Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks. Nã
 A configuração da Vercel instala e compila a partir da raiz e publica `frontend/dist`. Veja [deploy, integração de PRs e diagnóstico](docs/deploy.md) para configurar a conta Vercel, executar os checks de infraestrutura e investigar falhas. O deploy publica somente o frontend; o pacote científico Python permanece independente.
 
 Após `npm run build`, execute `npm run check:deploy` para verificar os artefatos publicáveis. Os testes dessa verificação rodam com `npm run test:infra`.
+
+## Motor geométrico científico
+
+O subcomando Python `analyze` calcula direções aparentes reais dos centros do Sol e da Terra para dois locais lunares. Veja [comandos, modelos, contratos, fontes e limitações](science/GEOMETRY.md). Há um exemplo histórico calculado em `science/examples/result.json`; o kernel demonstrativo não cobre 2026. A validação independente com Horizons permanece bloqueada por acesso de rede, registrada sem residual numérico inventado.

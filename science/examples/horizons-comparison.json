@@ -1,0 +1,10 @@
+{
+  "status": "blocked_or_invalid_reference",
+  "comparisons": [],
+  "notes": [
+    "Horizons orientation/DE version and spherical observer model must be checked in retained headers.",
+    "Residuals compare different ephemeris/orientation configurations; no physical tolerance assumed.",
+    "Observer coordinate altitude is km above the lunar reference surface; verify Horizons radius in header."
+  ],
+  "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+}

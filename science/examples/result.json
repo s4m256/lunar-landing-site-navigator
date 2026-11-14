@@ -1,0 +1,249 @@
+{
+  "schema_version": "1.0.0",
+  "request": {
+    "schema_version": "1.0.0",
+    "frame": "IAU_MOON",
+    "surface_radius_m": 1737400,
+    "sites": [
+      {
+        "id": "south-a",
+        "latitude_deg": -89.5,
+        "longitude_east_deg": 0,
+        "height_m": 0
+      },
+      {
+        "id": "south-b",
+        "latitude_deg": -89,
+        "longitude_east_deg": 90,
+        "height_m": 0
+      }
+    ],
+    "start_utc": "2007-01-01T00:00:00Z",
+    "end_utc": "2007-01-01T03:00:00Z",
+    "step_seconds": 3600
+  },
+  "series": [
+    {
+      "site_id": "south-a",
+      "target": "SUN",
+      "samples": [
+        {
+          "utc": "2007-01-01T00:00:00.000Z",
+          "azimuth_deg": 36.3329150910356,
+          "elevation_deg": 1.8439534951569565
+        },
+        {
+          "utc": "2007-01-01T01:00:00.000Z",
+          "azimuth_deg": 35.82741555709542,
+          "elevation_deg": 1.8462721267319704
+        },
+        {
+          "utc": "2007-01-01T02:00:00.000Z",
+          "azimuth_deg": 35.32192128689676,
+          "elevation_deg": 1.8485578700555967
+        }
+      ]
+    },
+    {
+      "site_id": "south-a",
+      "target": "EARTH",
+      "samples": [
+        {
+          "utc": "2007-01-01T00:00:00.000Z",
+          "azimuth_deg": 3.6167981723799603,
+          "elevation_deg": 6.673293716706273
+        },
+        {
+          "utc": "2007-01-01T01:00:00.000Z",
+          "azimuth_deg": 3.6506087736589166,
+          "elevation_deg": 6.686448881479966
+        },
+        {
+          "utc": "2007-01-01T02:00:00.000Z",
+          "azimuth_deg": 3.684189733627422,
+          "elevation_deg": 6.698928575603994
+        }
+      ]
+    },
+    {
+      "site_id": "south-b",
+      "target": "SUN",
+      "samples": [
+        {
+          "utc": "2007-01-01T00:00:00.000Z",
+          "azimuth_deg": 306.2999676792002,
+          "elevation_deg": 2.033331123332807
+        },
+        {
+          "utc": "2007-01-01T01:00:00.000Z",
+          "azimuth_deg": 305.79446211332834,
+          "elevation_deg": 2.0259207902258805
+        },
+        {
+          "utc": "2007-01-01T02:00:00.000Z",
+          "azimuth_deg": 305.2889656262391,
+          "elevation_deg": 2.0184637209002245
+        }
+      ]
+    },
+    {
+      "site_id": "south-b",
+      "target": "EARTH",
+      "samples": [
+        {
+          "utc": "2007-01-01T00:00:00.000Z",
+          "azimuth_deg": 273.4999231042907,
+          "elevation_deg": 6.236095091667542
+        },
+        {
+          "utc": "2007-01-01T01:00:00.000Z",
+          "azimuth_deg": 273.5334596868178,
+          "elevation_deg": 6.249855058696917
+        },
+        {
+          "utc": "2007-01-01T02:00:00.000Z",
+          "azimuth_deg": 273.5667790880111,
+          "elevation_deg": 6.262935714931742
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "schema_version": "1.0.0",
+    "engine_version": "0.2.0",
+    "spiceypy_version": "8.0.0",
+    "numpy_version": "2.5.4",
+    "cspice_version": "CSPICE_N0067",
+    "frame": "IAU_MOON",
+    "correction": "CN+S",
+    "frame_epoch": "OBSERVER",
+    "time_scale": "UTC input/output; TDB seconds past J2000 internally",
+    "surface_radius_m": 1737400,
+    "horizon_elevation_deg": 0,
+    "azimuth_convention": "north=0, east=90; undefined at zenith/nadir or geographic pole uses supplied longitude meridian and azimuth 0 for vertical rays",
+    "kernels": [
+      {
+        "filename": "de405s_littleendian.bsp",
+        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/de405s_littleendian.bsp",
+        "sha256": "b52400cfa5bdfbb4ce94c578beb999d30d7ab5e715be0cd5628ffbf5d7042236",
+        "type": "SPK",
+        "coverage_et": {
+          "1": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "2": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "3": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "4": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "5": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "6": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "7": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "8": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "9": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "10": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "199": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "299": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "301": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "399": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ],
+          "499": [
+            [
+              -94651137.81606464,
+              315662463.18395346
+            ]
+          ]
+        }
+      },
+      {
+        "filename": "pck00010.tpc",
+        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/pck00010.tpc",
+        "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2",
+        "type": "PCK",
+        "coverage_et": {}
+      },
+      {
+        "filename": "naif0012.tls",
+        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/naif0012.tls",
+        "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+        "type": "LSK",
+        "coverage_et": {}
+      }
+    ],
+    "horizons_validation": "not_performed_in_engine",
+    "limitations": [
+      "Spherical reference, planetocentric latitude, east longitude [0,360).",
+      "IAU_MOON analytic PCK orientation, not high-accuracy lunar PA/ME orientation.",
+      "No topography, refraction, disk extent, eclipses, power or communication guarantee.",
+      "Flat tangent horizon remains zero at nonzero observer height; no spherical horizon dip.",
+      "Half-open [start,end); steps follow UTC calendar labels (SI spacing changes across leap seconds); millisecond formatting is not an accuracy claim.",
+      "Kernel temporal coverage is restricted; no extrapolation is performed.",
+      "Independent comparison is external to this engine; no physical accuracy certified."
+    ]
+  }
+}

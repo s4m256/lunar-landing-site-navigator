@@ -5,7 +5,7 @@
 - Use o checkout existente: tarefas na nuvem já são isoladas. Não crie worktrees sem pedido explícito.
 - Trabalhe em uma branch própria e abra PR; não faça push de funcionalidades em `main`.
 - Frontend em `frontend/`, ciência em `science/`, interfaces compartilhadas em `contracts/`.
-- Esta base não implementa ciência. Não invente datasets, métricas, resultados, unidades ou alegações de validação científica.
+- O núcleo geométrico calcula direções aparentes com SPICE. Não invente datasets, métricas, resultados, unidades ou alegações de validação científica; respeite as limitações em science/GEOMETRY.md.
 - Preserve alterações existentes do usuário. Nunca versione segredos, `.venv`, dependências ou artefatos gerados.
 
 ## Colaboração em paralelo

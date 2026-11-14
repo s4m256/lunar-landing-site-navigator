@@ -19,3 +19,7 @@ O produtor atual é `python -m lunar_science` (ou `lunar-science` após instala�
 ## Evolução
 
 Use versionamento semântico do contrato. Mudanças incompatíveis, inclusive novos campos obrigatórios ou valores de status, exigem nova versão principal. Como esta versão rejeita campos desconhecidos e fixa `schema_version`, qualquer nova versão precisa de atualização explícita do consumidor e dos testes; nenhuma compatibilidade automática é prometida. Antes de introduzir dados científicos, documente fontes, licença, proveniência, unidades, sistema de coordenadas lunar, intervalos válidos, valores ausentes e incerteza. Atualize schema, fixture, tipos TypeScript, produtor Python e testes juntos.
+
+## Famílias científicas adicionais
+
+`analysis-request.v1.schema.json`, `analysis-result.v1.schema.json` e `scientific-provenance.v1.schema.json` são contratos novos e independentes (versão 1.0.0 cada). Não substituem nem estendem silenciosamente `science-status` 1.0.0. Veja `../science/GEOMETRY.md` para semântica temporal, unidades, referencial, superfície e limitações. O exemplo calculado está em `../science/examples/result.json`.

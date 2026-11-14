@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lunar-science"
-version = "0.1.0"
-description = "Scientific module scaffold for Lunar Landing Site Navigator"
+version = "0.2.0"
+description = "Batch lunar apparent center geometry using NAIF CSPICE"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["spiceypy==8.0.0", "jsonschema==4.23.0"]
 
 [project.optional-dependencies]
 dev = ["pytest==8.3.5", "jsonschema==4.23.0", "build==1.2.2.post1"]
@@ -21,3 +21,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+lunar_science = ["schemas/*.json"]

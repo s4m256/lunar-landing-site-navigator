@@ -1,0 +1,32 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/cspice/spkcpo_c.html",
+    "file": "spkcpo_c.html",
+    "sha256": "bc1eecf4fc28be11f748a16536538eb34e7bb8eac6cc9a7a06540ac3e2a7a9cd"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/cspice/spkssb_c.html",
+    "file": "spkssb_c.html",
+    "sha256": "7af3210ce7039397feedc5d8dc2295b605f3c9b4b0e5a2e36f5ff59e8d91af80"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/cspice/stelab_c.html",
+    "file": "stelab_c.html",
+    "sha256": "eb38b86d59901964009f0b5062abe45f933944a130b14f268958a23037456487"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/req/frames.html",
+    "file": "frames.html",
+    "sha256": "4cc40ccf85a5415e2d6fe68c624737ddc4b0bd1810b6e2e8af516be0c650370a"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/req/time.html",
+    "file": "time.html",
+    "sha256": "45480eb7837e32522db9f2583c4d1ffe7599fff7a77f2a88cdddd62e857175f2"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/nasa/EMTG/master/depend/cspice/doc/html/req/abcorr.html",
+    "file": "abcorr.html",
+    "sha256": "303fe49633a0202c38070ab2018fda7550d57bd5b9d7c53bfed3e479ba4766d5"
+  }
+]
