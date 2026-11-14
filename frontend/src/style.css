@@ -1,0 +1,7 @@
+ :root { font-family: system-ui, sans-serif; color: #e5edf8; background: #101827; line-height: 1.6; }
+body { margin: 0; }
+main { max-width: 56rem; margin: 0 auto; padding: 4rem 1.5rem; }
+h1 { font-size: clamp(2rem, 6vw, 3.5rem); line-height: 1.15; }
+.eyebrow, small { color: #b4c7e0; }
+section { margin-top: 2.5rem; padding: 1.5rem; border: 1px solid #4c6383; border-radius: .75rem; }
+[role="status"] { color: #f3cd85; font-weight: 600; }
