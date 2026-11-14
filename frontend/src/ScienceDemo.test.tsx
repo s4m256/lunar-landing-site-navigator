@@ -8,7 +8,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import data from "../../docs/audits/pr4/result-2026.json";
 import { ScienceDemo } from "./ScienceDemo";
-import { App } from "./App";
+import { LegacyApp as App } from "./App";
 
 afterEach(cleanup);
 const changeDate = (date: string) =>

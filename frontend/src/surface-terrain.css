@@ -1,0 +1,189 @@
+.lg-surface-terrain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  outline: none;
+  background: #182024;
+  isolation: isolate;
+}
+.lg-surface-terrain:focus-visible {
+  outline: 3px solid #ffe3a2;
+  outline-offset: -4px;
+}
+.lg-terrain-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  cursor: grab;
+}
+.lg-terrain-canvas:active {
+  cursor: grabbing;
+}
+.lg-terrain-canvas:focus-visible {
+  outline: 3px solid #ffe3a2;
+  outline-offset: -4px;
+}
+.lg-surface-marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.landing-guide .lg-surface-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid #f0ce8a;
+  border-radius: 50%;
+  background: #152024;
+  color: #ffe1a1;
+  font-size: 18px;
+  font-weight: 650;
+  box-shadow: 0 3px 13px #0008;
+  pointer-events: auto;
+}
+.landing-guide .lg-surface-marker-B {
+  color: #bce7f0;
+  border-color: #bce7f0;
+  border-radius: 7px;
+}
+.landing-guide .lg-surface-marker:hover {
+  background: #29383d;
+  border-color: #fff5df;
+}
+.landing-guide .lg-surface-marker.is-outside {
+  width: auto;
+  min-width: 68px;
+  height: auto;
+  min-height: 48px;
+  padding: 6px 10px;
+  gap: 1px;
+}
+.lg-surface-marker small {
+  font:
+    11px/1.2 system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+.lg-surface-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px #000);
+}
+.lg-surface-crosshair i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 20px;
+  height: 1px;
+  background: #fff7da;
+}
+.lg-surface-crosshair i:nth-child(2) {
+  left: 20px;
+  top: 0;
+  bottom: 0;
+  right: auto;
+  width: 1px;
+  height: auto;
+}
+.lg-surface-crosshair span {
+  position: absolute;
+  inset: 11px;
+  border: 1px solid #fff7da;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #151e2080;
+}
+.lg-terrain-loading,
+.lg-terrain-failure {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  width: min(430px, calc(100% - 50px));
+  padding: 25px;
+  border: 1px solid #73807e;
+  border-radius: 12px;
+  background: #142024ed;
+  text-align: center;
+  color: #e8ede5;
+}
+.lg-terrain-loading strong,
+.lg-terrain-failure strong {
+  display: block;
+  font-size: 18px;
+}
+.lg-terrain-loading p,
+.lg-terrain-failure p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+.lg-terrain-loading-mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #dfd7b6;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  box-shadow: 0 0 0 7px #dfd7b610;
+}
+.lg-terrain-notice,
+.lg-terrain-solar-notice {
+  position: absolute;
+  left: 50%;
+  top: 82px;
+  transform: translateX(-50%);
+  max-width: 500px;
+  width: calc(100% - 70px);
+  padding: 9px 14px;
+  background: #101a21e8;
+  border: 1px solid #a6a896;
+  border-radius: 5px;
+  color: #f0e8d0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.lg-terrain-solar-notice {
+  top: 115px;
+}
+@media (max-width: 700px) {
+  .lg-terrain-notice,
+  .lg-terrain-solar-notice {
+    font-size: 12px;
+    top: 86px;
+    width: calc(100% - 40px);
+  }
+  .lg-surface-marker small {
+    font-size: 11px;
+  }
+}
+@media (prefers-contrast: more) {
+  .landing-guide .lg-surface-marker {
+    border-width: 3px;
+  }
+  .lg-terrain-notice,
+  .lg-terrain-solar-notice {
+    background: #081115;
+    color: #fff;
+  }
+}

@@ -1,0 +1,232 @@
+.lg-moon-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  outline: none;
+  isolation: isolate;
+}
+.lg-moon-view:focus-visible {
+  outline: 2px solid #f1c77d;
+  outline-offset: -5px;
+  border-radius: 12px;
+}
+.lg-moon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+}
+.lg-moon-view:not(.lg-decorative-moon) .lg-moon-svg {
+  cursor: grab;
+}
+.lg-moon-view:not(.lg-decorative-moon) .lg-moon-svg:active {
+  cursor: grabbing;
+}
+.lg-illustrated-minerals {
+  fill: #363c38;
+  opacity: 0.18;
+}
+.lg-graticule {
+  fill: none;
+  stroke: #f1f2e9;
+  stroke-width: 1;
+  opacity: 0.22;
+}
+.lg-limb {
+  fill: none;
+  stroke: #d6dbcf;
+  stroke-width: 0.8;
+  opacity: 0.38;
+}
+.lg-map-edge {
+  fill: #10181a;
+  stroke: #465256;
+  stroke-width: 1;
+}
+.lg-marker {
+  color: #f1c77d;
+}
+.lg-marker-b {
+  color: #b7d9e2;
+}
+.lg-marker-leader {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.lg-marker-point {
+  fill: currentColor;
+  stroke: #142026;
+  stroke-width: 2;
+}
+.lg-marker-badge {
+  fill: #10191c;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.lg-marker-text {
+  fill: currentColor;
+  font:
+    600 22px system-ui,
+    sans-serif;
+}
+.lg-hidden-marker text {
+  fill: currentColor;
+  font:
+    500 18px system-ui,
+    sans-serif;
+  letter-spacing: 0.03em;
+}
+.lg-crosshair {
+  fill: none;
+  stroke: #fff9e9;
+  stroke-width: 1.5;
+  opacity: 0.9;
+  pointer-events: none;
+}
+.lg-crosshair circle {
+  fill: #0d1519;
+  fill-opacity: 0.25;
+}
+.lg-map-note {
+  font:
+    500 15px system-ui,
+    sans-serif;
+  fill: #c4cdcc;
+}
+.lg-view-access {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  width: min(660px, 80%);
+  text-align: center;
+  color: #bbc7c9;
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+  pointer-events: none;
+}
+.lg-view-access p {
+  margin: 0 0 5px;
+  font: inherit;
+}
+.lg-view-access span {
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+  color: #d0d8d7;
+}
+.lg-decorative-moon {
+  min-height: 0;
+}
+.lg-decorative-moon .lg-moon-svg {
+  touch-action: auto;
+  pointer-events: none;
+}
+.lg-flat-map .lg-view-access {
+  bottom: 15%;
+}
+@media (max-width: 650px) {
+  .lg-moon-view {
+    min-height: 260px;
+  }
+  .lg-view-access {
+    bottom: 12%;
+    width: 83%;
+    font-size: 12px;
+  }
+  .lg-view-access span {
+    font-size: 12px;
+  }
+  .lg-flat-map .lg-view-access {
+    bottom: 18%;
+  }
+  .lg-marker-text {
+    font-size: 25px;
+  }
+  .lg-marker-badge {
+    stroke-width: 2;
+  }
+  .lg-hidden-marker text {
+    font-size: 23px;
+  }
+  .lg-map-note {
+    font-size: 20px;
+  }
+  .lg-graticule {
+    stroke-width: 1.3;
+  }
+}
+@media (prefers-contrast: more) {
+  .lg-graticule {
+    opacity: 0.6;
+  }
+  .lg-marker-leader {
+    stroke-width: 3;
+  }
+  .lg-view-access {
+    color: #fff;
+  }
+}
+.lg-moon-marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lg-moon-marker-button {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #f1c77d;
+  border-radius: 50%;
+  background: #0f191e;
+  color: #f1c77d;
+  box-shadow: 0 3px 18px #05090b55;
+  font:
+    600 18px/1 system-ui,
+    sans-serif;
+  padding: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.lg-moon-marker-button:hover {
+  background: #293035;
+}
+.lg-moon-marker-button:focus-visible {
+  outline: 3px solid #fff6dc;
+  outline-offset: 4px;
+}
+.lg-moon-marker-b {
+  border-color: #b7d9e2;
+  color: #b7d9e2;
+  border-radius: 9px;
+}
+.lg-moon-marker-button.lg-marker-outside {
+  width: auto;
+  min-width: 84px;
+  max-width: 135px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  gap: 3px;
+  font-size: 16px;
+}
+.lg-moon-marker-button small {
+  font:
+    12px/1.1 system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+.lg-view-access .lg-art-caption {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 6px;
+}

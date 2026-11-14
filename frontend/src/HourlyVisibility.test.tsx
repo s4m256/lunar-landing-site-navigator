@@ -8,7 +8,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import dataset from "../../docs/data/mvp-b-hourly.json";
 import { HourlyVisibility } from "./HourlyVisibility";
-import { App } from "./App";
+import { LegacyApp as App } from "./App";
 
 afterEach(cleanup);
 function check(target: "SUN" | "EARTH", date: string, hour: string) {

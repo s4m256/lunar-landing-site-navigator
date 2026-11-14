@@ -1,5 +1,7 @@
 # MVP B — terreno indisponível e verificações controladas
 
+**Registro histórico da geração do dataset MVP B.** A aquisição foi resolvida posteriormente no [pacote de mudanças 1](landing-guide-package-1.md), para visualização topográfica. O dataset horário original conserva `topographic_visible: null`; sombras GPU não foram convertidas em novos resultados científicos.
+
 ## Resultado da aquisição nesta execução
 
 Foram tentadas requisições HTTPS GET normais ao label candidato `LDEM_80S_80M` no PDS Geosciences, ao índice NASA PGDA e ao índice NASA LOLA. As três foram rejeitadas pelo proxy no CONNECT com **HTTP 403**, antes de receber metadados do produto. As URLs, horários e erros estão em [dem-access.json](evidence/mvp-b/dem-access.json).

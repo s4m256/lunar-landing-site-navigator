@@ -9,8 +9,17 @@ const status = parseScienceStatus(example);
 
 import { ScienceDemo } from "./ScienceDemo";
 import { HourlyVisibility } from "./HourlyVisibility";
+import { LandingGuide } from "./LandingGuide";
 
 export function App() {
+  if (new URLSearchParams(window.location.search).get("interface") === "legacy") {
+    return <><a className="legacy-return" href="/">← Voltar ao Landing Guide</a><LegacyApp /></>;
+  }
+  return <LandingGuide />;
+}
+
+/** Preserved scientific/planning screens for existing integrations and tests. */
+export function LegacyApp() {
   const [mode, setMode] = useState<"demo" | "planning" | "hourly">("demo");
   return (
     <>
