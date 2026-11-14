@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "scientific-provenance 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "engine_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spiceypy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "numpy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cspice_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frame": {
+      "const": "IAU_MOON"
+    },
+    "correction": {
+      "const": "CN+S"
+    },
+    "frame_epoch": {
+      "const": "OBSERVER"
+    },
+    "time_scale": {
+      "const": "UTC input/output; TDB seconds past J2000 internally"
+    },
+    "surface_radius_m": {
+      "const": 1737400
+    },
+    "horizon_elevation_deg": {
+      "const": 0
+    },
+    "azimuth_convention": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kernels": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coverage_et": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "required": [
+          "filename",
+          "url",
+          "sha256",
+          "type",
+          "coverage_et"
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "horizons_validation": {
+      "const": "not_performed_in_engine"
+    }
+  },
+  "required": [
+    "schema_version",
+    "engine_version",
+    "spiceypy_version",
+    "numpy_version",
+    "cspice_version",
+    "frame",
+    "correction",
+    "frame_epoch",
+    "time_scale",
+    "surface_radius_m",
+    "horizon_elevation_deg",
+    "azimuth_convention",
+    "kernels",
+    "limitations",
+    "horizons_validation"
+  ]
+}

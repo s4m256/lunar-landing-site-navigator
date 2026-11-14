@@ -1,0 +1,20 @@
+[
+  {
+    "filename": "de405s_littleendian.bsp",
+    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/de405s_littleendian.bsp",
+    "sha256": "b52400cfa5bdfbb4ce94c578beb999d30d7ab5e715be0cd5628ffbf5d7042236",
+    "reference_md5": "b4bb31ce13a006a4b20c124ad58b933a"
+  },
+  {
+    "filename": "pck00010.tpc",
+    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/pck00010.tpc",
+    "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2",
+    "reference_md5": "da153641f7346bd5b6a1226778e0d51b"
+  },
+  {
+    "filename": "naif0012.tls",
+    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/naif0012.tls",
+    "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+    "reference_md5": "25a2fff30b0dedb4d76c06727b1895b1"
+  }
+]

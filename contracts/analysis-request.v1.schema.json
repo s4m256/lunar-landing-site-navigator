@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "analysis-request 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "frame": {
+      "const": "IAU_MOON"
+    },
+    "surface_radius_m": {
+      "const": 1737400
+    },
+    "sites": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "latitude_deg": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude_east_deg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 360
+          },
+          "height_m": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          }
+        },
+        "required": [
+          "id",
+          "latitude_deg",
+          "longitude_east_deg",
+          "height_m"
+        ]
+      }
+    },
+    "start_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
+    },
+    "end_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
+    },
+    "step_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    }
+  },
+  "required": [
+    "schema_version",
+    "frame",
+    "surface_radius_m",
+    "sites",
+    "start_utc",
+    "end_utc",
+    "step_seconds"
+  ]
+}

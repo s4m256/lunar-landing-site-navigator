@@ -26,12 +26,16 @@ jobs:
       - run: npm run check:deploy
   science:
     runs-on: ubuntu-latest
+    env:
+      LUNAR_KERNEL_DIR: ${{ runner.temp }}/lunar-kernels
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install -e './science[dev]'
+      - name: Fetch checksum-verified historical JPL kernels
+        run: python -m lunar_science fetch-kernels --kernel-set science/examples/kernel-set.json --kernel-dir "$LUNAR_KERNEL_DIR"
       - run: python -m pytest
         working-directory: science
       - run: python -m build science
@@ -39,6 +43,6 @@ jobs:
         shell: bash
         run: |
           python -m venv "$RUNNER_TEMP/lunar-wheel"
-          "$RUNNER_TEMP/lunar-wheel/bin/python" -m pip install --no-deps science/dist/*.whl
+          "$RUNNER_TEMP/lunar-wheel/bin/python" -m pip install science/dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/lunar-wheel/bin/lunar-science"
