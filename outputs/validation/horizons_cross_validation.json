@@ -1,0 +1,272 @@
+{
+  "site_id": "shackleton_ridge",
+  "site_name": "Shackleton\u2013de Gerlache Connecting Ridge",
+  "latitude_deg": -89.45,
+  "longitude_east_deg": 222.5,
+  "elevation_m": 1953.07,
+  "frame": "MOON_ME (de421.bsp + moon_pa_de421_1900-2050.bpc)",
+  "aberration": "LT+S",
+  "max_sun_angular_diff_deg": 1.3e-05,
+  "max_earth_angular_diff_deg": 3.6e-05,
+  "sample_count": 16,
+  "sun_comparisons": [
+    {
+      "timestamp_utc": "2026-11-15T00:00:00Z",
+      "spice_az_deg": 251.91787,
+      "spice_el_deg": 1.3857,
+      "horizons_az_deg": 251.91787,
+      "horizons_el_deg": 1.3857,
+      "angular_diff_deg": 9e-06
+    },
+    {
+      "timestamp_utc": "2026-11-17T00:00:00Z",
+      "spice_az_deg": 227.56752,
+      "spice_el_deg": 1.18223,
+      "horizons_az_deg": 227.56753,
+      "horizons_el_deg": 1.18224,
+      "angular_diff_deg": 6e-06
+    },
+    {
+      "timestamp_utc": "2026-11-19T00:00:00Z",
+      "spice_az_deg": 203.24517,
+      "spice_el_deg": 1.04266,
+      "horizons_az_deg": 203.24517,
+      "horizons_el_deg": 1.04266,
+      "angular_diff_deg": 3e-06
+    },
+    {
+      "timestamp_utc": "2026-11-21T00:00:00Z",
+      "spice_az_deg": 178.95046,
+      "spice_el_deg": 0.99094,
+      "horizons_az_deg": 178.95046,
+      "horizons_el_deg": 0.99094,
+      "angular_diff_deg": 5e-06
+    },
+    {
+      "timestamp_utc": "2026-11-23T00:00:00Z",
+      "spice_az_deg": 154.6789,
+      "spice_el_deg": 1.0338,
+      "horizons_az_deg": 154.67891,
+      "horizons_el_deg": 1.0338,
+      "angular_diff_deg": 9e-06
+    },
+    {
+      "timestamp_utc": "2026-11-25T00:00:00Z",
+      "spice_az_deg": 130.42036,
+      "spice_el_deg": 1.1607,
+      "horizons_az_deg": 130.42037,
+      "horizons_el_deg": 1.16068,
+      "angular_diff_deg": 1.2e-05
+    },
+    {
+      "timestamp_utc": "2026-11-27T00:00:00Z",
+      "spice_az_deg": 106.15986,
+      "spice_el_deg": 1.34751,
+      "horizons_az_deg": 106.15986,
+      "horizons_el_deg": 1.3475,
+      "angular_diff_deg": 1.3e-05
+    },
+    {
+      "timestamp_utc": "2026-11-29T00:00:00Z",
+      "spice_az_deg": 81.88211,
+      "spice_el_deg": 1.56146,
+      "horizons_az_deg": 81.88211,
+      "horizons_el_deg": 1.56145,
+      "angular_diff_deg": 1.3e-05
+    },
+    {
+      "timestamp_utc": "2026-12-01T00:00:00Z",
+      "spice_az_deg": 57.57691,
+      "spice_el_deg": 1.76509,
+      "horizons_az_deg": 57.57692,
+      "horizons_el_deg": 1.76508,
+      "angular_diff_deg": 1.1e-05
+    },
+    {
+      "timestamp_utc": "2026-12-03T00:00:00Z",
+      "spice_az_deg": 33.24147,
+      "spice_el_deg": 1.92091,
+      "horizons_az_deg": 33.24148,
+      "horizons_el_deg": 1.9209,
+      "angular_diff_deg": 8e-06
+    },
+    {
+      "timestamp_utc": "2026-12-05T00:00:00Z",
+      "spice_az_deg": 8.87952,
+      "spice_el_deg": 1.99774,
+      "horizons_az_deg": 8.87952,
+      "horizons_el_deg": 1.99774,
+      "angular_diff_deg": 5e-06
+    },
+    {
+      "timestamp_utc": "2026-12-07T00:00:00Z",
+      "spice_az_deg": 344.49927,
+      "spice_el_deg": 1.97729,
+      "horizons_az_deg": 344.49927,
+      "horizons_el_deg": 1.97729,
+      "angular_diff_deg": 5e-06
+    },
+    {
+      "timestamp_utc": "2026-12-09T00:00:00Z",
+      "spice_az_deg": 320.11129,
+      "spice_el_deg": 1.85867,
+      "horizons_az_deg": 320.1113,
+      "horizons_el_deg": 1.85868,
+      "angular_diff_deg": 8e-06
+    },
+    {
+      "timestamp_utc": "2026-12-11T00:00:00Z",
+      "spice_az_deg": 295.72645,
+      "spice_el_deg": 1.65924,
+      "horizons_az_deg": 295.72646,
+      "horizons_el_deg": 1.65925,
+      "angular_diff_deg": 9e-06
+    },
+    {
+      "timestamp_utc": "2026-12-13T00:00:00Z",
+      "spice_az_deg": 271.35431,
+      "spice_el_deg": 1.41142,
+      "horizons_az_deg": 271.35431,
+      "horizons_el_deg": 1.41143,
+      "angular_diff_deg": 9e-06
+    },
+    {
+      "timestamp_utc": "2026-12-15T00:00:00Z",
+      "spice_az_deg": 247.00226,
+      "spice_el_deg": 1.15622,
+      "horizons_az_deg": 247.00226,
+      "horizons_el_deg": 1.15623,
+      "angular_diff_deg": 8e-06
+    }
+  ],
+  "earth_comparisons": [
+    {
+      "timestamp_utc": "2026-11-15T00:00:00Z",
+      "spice_az_deg": 134.8561,
+      "spice_el_deg": -3.94107,
+      "horizons_az_deg": 134.8561,
+      "horizons_el_deg": -3.94105,
+      "angular_diff_deg": 1.5e-05
+    },
+    {
+      "timestamp_utc": "2026-11-17T00:00:00Z",
+      "spice_az_deg": 132.2785,
+      "spice_el_deg": -1.33673,
+      "horizons_az_deg": 132.2785,
+      "horizons_el_deg": -1.33671,
+      "angular_diff_deg": 1.8e-05
+    },
+    {
+      "timestamp_utc": "2026-11-19T00:00:00Z",
+      "spice_az_deg": 130.57501,
+      "spice_el_deg": 1.47693,
+      "horizons_az_deg": 130.57501,
+      "horizons_el_deg": 1.47694,
+      "angular_diff_deg": 1.7e-05
+    },
+    {
+      "timestamp_utc": "2026-11-21T00:00:00Z",
+      "spice_az_deg": 130.46944,
+      "spice_el_deg": 4.01056,
+      "horizons_az_deg": 130.46945,
+      "horizons_el_deg": 4.01057,
+      "angular_diff_deg": 1.1e-05
+    },
+    {
+      "timestamp_utc": "2026-11-23T00:00:00Z",
+      "spice_az_deg": 132.34239,
+      "spice_el_deg": 5.61961,
+      "horizons_az_deg": 132.34239,
+      "horizons_el_deg": 5.61961,
+      "angular_diff_deg": 4e-06
+    },
+    {
+      "timestamp_utc": "2026-11-25T00:00:00Z",
+      "spice_az_deg": 135.8033,
+      "spice_el_deg": 5.6765,
+      "horizons_az_deg": 135.8033,
+      "horizons_el_deg": 5.67649,
+      "angular_diff_deg": 1.4e-05
+    },
+    {
+      "timestamp_utc": "2026-11-27T00:00:00Z",
+      "spice_az_deg": 139.66158,
+      "spice_el_deg": 4.0075,
+      "horizons_az_deg": 139.66158,
+      "horizons_el_deg": 4.00747,
+      "angular_diff_deg": 2.7e-05
+    },
+    {
+      "timestamp_utc": "2026-11-29T00:00:00Z",
+      "spice_az_deg": 142.64633,
+      "spice_el_deg": 1.13596,
+      "horizons_az_deg": 142.64634,
+      "horizons_el_deg": 1.13592,
+      "angular_diff_deg": 3.5e-05
+    },
+    {
+      "timestamp_utc": "2026-12-01T00:00:00Z",
+      "spice_az_deg": 144.1607,
+      "spice_el_deg": -2.05627,
+      "horizons_az_deg": 144.16071,
+      "horizons_el_deg": -2.05631,
+      "angular_diff_deg": 3.6e-05
+    },
+    {
+      "timestamp_utc": "2026-12-03T00:00:00Z",
+      "spice_az_deg": 144.29897,
+      "spice_el_deg": -4.80366,
+      "horizons_az_deg": 144.29898,
+      "horizons_el_deg": -4.80369,
+      "angular_diff_deg": 3.3e-05
+    },
+    {
+      "timestamp_utc": "2026-12-05T00:00:00Z",
+      "spice_az_deg": 143.4266,
+      "spice_el_deg": -6.62173,
+      "horizons_az_deg": 143.4266,
+      "horizons_el_deg": -6.62175,
+      "angular_diff_deg": 2.7e-05
+    },
+    {
+      "timestamp_utc": "2026-12-07T00:00:00Z",
+      "spice_az_deg": 141.85133,
+      "spice_el_deg": -7.27382,
+      "horizons_az_deg": 141.85134,
+      "horizons_el_deg": -7.27384,
+      "angular_diff_deg": 1.8e-05
+    },
+    {
+      "timestamp_utc": "2026-12-09T00:00:00Z",
+      "spice_az_deg": 139.73525,
+      "spice_el_deg": -6.72975,
+      "horizons_az_deg": 139.73525,
+      "horizons_el_deg": -6.72976,
+      "angular_diff_deg": 9e-06
+    },
+    {
+      "timestamp_utc": "2026-12-11T00:00:00Z",
+      "spice_az_deg": 137.18633,
+      "spice_el_deg": -5.14038,
+      "horizons_az_deg": 137.18634,
+      "horizons_el_deg": -5.14037,
+      "angular_diff_deg": 6e-06
+    },
+    {
+      "timestamp_utc": "2026-12-13T00:00:00Z",
+      "spice_az_deg": 134.41034,
+      "spice_el_deg": -2.79214,
+      "horizons_az_deg": 134.41035,
+      "horizons_el_deg": -2.79213,
+      "angular_diff_deg": 1.1e-05
+    },
+    {
+      "timestamp_utc": "2026-12-15T00:00:00Z",
+      "spice_az_deg": 131.81457,
+      "spice_el_deg": -0.04932,
+      "horizons_az_deg": 131.81457,
+      "horizons_el_deg": -0.0493,
+      "angular_diff_deg": 1.6e-05
+    }
+  ]
+}
