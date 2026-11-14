@@ -11,6 +11,7 @@ import {
   RocketIllustration,
 } from "./MissionArt";
 import { HorizonDiagram } from "./HorizonDiagram";
+import { MissionDialogue, WELCOME_DIALOGUE } from "./MissionDialogue";
 import {
   DEFAULT_MISSION_DATE,
   MISSION_AUDIT,
@@ -310,14 +311,7 @@ export function MissionApp() {
               </p>
               <div className="mission-guide">
                 <div className="guide-copy">
-                  <p>
-                    <strong>Oi, eu sou a Lua, sua guia nesta missão.</strong>
-                  </p>
-                  <p>
-                    Sou uma astronauta fictícia. Aqui, nossa nave é robótica: a
-                    iniciativa CLPS contrata empresas para entregar cargas
-                    científicas e tecnológicas da NASA à Lua.
-                  </p>
+                  <MissionDialogue text={WELCOME_DIALOGUE} active={!dialog} />
                 </div>
               </div>
               <ul className="mission-objectives">
@@ -611,11 +605,10 @@ export function MissionApp() {
                   ))}
                 </dl>
               </div>
-              <p>
-                Os dois astros atendem ao objetivo deste exercício. Em uma
-                missão real, relevo, energia, comunicação e muitos outros
-                fatores também precisam ser estudados.
-              </p>
+              <MissionDialogue
+                text="Boa! Você encontrou o Sol e a Terra acima do horizonte deste exercício. Num pouso de verdade, ainda precisamos estudar o relevo, a energia e a comunicação. Quer testar outro local?"
+                active={!dialog}
+              />
               <div className="mission-actions">
                 <button
                   className="mission-button mission-button-primary"
@@ -708,6 +701,22 @@ export function MissionApp() {
                     <dd>{MISSION_PROVENANCE.limitation}</dd>
                   </div>
                 </dl>
+                <p className="mission-asset-credit">
+                  Astronauta:{" "}
+                  <a href="https://poly.google.com/view/dLHpzNdygsg">
+                    Astronaut, de Poly
+                  </a>
+                  , licença{" "}
+                  <a href="https://creativecommons.org/licenses/by/2.0/">
+                    CC BY 2.0
+                  </a>
+                  . Imagem existente, sem alterações além do tamanho de
+                  exibição, disponível no{" "}
+                  <a href="https://github.com/google/model-viewer/blob/9c6fea9ac579e618bf2932456d3308309017df00/packages/modelviewer.dev/assets/poster-astronaut.webp">
+                    model-viewer
+                  </a>
+                  .
+                </p>
                 {auditUrl ? (
                   <a
                     className="mission-button mission-button-secondary"

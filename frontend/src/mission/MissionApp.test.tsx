@@ -145,16 +145,56 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
 describe("guided lunar mission", () => {
+  it("plays the full guide dialogue only on request and stops when opening context or leaving the scene", () => {
+    const speak = vi.fn();
+    const cancel = vi.fn();
+    vi.stubGlobal("speechSynthesis", {
+      getVoices: () => [{ lang: "pt-BR", name: "Português" }],
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      speak,
+      cancel,
+    });
+    vi.stubGlobal(
+      "SpeechSynthesisUtterance",
+      class {
+        constructor(public text: string) {}
+      },
+    );
+    render(<MissionApp />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mostrar texto inteiro" }),
+    );
+    expect(speak).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Ouvir fala" }));
+    expect(speak.mock.calls[0][0].text).toContain(
+      "as missões CLPS não levam astronautas",
+    );
+    const beforeDialog = cancel.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Sobre a missão" }));
+    expect(cancel).toHaveBeenCalledTimes(beforeDialog + 1);
+    fireEvent.click(screen.getByRole("button", { name: "Fechar janela" }));
+    expect(speak).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Ouvir fala" }));
+    const beforeNavigation = cancel.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Ir direto ao mapa" }));
+    expect(cancel).toHaveBeenCalledTimes(beforeNavigation + 1);
+    expect(
+      screen.queryByRole("button", { name: "Parar fala" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("explains the robotic mission and opens the map directly with no preselected result", () => {
     render(<MissionApp />);
-    expect(screen.getByText(/Sou uma astronauta fictícia/)).toHaveTextContent(
-      /CLPS/,
-    );
+    expect(
+      screen.getByRole("group", { name: "Fala da guia" }),
+    ).toHaveTextContent(/as missões CLPS não levam astronautas/);
     fireEvent.click(screen.getByRole("button", { name: "Ir direto ao mapa" }));
     expect(
       screen.getByRole("heading", { name: "Onde vamos pousar?" }),
@@ -319,13 +359,11 @@ describe("guided lunar mission", () => {
   });
 
   it("respects reduced motion for both launch and landing", () => {
-    window.matchMedia = vi
-      .fn()
-      .mockReturnValue({
-        matches: true,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      });
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
     render(<MissionApp />);
     fireEvent.click(screen.getByRole("button", { name: "Iniciar missão" }));
     expect(

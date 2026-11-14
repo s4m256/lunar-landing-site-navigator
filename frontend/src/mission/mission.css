@@ -220,6 +220,56 @@
 .lunar-mission .guide-copy p + p {
   margin-top: 7px;
 }
+.lunar-mission .mission-dialogue {
+  font-size: 16px;
+  line-height: 1.65;
+}
+.lunar-mission .typewriter-controls {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.lunar-mission .speech-control {
+  display: contents;
+}
+.lunar-mission .typewriter-controls button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--mission-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mission-paper);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lunar-mission .typewriter-controls button:disabled,
+.lunar-mission .typewriter-controls button[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+.lunar-mission .speech-control__status {
+  flex-basis: 100%;
+  order: 1;
+  font-size: 14px;
+}
+.lunar-mission .speech-control__status:empty {
+  display: none;
+}
+.lunar-mission .guide-portrait {
+  display: block;
+  object-fit: contain;
+  height: auto;
+}
+.lunar-mission .complete-copy > .mission-dialogue {
+  margin-block: 24px;
+}
+.lunar-mission .mission-asset-credit a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
 .lunar-mission .mission-objectives {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -313,6 +363,7 @@
 }
 .lunar-mission .briefing-art > .guide-portrait {
   width: min(100%, 490px);
+  max-height: 520px;
   margin-inline: auto;
 }
 .lunar-mission .briefing-art > .rocket-illustration {

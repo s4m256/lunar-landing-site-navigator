@@ -96,6 +96,8 @@ await writeFile(
     "Abra Lunar-Missao.html em um navegador moderno no computador (Chrome, Edge ou Firefox).",
     "Todos os componentes, ilustrações e dados estão incorporados. Não precisa instalar Node ou Python.",
     "As fontes citadas em links externos exigem internet, apenas se você decidir abri-las.",
+    "Para ouvir a guia, clique em Ouvir fala. A voz vem do navegador/dispositivo e precisa de uma voz em português disponível; algumas vozes usam internet.",
+    "O texto continua disponível quando o navegador não oferece áudio. A digitação visual e a leitura em voz alta são independentes.",
     "",
     "Os quatro locais são hipotéticos; o critério do exercício usa o horizonte tangente idealizado.",
     "Não calcula bloqueio por montanhas, energia gerada, enlace de rádio nem segurança de pouso.",
