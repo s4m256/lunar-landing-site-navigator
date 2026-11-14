@@ -19,3 +19,10 @@ O produtor atual é `python -m lunar_science` (ou `lunar-science` após instala�
 ## Evolução
 
 Use versionamento semântico do contrato. Mudanças incompatíveis, inclusive novos campos obrigatórios ou valores de status, exigem nova versão principal. Como esta versão rejeita campos desconhecidos e fixa `schema_version`, qualquer nova versão precisa de atualização explícita do consumidor e dos testes; nenhuma compatibilidade automática é prometida. Antes de introduzir dados científicos, documente fontes, licença, proveniência, unidades, sistema de coordenadas lunar, intervalos válidos, valores ausentes e incerteza. Atualize schema, fixture, tipos TypeScript, produtor Python e testes juntos.
+
+## Contrato científico pré-computado (`navigator-dataset.v1.schema.json`)
+
+Define o payload pré-computado em grade para o navegador de sítios de pouso do Polo Sul lunar (`schema_version: "1.0.0"`), validado em Python (`jsonschema`) e no frontend (`Ajv`):
+
+- **Proveniência:** produto DEM LRO LOLA (`ldem_80s_80m`, raio de referência $R_{\text{ref}} = 1\,737\,400\text{ m}$, projeção estereográfica polar em `MOON_ME`), kernels NAIF SPICE com SHA-256 fixado e resumo de validação cruzada com o JPL Horizons.
+- **Sítios e malha local:** candidatos no Polo Sul e pontos vizinhos espaçados a $500\text{ m}$ contendo elevação, declividade ($\theta_{\text{slope}}$), distância até PSR, curva de horizonte $h_{\text{horiz}}(\text{Az})$ por *ray-marching* geodésico ($s_{\max} = 120\text{ km}$), séries horárias de Sol, Terra e satélites *relay* (LRO e ELFO *Lunar Pathfinder* / *LunaNet*), métricas solares/energéticas e *Landing Score* composto ($0\text{–}100$).

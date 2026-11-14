@@ -1,0 +1,451 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LunarNavigatorDatasetV1",
+  "description": "Precomputed lunar south pole terrain, ephemeris, horizon mask, communications, solar power, and landing score dataset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_utc",
+    "provenance",
+    "mission_window",
+    "relay_presets",
+    "horizon_azimuths_deg",
+    "sites"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "generated_utc": { "type": "string", "minLength": 10 },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dem_product",
+        "ephemeris",
+        "horizons_validation",
+        "conventions",
+        "limitations"
+      ],
+      "properties": {
+        "dem_product": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "product_id",
+            "url",
+            "sha256",
+            "resolution_m",
+            "coverage_lat_deg",
+            "reference_radius_m",
+            "coordinate_system",
+            "ray_max_distance_m",
+            "azimuth_step_deg"
+          ],
+          "properties": {
+            "product_id": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "minLength": 1 },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "resolution_m": { "type": "number", "exclusiveMinimum": 0 },
+            "coverage_lat_deg": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "reference_radius_m": { "type": "number", "const": 1737400 },
+            "coordinate_system": { "type": "string", "minLength": 1 },
+            "ray_max_distance_m": { "type": "number", "exclusiveMinimum": 0 },
+            "azimuth_step_deg": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "ephemeris": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine", "frame", "correction", "kernels"],
+          "properties": {
+            "engine": { "type": "string", "minLength": 1 },
+            "frame": { "type": "string", "minLength": 1 },
+            "correction": { "type": "string", "minLength": 1 },
+            "kernels": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["filename", "url", "sha256"],
+                "properties": {
+                  "filename": { "type": "string", "minLength": 1 },
+                  "url": { "type": "string", "minLength": 1 },
+                  "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                }
+              }
+            }
+          }
+        },
+        "horizons_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "endpoint", "notes"],
+          "properties": {
+            "status": { "type": "string", "minLength": 1 },
+            "endpoint": { "type": "string", "minLength": 1 },
+            "max_sun_az_diff_deg": { "type": ["number", "null"] },
+            "max_sun_el_diff_deg": { "type": ["number", "null"] },
+            "max_earth_az_diff_deg": { "type": ["number", "null"] },
+            "max_earth_el_diff_deg": { "type": ["number", "null"] },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "conventions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "azimuth_deg",
+            "elevation_deg",
+            "latitude_type",
+            "longitude_convention",
+            "solar_constant_w_m2",
+            "solar_radius_km",
+            "earth_radius_km",
+            "lunar_radius_m",
+            "clps_slope_limit_deg"
+          ],
+          "properties": {
+            "azimuth_deg": { "type": "string" },
+            "elevation_deg": { "type": "string" },
+            "latitude_type": { "type": "string" },
+            "longitude_convention": { "type": "string" },
+            "solar_constant_w_m2": { "type": "number" },
+            "solar_radius_km": { "type": "number" },
+            "earth_radius_km": { "type": "number" },
+            "lunar_radius_m": { "type": "number" },
+            "clps_slope_limit_deg": { "type": "number" }
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "mission_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_utc",
+        "end_utc",
+        "step_seconds",
+        "synodic_period_days",
+        "timestamps_utc",
+        "sun_dist_au",
+        "earth_angular_radius_deg",
+        "solar_angular_radius_deg"
+      ],
+      "properties": {
+        "start_utc": { "type": "string" },
+        "end_utc": { "type": "string" },
+        "step_seconds": { "type": "integer", "minimum": 60 },
+        "synodic_period_days": { "type": "number", "exclusiveMinimum": 0 },
+        "timestamps_utc": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string" }
+        },
+        "sun_dist_au": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "earth_angular_radius_deg": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "solar_angular_radius_deg": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        }
+      }
+    },
+    "relay_presets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lro", "elfo_pathfinder", "elfo_constellation"],
+      "properties": {
+        "lro": { "$ref": "#/definitions/relaySpec" },
+        "elfo_pathfinder": { "$ref": "#/definitions/relaySpec" },
+        "elfo_constellation": { "$ref": "#/definitions/relaySpec" }
+      }
+    },
+    "horizon_azimuths_deg": {
+      "type": "array",
+      "minItems": 36,
+      "items": { "type": "number", "minimum": 0, "maximum": 360 }
+    },
+    "sites": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "category",
+          "description",
+          "center",
+          "horizon_elev_deg",
+          "sky_series",
+          "engineering_summary",
+          "local_grid"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "category": {
+            "enum": ["artemis_candidate", "reference_ridge", "psr_contrast"]
+          },
+          "description": { "type": "string", "minLength": 1 },
+          "center": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "latitude_deg",
+              "longitude_east_deg",
+              "elevation_m",
+              "slope_deg",
+              "cartesian_me_km",
+              "psr_distance_m",
+              "is_psr",
+              "observer_height_m"
+            ],
+            "properties": {
+              "latitude_deg": { "type": "number", "minimum": -90, "maximum": -75 },
+              "longitude_east_deg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
+              "elevation_m": { "type": "number" },
+              "slope_deg": { "type": "number", "minimum": 0, "maximum": 90 },
+              "cartesian_me_km": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "psr_distance_m": { "type": "number", "minimum": 0 },
+              "is_psr": { "type": "boolean" },
+              "observer_height_m": { "type": "number", "minimum": 0 }
+            }
+          },
+          "horizon_elev_deg": {
+            "type": "array",
+            "minItems": 36,
+            "items": { "type": "number", "minimum": -90, "maximum": 90 }
+          },
+          "sky_series": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sun_az_deg",
+              "sun_el_deg",
+              "earth_az_deg",
+              "earth_el_deg",
+              "elfo_primary_az_deg",
+              "elfo_primary_el_deg",
+              "elfo_primary_alt_km",
+              "elfo_primary_range_km",
+              "elfo_primary_earth_los",
+              "elfo_constellation_visible",
+              "elfo_constellation_best_alt_km",
+              "elfo_constellation_best_fspl_db",
+              "lro_visible"
+            ],
+            "properties": {
+              "sun_az_deg": { "type": "array", "items": { "type": "number" } },
+              "sun_el_deg": { "type": "array", "items": { "type": "number" } },
+              "earth_az_deg": { "type": "array", "items": { "type": "number" } },
+              "earth_el_deg": { "type": "array", "items": { "type": "number" } },
+              "elfo_primary_az_deg": { "type": "array", "items": { "type": "number" } },
+              "elfo_primary_el_deg": { "type": "array", "items": { "type": "number" } },
+              "elfo_primary_alt_km": { "type": "array", "items": { "type": "number" } },
+              "elfo_primary_range_km": { "type": "array", "items": { "type": "number" } },
+              "elfo_primary_earth_los": { "type": "array", "items": { "type": "boolean" } },
+              "elfo_constellation_visible": { "type": "array", "items": { "type": "boolean" } },
+              "elfo_constellation_best_alt_km": { "type": "array", "items": { "type": "number" } },
+              "elfo_constellation_best_fspl_db": { "type": "array", "items": { "type": "number" } },
+              "lro_visible": { "type": "array", "items": { "type": "boolean" } }
+            }
+          },
+          "engineering_summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["solar", "comms", "score"],
+            "properties": {
+              "solar": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mean_illum_fraction",
+                  "sunlit_hours",
+                  "max_continuous_shadow_hours",
+                  "energy_tracking_wh_m2",
+                  "energy_fixed_north_wh_m2",
+                  "energy_fixed_horiz_wh_m2",
+                  "min_battery_100w_wh"
+                ],
+                "properties": {
+                  "mean_illum_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+                  "sunlit_hours": { "type": "number", "minimum": 0 },
+                  "max_continuous_shadow_hours": { "type": "number", "minimum": 0 },
+                  "energy_tracking_wh_m2": { "type": "number", "minimum": 0 },
+                  "energy_fixed_north_wh_m2": { "type": "number", "minimum": 0 },
+                  "energy_fixed_horiz_wh_m2": { "type": "number", "minimum": 0 },
+                  "min_battery_100w_wh": { "type": "number", "minimum": 0 }
+                }
+              },
+              "comms": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "dte_center_duty_cycle_pct",
+                  "dte_full_disk_duty_cycle_pct",
+                  "elfo_pathfinder_duty_cycle_pct",
+                  "elfo_constellation_duty_cycle_pct",
+                  "lro_duty_cycle_pct",
+                  "combined_dte_elfo_duty_cycle_pct",
+                  "relay_coverage_gain_pct",
+                  "max_blackout_dte_hours",
+                  "max_blackout_combined_hours",
+                  "mean_elfo_altitude_km",
+                  "mean_elfo_fspl_db"
+                ],
+                "properties": {
+                  "dte_center_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "dte_full_disk_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "elfo_pathfinder_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "elfo_constellation_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "lro_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "combined_dte_elfo_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "relay_coverage_gain_pct": { "type": "number" },
+                  "max_blackout_dte_hours": { "type": "number", "minimum": 0 },
+                  "max_blackout_combined_hours": { "type": "number", "minimum": 0 },
+                  "mean_elfo_altitude_km": { "type": "number", "minimum": 0 },
+                  "mean_elfo_fspl_db": { "type": "number", "minimum": 0 }
+                }
+              },
+              "score": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "total_0_100",
+                  "safety_slope_0_100",
+                  "power_0_100",
+                  "comms_0_100",
+                  "science_psr_0_100"
+                ],
+                "properties": {
+                  "total_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "safety_slope_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "power_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "comms_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "science_psr_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
+                }
+              }
+            }
+          },
+          "local_grid": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["spacing_m", "grid_size", "nodes"],
+            "properties": {
+              "spacing_m": { "type": "number", "exclusiveMinimum": 0 },
+              "grid_size": { "type": "integer", "minimum": 3 },
+              "nodes": {
+                "type": "array",
+                "minItems": 9,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "row",
+                    "col",
+                    "dx_m",
+                    "dy_m",
+                    "latitude_deg",
+                    "longitude_east_deg",
+                    "elevation_m",
+                    "slope_deg",
+                    "psr_distance_m",
+                    "is_psr",
+                    "horizon_elev_deg",
+                    "mean_illum_fraction",
+                    "max_continuous_shadow_hours",
+                    "energy_tracking_wh_m2",
+                    "dte_full_disk_duty_cycle_pct",
+                    "combined_dte_elfo_duty_cycle_pct",
+                    "max_blackout_combined_hours",
+                    "landing_score_0_100"
+                  ],
+                  "properties": {
+                    "row": { "type": "integer", "minimum": 0 },
+                    "col": { "type": "integer", "minimum": 0 },
+                    "dx_m": { "type": "number" },
+                    "dy_m": { "type": "number" },
+                    "latitude_deg": { "type": "number" },
+                    "longitude_east_deg": { "type": "number" },
+                    "elevation_m": { "type": "number" },
+                    "slope_deg": { "type": "number", "minimum": 0, "maximum": 90 },
+                    "psr_distance_m": { "type": "number", "minimum": 0 },
+                    "is_psr": { "type": "boolean" },
+                    "horizon_elev_deg": { "type": "array", "items": { "type": "number" } },
+                    "mean_illum_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "max_continuous_shadow_hours": { "type": "number", "minimum": 0 },
+                    "energy_tracking_wh_m2": { "type": "number", "minimum": 0 },
+                    "dte_full_disk_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "combined_dte_elfo_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+                    "max_blackout_combined_hours": { "type": "number", "minimum": 0 },
+                    "landing_score_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "relaySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "satellites_count",
+        "a_km",
+        "e",
+        "i_deg",
+        "omega_deg",
+        "period_hours",
+        "apolune_alt_km",
+        "perilune_alt_km",
+        "max_range_km",
+        "antenna_mask_deg",
+        "freq_ghz"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "satellites_count": { "type": "integer", "minimum": 1 },
+        "a_km": { "type": "number", "exclusiveMinimum": 0 },
+        "e": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
+        "i_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+        "omega_deg": { "type": "number" },
+        "period_hours": { "type": "number", "exclusiveMinimum": 0 },
+        "apolune_alt_km": { "type": "number" },
+        "perilune_alt_km": { "type": "number" },
+        "max_range_km": { "type": "number", "exclusiveMinimum": 0 },
+        "antenna_mask_deg": { "type": "number", "minimum": 0 },
+        "freq_ghz": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

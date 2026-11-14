@@ -7,3 +7,6 @@ __pycache__/
 *.tsbuildinfo
 build/
 .vercel/
+science/.cache/
+science/.kernels/
+science/.data/
