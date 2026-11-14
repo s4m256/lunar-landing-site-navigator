@@ -7,7 +7,40 @@ import { validateSite, type PlanningSite } from "./planning";
 
 const status = parseScienceStatus(example);
 
+import { ScienceDemo } from "./ScienceDemo";
+
 export function App() {
+  const [mode, setMode] = useState<"demo" | "planning">("demo");
+  return (
+    <>
+      <div className="mode-switch" role="group" aria-label="Modo de exploração">
+        <button aria-pressed={mode === "demo"} onClick={() => setMode("demo")}>
+          Demonstração científica 2026
+        </button>
+        <button
+          aria-pressed={mode === "planning"}
+          onClick={() => setMode("planning")}
+        >
+          Planejamento livre
+        </button>
+      </div>
+      {mode === "demo" ? (
+        <ScienceDemo />
+      ) : (
+        <>
+          <div className="planning-warning" role="note">
+            Planejamento livre: suas coordenadas e datas não têm resultados
+            calculados. Este modo não utiliza as séries da demonstração. O
+            rascunho é descartado ao trocar de modo ou recarregar.
+          </div>
+          <PlanningApp />
+        </>
+      )}
+    </>
+  );
+}
+
+export function PlanningApp() {
   const [sites, setSites] = useState<PlanningSite[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [name, setName] = useState("");
@@ -254,7 +287,9 @@ export function App() {
         </div>
         <footer>
           <span>◒ LUNAR / EXPLORAR COMEÇA COM PERGUNTAS.</span>
-          <span>Rascunho temporário · não é salvo ao recarregar</span>
+          <span>
+            Rascunho temporário · descartado ao trocar de modo ou recarregar
+          </span>
         </footer>
       </main>
     </>

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { PlanningApp } from "./App";
 import { parseScienceStatus } from "./contract";
 import example from "../../contracts/examples/science-status.json";
 
@@ -8,7 +8,7 @@ afterEach(cleanup);
 
 describe("mission planner", () => {
   it("renders the application and clearly labels the scientific placeholder", () => {
-    render(<App />);
+    render(<PlanningApp />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Lunar Landing Site Navigator",
     );
@@ -30,7 +30,7 @@ describe("mission planner", () => {
     fireEvent.click(screen.getByRole("button", { name: "+ Adicionar local" }));
   }
   it("adds, selects and removes user locations across the map and comparison", () => {
-    render(<App />);
+    render(<PlanningApp />);
     addSite();
     addSite("Local B", "10", "-180");
     expect(screen.getByText("2 selecionados")).toBeVisible();
@@ -58,7 +58,7 @@ describe("mission planner", () => {
     ).not.toContain("Local A");
   });
   it("rejects missing names, missing coordinates and out of range coordinates", () => {
-    render(<App />);
+    render(<PlanningApp />);
     addSite("");
     expect(screen.getByRole("alert")).toHaveTextContent("Informe um nome");
     addSite("A", "", "");
@@ -75,7 +75,7 @@ describe("mission planner", () => {
     expect(screen.getByRole("checkbox")).toBeChecked();
   });
   it("validates the planning interval without claiming computed conditions", () => {
-    render(<App />);
+    render(<PlanningApp />);
     fireEvent.change(screen.getByLabelText("Data inicial"), {
       target: { value: "2026-12-10" },
     });
@@ -97,7 +97,7 @@ describe("mission planner", () => {
     );
   });
   it("switches comparison formats while keeping the unavailable-data state", () => {
-    render(<App />);
+    render(<PlanningApp />);
     fireEvent.click(screen.getByRole("button", { name: "Linhas" }));
     expect(screen.getByRole("button", { name: "Linhas" })).toHaveAttribute(
       "aria-pressed",

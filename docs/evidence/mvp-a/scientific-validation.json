@@ -1,0 +1,77 @@
+{
+  "audit_files_checksum_verified": 44,
+  "result_sha256": "108d2adf202442acf32ba589504482ac00b2afac830b0bf14c55bc913147e023",
+  "json_schemas_validated": 3,
+  "packaged_schema_byte_matches": 3,
+  "series": [
+    [
+      "south-a",
+      "SUN",
+      365
+    ],
+    [
+      "south-a",
+      "EARTH",
+      365
+    ],
+    [
+      "south-b",
+      "SUN",
+      365
+    ],
+    [
+      "south-b",
+      "EARTH",
+      365
+    ]
+  ],
+  "timestamps": "2026-01-01T00:00:00.000Z through 2026-12-31T00:00:00.000Z; daily UTC; end exclusive 2027-01-01",
+  "validation_status": "not independently validated",
+  "scientific_engine_commit": "a491081f245965448360aa27186a7be9f129cc21",
+  "audit_commit": "063ba0a78a5a8b87076334c485f008123d7787e1",
+  "execution": "current integration environment, 2026-11-14",
+  "python": "3.12.14",
+  "spiceypy": "8.0.0",
+  "numpy": "2.5.4",
+  "cspice": "CSPICE_N0067",
+  "jsonschema": "4.23.0",
+  "pytest": "8.3.5",
+  "build": "1.2.2.post1",
+  "audit_reproduction": {
+    "command": ".venv/bin/python science/tools/verify_de421_audit.py --cache-dir /tmp/mvp-a-de421-cache --output-dir /tmp/mvp-a-de421-reproduction",
+    "exit": 0,
+    "series_exact_match": true,
+    "whole_json_exact_match": true,
+    "byte_hash_exact_match": true,
+    "max_angular_difference_deg": 0.0,
+    "sha256": "108d2adf202442acf32ba589504482ac00b2afac830b0bf14c55bc913147e023"
+  },
+  "python_tests": {
+    "command": "LUNAR_KERNEL_DIR=/tmp/mvp-a-historical-kernels .venv/bin/python -m pytest science/tests -ra",
+    "exit": 0,
+    "passed": 62,
+    "skipped": 0,
+    "failed": 0
+  },
+  "python_build": {
+    "command": ".venv/bin/python -m build science",
+    "exit": 0,
+    "artifacts": [
+      "lunar_science-0.2.0.tar.gz",
+      "lunar_science-0.2.0-py3-none-any.whl"
+    ]
+  },
+  "installed_wheel_smoke": {
+    "working_directory": "/tmp",
+    "venv": "/tmp/mvp-a-wheel-smoke",
+    "no_argument_cli_exit": 0,
+    "analyze_2026_exit": 0,
+    "whole_json_equal_to_audit": true
+  },
+  "independent_validation": {
+    "Horizons": "not rerun; inherited current/horizons-attempt.json records network_error HTTP 403, zero compared samples",
+    "primary_NAIF_integrity": "not verified",
+    "LSK_completeness_2026": "not independently verified"
+  },
+  "repository_edits": "none by scientific-validation subagent; ignored .venv and science build artifacts prepared"
+}

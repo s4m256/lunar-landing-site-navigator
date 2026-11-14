@@ -1,60 +1,71 @@
-# Lunar Landing Site Navigator
+# Lunar Landing Site Navigator — Ari / MVP A
 
-Base de desenvolvimento para o NASA Space Apps 2026. Aplicação React + TypeScript e módulo Python independentes, preparados para trabalho paralelo. O pacote Python calcula direções geométricas aparentes com SPICE; não calcula energia, enlace, topografia ou segurança de pouso. O exemplo histórico usa dados JPL/NAIF obtidos de um espelho documentado. O projeto não pressupõe vínculo oficial com a NASA.
+MVP web estático para comparar direções aparentes dos **centros do Sol e da Terra** em dois locais lunares hipotéticos durante 2026. React + TypeScript + Vite exibem efemérides calculadas offline com SPICE; nenhum Python ou backend executa em produção. O projeto não pressupõe vínculo oficial com a NASA.
 
-## Estrutura e responsabilidades
+## Executar a demonstração
 
-- `frontend/`: interface React com Vite, tipagem estrita e testes de componentes.
-- `science/`: pacote Python instalável, CLI e testes de contrato. Sem servidor HTTP.
-- `contracts/`: JSON Schema e exemplo compartilhado; ponto de integração entre as equipes.
-- `.github/workflows/ci.yml`: testes, tipos e builds das duas stacks.
-
-As equipes podem trabalhar em frontend e ciência em branches separadas. Mudanças de contrato devem ser discutidas entre ambas antes da implementação. O frontend usa um exemplo local validado, sem chamar Python ou simular resultados científicos.
-
-## Pré-requisitos
-
-Node.js 24 (ver `.nvmrc`), npm 11 e Python 3.12+ com `venv`. Os comandos abaixo partem da raiz do checkout. Não são necessários segredos, banco de dados, API externa ou download de datasets.
+Requer Node.js 24 e npm 11. Na raiz:
 
 ```sh
-npm ci
-python -m venv .venv
-.venv/bin/python -m pip install -e './science[dev]'
-```
-
-Em Windows, use `.venv\Scripts\python.exe` nos comandos Python.
-
-## Executar
-
-```sh
+npm ci --include=dev
 npm run dev
-# Em outro terminal, a partir da raiz:
-.venv/bin/python -m lunar_science
 ```
 
-Vite usa a porta 5173 por padrão. A CLI imprime um objeto JSON com `status: not_implemented` e termina; não existe serviço Python para iniciar. A interface mostra claramente que é um exemplo de integração.
-
-## Validar e gerar artefatos
+Abra o endereço local informado pelo Vite (porta 5173). Para testar o build estático:
 
 ```sh
+npm run build
+npm run check:deploy
+npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4173
+```
+
+A Vercel usa a raiz do repositório, `npm ci --include=dev`, `npm run build` e publica `frontend/dist`, conforme `vercel.json`. Não precisa instalar Python nem baixar kernels. Não foi realizado deploy público nesta integração. Veja [configuração e diagnóstico](docs/deploy.md).
+
+## Fluxo e limites da demonstração
+
+- **Local A / south-a:** latitude planetocêntrica −89,5°, longitude leste 0°, altura radial 0 m.
+- **Local B / south-b:** latitude planetocêntrica −89°, longitude leste 90°, altura radial 0 m.
+- Datas: 01/01/2026 a 31/12/2026, às **00:00 UTC**; fim exclusivo 01/01/2027. São 365 instantes em cada um dos quatro pares local/alvo.
+- Escolha data e Sol/Terra. A tabela mostra azimute/elevação em graus; o gráfico mostra amostras discretas de elevação e horizonte geométrico 0°. As linhas são guias visuais, sem interpolação.
+- O **planejamento livre** do frontend original permanece em modo separado, sem resultados científicos para coordenadas/datas próprias. Seu rascunho é temporário e é descartado ao trocar de modo ou recarregar.
+
+O JSON original de [2026](docs/audits/pr4/result-2026.json) é importado como texto estático e validado em tempo de execução pelo contrato `analysis-result` 1.0.0 e por invariantes de cobertura, pares e grade UTC. Dados incompatíveis geram erro explícito, sem números substitutos. O download oferece o arquivo original completo, incluindo proveniência e hashes; não existe cópia manual divergente no frontend.
+
+**Não são observações diretas nem recomendações de pouso.** Modelo esférico com orientação analítica IAU_MOON e correção CN+S; não modela relevo, sombras de crateras/montanhas, refração, disco finito, eclipses, energia, qualidade de enlace ou segurança. Elevação não é iluminação efetiva nem garantia de comunicação. Amostras diárias não fornecem duração contínua de iluminação.
+
+**Não validado independentemente contra JPL Horizons:** a auditoria registra HTTP 403 e zero comparações. DE421 veio de espelho de terceiros, com hashes, sem conferência direta no servidor NAIF; completude atual do LSK e precisão física não estão certificadas. Reproduzir o cálculo não equivale a validar sua precisão física.
+
+## Verificação
+
+```sh
+npm run test:infra
 npm run typecheck
 npm test
 npm run build
-(cd science && ../.venv/bin/python -m pytest)
-.venv/bin/python -m build science
+npm run check:deploy
 ```
 
-Frontend: `frontend/dist/`. Python: wheel e distribuição fonte em `science/dist/`. O build frontend também verifica tipos. Os testes validam renderização, contrato compartilhado, rejeição de payloads incompatíveis e saída real da CLI. CI usa instalação npm pelo lockfile. As dependências Python de ferramentas são fixadas em `science/pyproject.toml`; dependências transitivas ainda não possuem lockfile.
+O runner de infraestrutura também confere o SHA-256 do artefato auditado. Os testes frontend cobrem o consumidor científico, todos os 1.460 pares amostrados, seleções de locais/alvos/datas, erros e isolamento do planejamento livre.
 
-## Contrato e próximos passos
+Para desenvolvimento e reprodução Python (Python 3.12+):
 
-Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks. Não há campos de pontuação, coordenadas ou candidatos até que requisitos científicos sejam definidos. Para evoluir: definir entradas, fontes, unidades, sistema de referência, proveniência e incerteza com a equipe; versionar o contrato; só então implementar algoritmos e transporte.
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install -e './science[dev]'
+.venv/bin/python -m lunar_science fetch-kernels --kernel-set science/examples/kernel-set.json --kernel-dir /tmp/lunar-historical-kernels
+LUNAR_KERNEL_DIR=/tmp/lunar-historical-kernels .venv/bin/python -m pytest science/tests -ra
+.venv/bin/python -m build science
+.venv/bin/python science/tools/verify_de421_audit.py --cache-dir /tmp/lunar-de421-cache --output-dir /tmp/lunar-de421-reproduction
+```
 
-## Deploy e integração contínua
+O conjunto histórico de testes usa DE405 e não cobre 2026. O reprodutor usa DE421, verifica hashes/cobertura e compara as séries com a auditoria. Sem kernels, alguns testes Python são explicitamente pulados; não interpretar skips como execução científica aprovada. A CLI sem argumentos mantém o status legado `not_implemented`; o subcomando `analyze` executa o motor geométrico. Veja [GEOMETRY.md](science/GEOMETRY.md).
 
-A configuração da Vercel instala e compila a partir da raiz e publica `frontend/dist`. Veja [deploy, integração de PRs e diagnóstico](docs/deploy.md) para configurar a conta Vercel, executar os checks de infraestrutura e investigar falhas. O deploy publica somente o frontend; o pacote científico Python permanece independente.
+## Organização e evidências
 
-Após `npm run build`, execute `npm run check:deploy` para verificar os artefatos publicáveis. Os testes dessa verificação rodam com `npm run test:infra`.
+- `frontend/`: interface, mapa esquemático, gráficos e testes.
+- `science/`: motor batch, ferramentas offline e testes.
+- `contracts/`: contratos normativos; `science-status` e `analysis-result` são famílias separadas.
+- `docs/audits/pr4/`: auditoria original preservada, dados, fontes e hashes.
+- [Integração MVP A](docs/mvp-a-integration.md): commits incorporados, decisões, pré-voo e resultados desta execução.
 
-## Motor geométrico científico
-
-O subcomando Python `analyze` calcula direções aparentes reais dos centros do Sol e da Terra para dois locais lunares. Veja [comandos, modelos, contratos, fontes e limitações](science/GEOMETRY.md). Há um exemplo histórico calculado em `science/examples/result.json`; o kernel demonstrativo não cobre 2026. A validação independente com Horizons permanece bloqueada por acesso de rede, registrada sem residual numérico inventado.
+Não altere contratos ou introduza alegações científicas sem coordenar produtor, consumidor e testes. Dependências transitivas Python ainda não possuem lockfile; a evidência de reprodução registra as versões efetivamente usadas.

@@ -1,0 +1,22 @@
+{
+  "browser": "156.0.8078.79",
+  "url": "http://127.0.0.1:4173",
+  "checks": [
+    "Both exact demo sites/coordinates, south polar map and visible scientific/Horizons caveats",
+    "Elevation chart has 730 discrete points plus selected points, two guide lines, units, UTC axis, zero horizon and legends",
+    "First/middle/last dates, both SUN/EARTH, both sites match all 24 displayed azimuth/elevation numbers from JSON; UTC preserved in America/Sao_Paulo browser timezone",
+    "Full provenance expands, kernel hashes visible, downloadable static JSON bytes SHA256-identical to audited source",
+    "Out-of-coverage date shows no-data state and no numeric table/selected chart points",
+    "Free planning accepts own coordinates without scientific results; returning demo restores only actual demonstration series",
+    "Mobile chart labels 11.0px; focusable scroll region responds to ArrowRight and horizontal scrolling reaches year end; swipe hint visible, body remains within viewport",
+    "390 px mobile viewport: no horizontal document overflow, Earth/date selection and scientific table work"
+  ],
+  "errors": [],
+  "warnings": [],
+  "resources": [],
+  "screenshots": [
+    "/tmp/mvp-a-desktop.png",
+    "/tmp/mvp-a-mobile.png"
+  ],
+  "pass": true
+}

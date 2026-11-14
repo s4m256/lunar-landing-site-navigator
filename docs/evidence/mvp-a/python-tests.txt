@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.3.5, pluggy-1.7.0
+rootdir: /workspace/lunar-landing-site-navigator/science
+configfile: pyproject.toml
+collected 62 items
+
+science/tests/test_compare_horizons.py ............................      [ 45%]
+science/tests/test_contract.py ........                                  [ 58%]
+science/tests/test_geometry.py ..........................                [100%]
+
+============================== 62 passed in 0.84s ==============================
