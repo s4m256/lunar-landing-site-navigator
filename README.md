@@ -48,3 +48,9 @@ Frontend: `frontend/dist/`. Python: wheel e distribuição fonte em `science/dis
 ## Contrato e próximos passos
 
 Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks. Não há campos de pontuação, coordenadas ou candidatos até que requisitos científicos sejam definidos. Para evoluir: definir entradas, fontes, unidades, sistema de referência, proveniência e incerteza com a equipe; versionar o contrato; só então implementar algoritmos e transporte.
+
+## Deploy e integração contínua
+
+A configuração da Vercel instala e compila a partir da raiz e publica `frontend/dist`. Veja [deploy, integração de PRs e diagnóstico](docs/deploy.md) para configurar a conta Vercel, executar os checks de infraestrutura e investigar falhas. O deploy publica somente o frontend; o pacote científico Python permanece independente.
+
+Após `npm run build`, execute `npm run check:deploy` para verificar os artefatos publicáveis. Os testes dessa verificação rodam com `npm run test:infra`.
