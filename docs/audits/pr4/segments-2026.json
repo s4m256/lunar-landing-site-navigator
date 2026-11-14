@@ -1,0 +1,58 @@
+[
+  {
+    "requested_body": 3,
+    "segment_id": "DE-0421LE-0421",
+    "descriptor_body_center_frame_type_start_end_begin_end": [
+      3,
+      0,
+      1,
+      2,
+      -3169195200.0,
+      1696852800.0,
+      422921,
+      567244
+    ]
+  },
+  {
+    "requested_body": 10,
+    "segment_id": "DE-0421LE-0421",
+    "descriptor_body_center_frame_type_start_end_begin_end": [
+      10,
+      0,
+      1,
+      2,
+      -3169195200.0,
+      1696852800.0,
+      820709,
+      943912
+    ]
+  },
+  {
+    "requested_body": 301,
+    "segment_id": "DE-0421LE-0421",
+    "descriptor_body_center_frame_type_start_end_begin_end": [
+      301,
+      3,
+      1,
+      2,
+      -3169195200.0,
+      1696852800.0,
+      943913,
+      1521196
+    ]
+  },
+  {
+    "requested_body": 399,
+    "segment_id": "DE-0421LE-0421",
+    "descriptor_body_center_frame_type_start_end_begin_end": [
+      399,
+      3,
+      1,
+      2,
+      -3169195200.0,
+      1696852800.0,
+      1521197,
+      2098480
+    ]
+  }
+]
