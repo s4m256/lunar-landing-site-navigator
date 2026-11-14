@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "frame": "IAU_MOON",
+  "surface_radius_m": 1737400,
+  "sites": [
+    {
+      "id": "mission-a",
+      "latitude_deg": -85,
+      "longitude_east_deg": 0,
+      "height_m": 0
+    },
+    {
+      "id": "mission-b",
+      "latitude_deg": -85,
+      "longitude_east_deg": 90,
+      "height_m": 0
+    }
+  ],
+  "start_utc": "2026-01-01T00:00:00Z",
+  "end_utc": "2027-01-01T00:00:00Z",
+  "step_seconds": 86400
+}

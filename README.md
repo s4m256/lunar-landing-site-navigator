@@ -1,69 +1,66 @@
 # Lunar Landing Site Navigator
 
-MVP estático para explorar a direção aparente dos centros do **Sol e da Terra** a partir de um ponto próximo ao polo sul lunar. A tela principal apresenta um observador simbólico, uma cena 3D e três controles agrupados: **data UTC, Recentrar e Informações**.
+Uma missão guiada para aprender por que **local e data** importam em um pouso lunar. Uma astronauta fictícia apresenta a iniciativa CLPS, que envolve entregas robóticas comerciais. O usuário escolhe entre quatro locais hipotéticos, compara as direções do Sol e da Terra e registra uma escolha. Um quinto alvo oferece um bônus educativo opcional.
 
-## Executar
+O visual usa ilustrações SVG próprias, mapa polar esquemático e corte do horizonte. Decolagem e pouso são transições curtas, puláveis; movimento reduzido elimina as animações. É possível ir direto ao mapa. A experiência principal dispensa WebGL, vídeos, câmera e servidor científico.
 
-Requer Node.js 24 e npm 11. Na raiz:
+## Abrir sem instalação
+
+A distribuição **Lunar-Missao.html** reúne interface, ilustrações e dados em um único arquivo. Abra-o em um navegador moderno no computador. A entrega fica fora do Git, em uma pasta temporária ou na pasta de saída informada.
+
+Para gerar a distribuição a partir do código, use Node.js 24 e npm 11:
+
+```sh
+npm ci --include=dev
+npm run typecheck
+npm run build:offline
+```
+
+O comando informa o caminho do HTML. Para escolher a pasta: `npm run build:offline -- /caminho/da/entrega`. Links externos de referência só precisam de internet quando abertos pelo usuário.
+
+## Desenvolver
 
 ```sh
 npm ci --include=dev
 npm run dev
 ```
 
-Abra o endereço informado pelo Vite. Para conferir os arquivos estáticos:
+Abra o endereço informado pelo Vite. Para testar o build estático:
 
 ```sh
 npm run build
 npm run check:deploy
-npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4173
+npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4174
 ```
 
 Esses comandos não publicam o site. A configuração Vercel permanece na raiz, com saída em `frontend/dist`.
 
-## O que a versão mínima mostra
+## O que os resultados significam
 
-- Um local fixo: **south-a**, latitude planetocêntrica −89,5°, longitude leste 0°, altura radial 0 m sobre a esfera de referência.
-- Sol e Terra simultaneamente, com azimute e elevação do mesmo instante UTC.
-- 365 datas de 2026, sempre às **00:00 UTC**. Não há interpolação nem escolha de horário entre amostras; o fim em 01/01/2027 é exclusivo.
-- Câmera manipulável e comando para recuperar a vista inicial. Os resultados também estão disponíveis em texto.
-- Fontes, método, hipóteses e download do JSON original em Informações.
+Os quatro observadores estão a −85° de latitude planetocêntrica, em longitudes leste 0°, 90°, 180° e 270°, sobre uma esfera de raio 1.737.400 m. As datas selecionadas são 24/03, 28/04 e 08/09 de 2026, às 00:00 UTC. Cada posição tem suas próprias direções calculadas com Python/SPICE, DE421, IAU_MOON e CN+S. O navegador consome artefatos estáticos validados.
 
-O astronauta é um marcador visual, não uma simulação de uma pessoa ou veículo. A cena inclui um recorte contextual de 120 km do DEM LRO/LOLA LDEM4, com escala e proveniência documentadas. O relevo está no referencial ME/DE421, sem transformação para o IAU_MOON das direções. A origem científica permanece no observador definido no dataset; a malha não calcula obstruções, sombras ou segurança. Se o relevo não carregar, a vista identifica explicitamente a superfície idealizada.
+O objetivo exige os **centros** de Sol e Terra acima do horizonte tangente idealizado, usando os valores completos. Em março, B e C atendem; em abril, A; em setembro, D. Há mais de uma escolha possível, sem vencedor fixo. Mudar a data pode mudar o resultado.
 
-**Não são observações diretas, recomendações de pouso ou estimativas de energia/enlace.** O cálculo de direções usa superfície esférica, IAU_MOON e correção CN+S. Ele não incorpora obstrução pelo relevo, refração, disco finito, eclipses ou antenas. Amostras diárias não fornecem horários de nascer/pôr nem duração contínua de janelas. Não há validação independente contra Horizons; a auditoria registra HTTP 403 e zero comparações. Reprodução numérica não certifica precisão física.
+**Não calcula interseção com montanhas, sombras, energia produzida, disponibilidade de enlace ou segurança de pouso.** Crateras, nave e personagem são ilustrações. As três datas não permitem inferir janelas contínuas ou horários de nascer/pôr. Fontes, método, limitações e download dos dados completos estão em Sobre a missão.
 
-Detalhes: [MVP minimalista](docs/minimal-explorer.md). Situação das fontes de terreno: [relevo](docs/terrain-source.md).
+Os cálculos são reais e reproduzíveis, mas não foram validados independentemente contra Horizons. Kernels vieram de distribuições de terceiros com hashes conferidos; a completude atual do LSK não foi confirmada. Reprodução numérica não certifica precisão física. O projeto não pressupõe vínculo oficial com a NASA.
 
-## Dados e arquitetura
+## Arquitetura e verificação
 
-Python/SPICE calcula offline; React/TypeScript consome o [artefato auditado de 2026](docs/audits/pr4/result-2026.json). Nenhum backend ou Python executa no navegador. O contrato `analysis-result` 1.0.0 e invariantes de cobertura são verificados antes de mostrar valores; falhas não geram números substitutos. O artefato original e seus hashes são preservados.
-
-`frontend/src/explorer/` contém a nova experiência. A demonstração comparativa e o planejamento anterior permanecem em `LegacyApp.tsx` e seus componentes para manter o histórico e os testes, fora da entrada principal do produto.
-
-Three.js é carregado separadamente para a cena. Não foram copiados código, fontes proprietárias ou ativos do Lunar Trek; ele serviu como referência de composição visual.
-
-## Validação
+- [Plano executado](docs/guided-mission-plan.md) e [implementação, testes e revisão no navegador](docs/guided-mission.md).
+- [Dados da missão](docs/mission-data.md) e [auditoria científica reproduzível](docs/audits/mission/README.md).
+- `frontend/src/mission/`: fluxo, arte, diagrama e consumidor científico.
+- `scripts/build-offline.mjs`: distribuição autocontida; `scripts/mission-browser-review.mjs`: revisão no Chromium.
+- Interfaces anteriores preservadas em `frontend/src/explorer/` e `LegacyApp.tsx`, fora da entrada principal. A [auditoria anterior](docs/audits/pr4/README.md) e os contratos normativos não mudaram.
 
 ```sh
-npm run test:infra
 npm run typecheck
 npm test
+npm run test:infra
 npm run build
 npm run check:deploy
-```
-
-Desenvolvimento científico, Python 3.12+:
-
-```sh
-python -m venv .venv
-.venv/bin/python -m pip install -e './science[dev]'
-.venv/bin/python -m lunar_science fetch-kernels --kernel-set science/examples/kernel-set.json --kernel-dir /tmp/lunar-historical-kernels
-LUNAR_KERNEL_DIR=/tmp/lunar-historical-kernels .venv/bin/python -m pytest science/tests -ra
+LUNAR_KERNEL_DIR=/tmp/lunar-review-historical-kernels .venv/bin/python -m pytest science/tests -ra
 .venv/bin/python -m build science
-.venv/bin/python science/tools/verify_de421_audit.py --cache-dir /tmp/lunar-de421-cache --output-dir /tmp/lunar-de421-reproduction
 ```
 
-Os kernels históricos de teste usam DE405 e não cobrem 2026; o reprodutor usa DE421 e compara com a auditoria. Sem kernels, parte dos testes é explicitamente pulada. DE421 foi adquirido por espelho de terceiros com hashes, sem autenticação direta no servidor NAIF. Veja [GEOMETRY.md](science/GEOMETRY.md).
-
-Histórico da integração anterior: [MVP A](docs/mvp-a-integration.md). Configuração de publicação e CI: [deploy](docs/deploy.md). O projeto não pressupõe vínculo oficial com a NASA.
+Preparação e convenções científicas: [GEOMETRY.md](science/GEOMETRY.md). Os testes Python requerem instalação de `./science[dev]`; os kernels históricos devem ser adquiridos e verificados conforme essa documentação. Sem kernels, parte dos testes é explicitamente pulada. Configuração de CI/publicação: [deploy](docs/deploy.md).

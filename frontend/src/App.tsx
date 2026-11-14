@@ -1,6 +1,6 @@
-import { MinimalExplorer } from "./explorer/MinimalExplorer";
+import { MissionApp } from "./mission/MissionApp";
 
-/** The default experience focuses on one observer and one sampled UTC date. */
+/** A guided exercise comparing four lunar observers at three sampled UTC dates. */
 export function App() {
-  return <MinimalExplorer />;
+  return <MissionApp />;
 }

@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import './style.css';
 import example from "../../contracts/examples/science-status.json";
 import { parseScienceStatus } from "./contract";
 import { LunarMap } from "./LunarMap";

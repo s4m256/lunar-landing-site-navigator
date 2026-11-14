@@ -1,0 +1,15 @@
+{
+  "verified_at_utc": "2026-11-14T22:46:21.670918+00:00",
+  "manifest_sources_sha256_match": true,
+  "manifest_outputs_sha256_match": true,
+  "second_generation_byte_identical": {
+    "request-ab-2026.json": true,
+    "result-ab-2026.json": true,
+    "request-cd-2026.json": true,
+    "result-cd-2026.json": true,
+    "selected-samples.json": true
+  },
+  "corrupt_cache_rejection": "Cached skyfield-data wheel checksum mismatch",
+  "corrupt_cache_writes_no_output": true,
+  "validation_scope": "File identity and same-engine numerical reproducibility only; no independent physical validation or Horizons comparison."
+}

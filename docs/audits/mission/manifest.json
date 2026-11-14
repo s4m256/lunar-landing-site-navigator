@@ -1,0 +1,63 @@
+{
+  "generated_at_utc": "2026-11-14T22:42:27.090056+00:00",
+  "python_version": "3.12.14",
+  "generator": "science/tools/generate_mission_fixture.py",
+  "execution": "Two sequential annual daily batches, exactly two observers per request.",
+  "dates": [
+    "2026-03-24",
+    "2026-04-28",
+    "2026-09-08"
+  ],
+  "date_selection": "Curated educational contrasts from computed daily samples; not a mission window search or continuous clock.",
+  "acquisition": {
+    "method": "Reused existing local cache; no new network request. Hashes matched preserved PR4 manifest.",
+    "de421": "JPL DE421 distributed in the third-party skyfield-data 7.0.0 PyPI wheel; wheel and member hashes checked.",
+    "pck_lsk": "Previously acquired from the SpiceyPy test-kernel GitHub mirror; pinned hashes checked.",
+    "package_url": "https://files.pythonhosted.org/packages/bb/46/e815e37cfb1f1108d80e45ee100c8a6d9f1d5999ccf1cf14dab7be6858dc/skyfield_data-7.0.0-py2.py3-none-any.whl",
+    "package_sha256": "4279f999f7f8c5ef5d8bf1b714f301a0844ae5df3a3f0d23610b20d8789073f5"
+  },
+  "kernels": [
+    {
+      "filename": "de421.bsp",
+      "url": "https://files.pythonhosted.org/packages/bb/46/e815e37cfb1f1108d80e45ee100c8a6d9f1d5999ccf1cf14dab7be6858dc/skyfield_data-7.0.0-py2.py3-none-any.whl#skyfield_data/data/de421.bsp",
+      "sha256": "a20a7139da04cbc462454634918e9a9ca69127044e2cc9d4f9c16e238d2deedc"
+    },
+    {
+      "filename": "pck00010.tpc",
+      "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/pck00010.tpc",
+      "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2",
+      "reference_md5": "da153641f7346bd5b6a1226778e0d51b"
+    },
+    {
+      "filename": "naif0012.tls",
+      "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/naif0012.tls",
+      "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+      "reference_md5": "25a2fff30b0dedb4d76c06727b1895b1"
+    }
+  ],
+  "source_sha256": {
+    "science/tools/generate_mission_fixture.py": "daa7393bddca166b82024c6f7f86197269e280b6828b79f6a02dca90689b5c28",
+    "science/src/lunar_science/geometry.py": "29d429600dd2ec629b00252ce0492d2e74e3597bc2443cf8701f874ccc1272dd",
+    "contracts/analysis-request.v1.schema.json": "e0b21ddf43f8568503f643cabe1a37b6c330f064c48c2af15d28c671fbd64c6d",
+    "contracts/analysis-result.v1.schema.json": "2a9edb67d55fd5fda9ab61c3970e3ca385746f61462b46995de465839314ba8e",
+    "contracts/scientific-provenance.v1.schema.json": "204ec01c68028b6c2e1557be24d542f2fc8a767e9f175696e62da9d30f11da30",
+    "docs/audits/pr4/kernel-set-2026.json": "0427b7addb9106d661afd68f9c55e9dd825d52216ef1ddc857be9eb55fc705f4",
+    "docs/audits/pr4/package-source.json": "cd873cc35961f84ee8d90fcae573b3000c57c8e1b00141eaaaf0c1cc3193c0ad",
+    "docs/audits/pr4/network-observations.json": "2be722ae0f75c373fd61ea08c6b08b08efff6b009c8a35b5854f14fbbd2f9dbe",
+    "docs/audits/pr4/result-2026.json": "108d2adf202442acf32ba589504482ac00b2afac830b0bf14c55bc913147e023"
+  },
+  "output_sha256": {
+    "request-ab-2026.json": "2e8154556e291a04b68ff54a80218a72dbe5606ac91a65a034896089b3e03741",
+    "result-ab-2026.json": "0093ba031ecec21f9111a561281f9e8934f385b5527abe454ecb3fe5c5e037b6",
+    "request-cd-2026.json": "8ac74918d1f89ca7d22ee3b0cb998c4549bc7ac3428cf2f82f3ea4d476d5b9e1",
+    "result-cd-2026.json": "2af254c13f413dd77bc7552ea05a0097321f6a62e8906bca8bd3adf433f0277e",
+    "selected-samples.json": "b5cf0735c8d21a7628ffb131c1ddca03a225a2a4d38d461d5da022e02a9807dc"
+  },
+  "validation_status": "Real SPICE calculation; NOT independently validated against Horizons.",
+  "validation": [
+    "Input/output JSON Schemas, pinned kernel hashes and successful SPICE state chains for every sample and boundaries.",
+    "Selected samples are exact copies of source results; each curated date has at least one pair strictly above zero.",
+    "Prior failed network attempts remain evidence only; no new Horizons or NAIF acquisition attempt was performed.",
+    "Primary-source integrity, current LSK completeness and physical angular accuracy remain unconfirmed."
+  ]
+}
