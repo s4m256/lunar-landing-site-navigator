@@ -1,0 +1,103 @@
+"""Lunar Landing Site Navigator scientific engine package."""
+
+from .comms import (
+    ELFO_CONSTELLATION_PRESET,
+    ELFO_PATHFINDER_PRESET,
+    LRO_PRESET,
+    RELAY_PRESETS,
+    RelayOrbitPreset,
+    analyze_site_comms,
+    check_segment_clears_moon,
+    compute_fspl_db,
+    interpolate_horizon_elev,
+    max_blackout_duration_hours,
+    propagate_kepler_lunar_inertial,
+)
+from .data_sources import (
+    ALL_REMOTE_ASSETS,
+    DEFAULT_SOUTH_POLE_SITES,
+    LOLA_DEM_ASSETS,
+    NAIF_KERNELS,
+    CandidateSiteSpec,
+    ensure_assets,
+)
+from .dem_horizon import (
+    LolaSouthPoleDem,
+    max_solar_elevation_curve,
+    parse_pds3_lbl,
+    selenographic_to_cartesian_me,
+)
+from .ephemeris import (
+    SpiceLunarEphemeris,
+    angular_separation_deg,
+    build_utc_grid,
+    cartesian_me_to_enu_az_el,
+    cross_check_skyfield_sun_earth,
+    enu_rotation_matrix,
+    query_jpl_horizons_topocentric,
+    validate_ephemeris_against_horizons,
+)
+from .pipeline import (
+    load_navigator_schema,
+    run_navigator_pipeline,
+    validate_dataset_schema,
+    write_navigator_outputs,
+)
+from .scoring import (
+    DEFAULT_SCORE_WEIGHTS,
+    LandingScoreWeights,
+    compute_composite_landing_score,
+)
+from .solar import (
+    BASELINE_SURVIVAL_LOAD_W,
+    DEFAULT_PANEL_EFFICIENCY,
+    analyze_site_solar,
+    compute_solar_illum_fraction,
+    compute_solar_irradiance_w_m2,
+    max_continuous_shadow_hours,
+)
+
+__all__ = [
+    "ALL_REMOTE_ASSETS",
+    "BASELINE_SURVIVAL_LOAD_W",
+    "CandidateSiteSpec",
+    "DEFAULT_PANEL_EFFICIENCY",
+    "DEFAULT_SCORE_WEIGHTS",
+    "DEFAULT_SOUTH_POLE_SITES",
+    "ELFO_CONSTELLATION_PRESET",
+    "ELFO_PATHFINDER_PRESET",
+    "LOLA_DEM_ASSETS",
+    "LRO_PRESET",
+    "LandingScoreWeights",
+    "LolaSouthPoleDem",
+    "NAIF_KERNELS",
+    "RELAY_PRESETS",
+    "RelayOrbitPreset",
+    "SpiceLunarEphemeris",
+    "analyze_site_comms",
+    "analyze_site_solar",
+    "angular_separation_deg",
+    "build_utc_grid",
+    "cartesian_me_to_enu_az_el",
+    "check_segment_clears_moon",
+    "compute_composite_landing_score",
+    "compute_fspl_db",
+    "compute_solar_illum_fraction",
+    "compute_solar_irradiance_w_m2",
+    "cross_check_skyfield_sun_earth",
+    "ensure_assets",
+    "enu_rotation_matrix",
+    "interpolate_horizon_elev",
+    "load_navigator_schema",
+    "max_blackout_duration_hours",
+    "max_continuous_shadow_hours",
+    "max_solar_elevation_curve",
+    "parse_pds3_lbl",
+    "propagate_kepler_lunar_inertial",
+    "query_jpl_horizons_topocentric",
+    "run_navigator_pipeline",
+    "selenographic_to_cartesian_me",
+    "validate_dataset_schema",
+    "validate_ephemeris_against_horizons",
+    "write_navigator_outputs",
+]
