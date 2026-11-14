@@ -1,0 +1,1401 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index a832aab..27248f6 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -26,12 +26,16 @@ jobs:
+       - run: npm run check:deploy
+   science:
+     runs-on: ubuntu-latest
++    env:
++      LUNAR_KERNEL_DIR: ${{ runner.temp }}/lunar-kernels
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-python@v5
+         with:
+           python-version: '3.12'
+       - run: python -m pip install -e './science[dev]'
++      - name: Fetch checksum-verified historical JPL kernels
++        run: python -m lunar_science fetch-kernels --kernel-set science/examples/kernel-set.json --kernel-dir "$LUNAR_KERNEL_DIR"
+       - run: python -m pytest
+         working-directory: science
+       - run: python -m build science
+@@ -39,6 +43,6 @@ jobs:
+         shell: bash
+         run: |
+           python -m venv "$RUNNER_TEMP/lunar-wheel"
+-          "$RUNNER_TEMP/lunar-wheel/bin/python" -m pip install --no-deps science/dist/*.whl
++          "$RUNNER_TEMP/lunar-wheel/bin/python" -m pip install science/dist/*.whl
+           cd "$RUNNER_TEMP"
+           "$RUNNER_TEMP/lunar-wheel/bin/lunar-science"
+diff --git a/.gitignore b/.gitignore
+index a91c1b0..f4ba1f9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -7,3 +7,6 @@ __pycache__/
+ *.tsbuildinfo
+ build/
+ .vercel/
++*.bsp
++*.bpc
++science/.kernels/
+diff --git a/AGENTS.md b/AGENTS.md
+index eb9ba2d..ed82e13 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -5,7 +5,7 @@
+ - Use o checkout existente: tarefas na nuvem já são isoladas. Não crie worktrees sem pedido explícito.
+ - Trabalhe em uma branch própria e abra PR; não faça push de funcionalidades em `main`.
+ - Frontend em `frontend/`, ciência em `science/`, interfaces compartilhadas em `contracts/`.
+-- Esta base não implementa ciência. Não invente datasets, métricas, resultados, unidades ou alegações de validação científica.
++- O núcleo geométrico calcula direções aparentes com SPICE. Não invente datasets, métricas, resultados, unidades ou alegações de validação científica; respeite as limitações em science/GEOMETRY.md.
+ - Preserve alterações existentes do usuário. Nunca versione segredos, `.venv`, dependências ou artefatos gerados.
+ 
+ ## Colaboração em paralelo
+diff --git a/README.md b/README.md
+index 0690af8..c7ae663 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # Lunar Landing Site Navigator
+ 
+-Base de desenvolvimento para o NASA Space Apps 2026. Aplicação React + TypeScript e módulo Python independentes, preparados para trabalho paralelo. Este repositório ainda **não executa análises científicas**, não contém dados NASA e não pressupõe vínculo oficial com a NASA.
++Base de desenvolvimento para o NASA Space Apps 2026. Aplicação React + TypeScript e módulo Python independentes, preparados para trabalho paralelo. O pacote Python calcula direções geométricas aparentes com SPICE; não calcula energia, enlace, topografia ou segurança de pouso. O exemplo histórico usa dados JPL/NAIF obtidos de um espelho documentado. O projeto não pressupõe vínculo oficial com a NASA.
+ 
+ ## Estrutura e responsabilidades
+ 
+@@ -54,3 +54,7 @@ Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks. Nã
+ A configuração da Vercel instala e compila a partir da raiz e publica `frontend/dist`. Veja [deploy, integração de PRs e diagnóstico](docs/deploy.md) para configurar a conta Vercel, executar os checks de infraestrutura e investigar falhas. O deploy publica somente o frontend; o pacote científico Python permanece independente.
+ 
+ Após `npm run build`, execute `npm run check:deploy` para verificar os artefatos publicáveis. Os testes dessa verificação rodam com `npm run test:infra`.
++
++## Motor geométrico científico
++
++O subcomando Python `analyze` calcula direções aparentes reais dos centros do Sol e da Terra para dois locais lunares. Veja [comandos, modelos, contratos, fontes e limitações](science/GEOMETRY.md). Há um exemplo histórico calculado em `science/examples/result.json`; o kernel demonstrativo não cobre 2026. A validação independente com Horizons permanece bloqueada por acesso de rede, registrada sem residual numérico inventado.
+diff --git a/contracts/README.md b/contracts/README.md
+index 2fa3955..30d34b1 100644
+--- a/contracts/README.md
++++ b/contracts/README.md
+@@ -19,3 +19,7 @@ O produtor atual é `python -m lunar_science` (ou `lunar-science` após instala
+ ## Evolução
+ 
+ Use versionamento semântico do contrato. Mudanças incompatíveis, inclusive novos campos obrigatórios ou valores de status, exigem nova versão principal. Como esta versão rejeita campos desconhecidos e fixa `schema_version`, qualquer nova versão precisa de atualização explícita do consumidor e dos testes; nenhuma compatibilidade automática é prometida. Antes de introduzir dados científicos, documente fontes, licença, proveniência, unidades, sistema de coordenadas lunar, intervalos válidos, valores ausentes e incerteza. Atualize schema, fixture, tipos TypeScript, produtor Python e testes juntos.
++
++## Famílias científicas adicionais
++
++`analysis-request.v1.schema.json`, `analysis-result.v1.schema.json` e `scientific-provenance.v1.schema.json` são contratos novos e independentes (versão 1.0.0 cada). Não substituem nem estendem silenciosamente `science-status` 1.0.0. Veja `../science/GEOMETRY.md` para semântica temporal, unidades, referencial, superfície e limitações. O exemplo calculado está em `../science/examples/result.json`.
+diff --git a/science/GEOMETRY.md b/science/GEOMETRY.md
+new file mode 100644
+index 0000000..35c1360
+--- /dev/null
++++ b/science/GEOMETRY.md
+@@ -0,0 +1,61 @@
++# Geometric engine 1.0.0
++
++This batch engine emits real apparent topocentric **center** directions of SUN (10) and EARTH (399), viewed from two configurable lunar observers. There is no HTTP service. Existing `science-status` 1.0.0 and the no-argument CLI retain their original placeholder meaning; use the `analyze` subcommand for science.
++
++## Reproduce the committed historical calculation
++
++From the repository root, Python 3.12+:
++
++```sh
++python -m venv .venv
++.venv/bin/python -m pip install -e './science[dev]'
++.venv/bin/python -m lunar_science fetch-kernels --kernel-set science/examples/kernel-set.json --kernel-dir science/.kernels
++.venv/bin/python -m lunar_science analyze --request science/examples/request.json --kernel-set science/examples/kernel-set.json --kernel-dir science/.kernels --output /tmp/lunar-result.json
++LUNAR_KERNEL_DIR="$PWD/science/.kernels" .venv/bin/python -m pytest science/tests
++.venv/bin/python science/tools/compare_horizons.py --result /tmp/lunar-result.json --output /tmp/horizons-comparison.json
++```
++
++No kernels are committed. The downloader requires HTTPS and checks pinned SHA-256 on download and on every analysis. The committed result is calculated, not synthetic. It uses two hypothetical coordinate choices (not nominated landing sites), on 2007-01-01, at 00, 01 and 02 UTC. It is not a 2026 prediction.
++
++## Sources, integrity and coverage
++
++`kernel-set.json` pins a DE405 SPK subset, NAIF `pck00010.tpc`, and `naif0012.tls` from the public SpiceyPy test-kernel mirror. Their MD5 values were also checked against SpiceyPy's published gettestkernels.py; SHA-256 values are pinned here. These are JPL/NAIF-format data of documented origin, **retrieved from a third-party mirror**, not independently downloaded from NAIF in this task. Inspect SPK comments using NAIF tools for the original DE405 release details.
++
++Upstream catalogs:
++- https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/
++- https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/
++- https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/
++- https://naif.jpl.nasa.gov/naif/data_lunar.html
++- Mirror and checksum reference: https://github.com/AndrewAnnex/SpiceyPyTestKernels and https://github.com/AndrewAnnex/SpiceyPy/blob/main/src/spiceypy/tests/gettestkernels.py
++
++Each result records all SPK object coverage intervals in ET. CSPICE must also successfully evaluate the full state chain, light-time-retarded epochs, requested boundaries and every returned sample; being inside one nominal coverage window is not sufficient. The historical subset does not cover 2026 and a test verifies that 2026 fails explicitly. For current mission dates, obtain a suitable official planetary SPK and compatible PCK/LSK, verify the upstream integrity information, then create a new filename/HTTPS-source/SHA-256 kernel-set manifest. Do not rename a file or alter a checksum merely to bypass a failure. High-accuracy PA/ME orientation is a separate model version, not silently substituted for IAU_MOON.
++
++## Physical conventions
++
++- Planetocentric latitude [-90,90], east-positive longitude [0,360), degrees, in `IAU_MOON`.
++- Spherical reference radius **1,737,400 m**. This is a declared idealized surface, not measured elevation or a DEM. Height is radial meters above this sphere (supported range 0–10000 m). No terrain is implied.
++- Convert observer radius plus height to **km** for CSPICE. Use `spkcpo` with Moon center, fixed observer in IAU_MOON, `CN+S` (reception converged light time plus stellar aberration) and output frame evaluated at `OBSERVER` epoch.
++- IAU_MOON is defined by analytic PCK orientation, not a high-accuracy lunar principal-axis/mean-Earth solution. The result must not be advertised with a positional/angular accuracy unsupported by independent validation.
++- ENU uses radial up; east follows increasing longitude; north completes the right-handed basis. Azimuth is atan2(east,north) modulo 360; elevation is atan2(up,hypot(east,north)). At a geographic pole the supplied longitude defines the meridian; a numerically vertical ray uses azimuth zero as an undefined-direction convention.
++- Flat tangent horizon is 0 degrees, including for elevated observers. No spherical horizon dip, topographic masking, refraction, finite-disk visibility, eclipse handling, power, radio-link quality or landing ranking.
++- Interval is **[start,end)**. Validate ISO UTC labels with mandatory `Z`, seconds and optional 1–3 fractional digits. Leap-second literals such as `23:59:60Z` are explicitly unsupported. Sampling follows UTC calendar labels at integer steps 1–86400 s; across leap seconds their SI separation can change. SPICE handles UTC/TDB conversion internally. Millisecond output formatting is not an accuracy claim.
++- Exactly two distinct site IDs; maximum 100000 sample instants per site/target to bound memory. JSON finite values only. Unknown coverage never becomes fabricated output.
++
++## Contracts and consumer integration
++
++New independent contract families, each version 1.0.0:
++- `contracts/analysis-request.v1.schema.json`
++- `contracts/analysis-result.v1.schema.json`
++- `contracts/scientific-provenance.v1.schema.json`
++
++The result embeds the request, four site/target series, and provenance. Packaged copies of these schemas make wheel validation independent of the checkout; a test requires byte-for-byte equality with contracts. Update both copies together when evolving a new contract version. Existing status schema/fixture are unchanged. A frontend can consume the exported JSON as a static asset; this task does not edit frontend or prescribe claims beyond center directions.
++
++Errors are JSON on stderr and exit code 2 (`INVALID_INPUT`, `MISSING_KERNEL`, `KERNEL_CHECKSUM`, `COVERAGE_ERROR`, `SPICE_ERROR`, etc.). No partial result is written. An existing output file is preserved on failure: always check exit status and do not mistake an older output for a new success. CSPICE kernel state is process-global; the batch API clears/owns the pool and must not run concurrently in threads.
++
++## Executed validation and remaining blocker
++
++Executed: real-kernel integration, schema validation, ENU handedness/orthogonality and cardinal directions, east longitude, height effect, invalid dates, interval endpoint behavior, unavailable 2026 coverage, and J2000-to-body-fixed path equivalence. Floating-point equivalence thresholds test numerical algebra, not physical accuracy. Without `LUNAR_KERNEL_DIR`, real-kernel tests are explicitly skipped; CI downloads the verified set and enables them.
++
++**Horizons comparison has not succeeded.** NAIF, Horizons and GitHub API requests returned proxy HTTP 403. `examples/horizons-comparison.json` retains the actual failed attempt, with no invented residuals/tolerance. The comparison tool submits the exact sample times, lunar observer coordinates and airless observer azimuth/elevation; it retains full responses and computes wrapped azimuth and elevation differences only if references return successfully. Inspect returned times, observer radius/coordinate interpretation, ephemeris version and orientation in the retained headers before interpreting differences. Horizons commonly uses a different DE/orientation solution; numerical agreement is not assumed. No pass/fail physical tolerance is fabricated.
++
++To finish independent validation, allow `ssd.jpl.nasa.gov` and rerun the comparison command, then review headers and residuals. Official acquisition additionally needs `naif.jpl.nasa.gov`. A Horizons-only fallback can use these same requests, retain full responses and metadata, and generate series only after validating the response's coordinate/time conventions. Until then, the SPICE calculation is real and internally tested, but **not independently validated against Horizons**.
+diff --git a/science/README.md b/science/README.md
+index e1dfd88..b9e4851 100644
+--- a/science/README.md
++++ b/science/README.md
+@@ -1,9 +1,9 @@
+ # lunar-science
+ 
+-Pacote Python independente do frontend para o Lunar Landing Site Navigator (NASA Space Apps 2026).
++Pacote Python independente do frontend. O subcomando `analyze` calcula direções aparentes dos centros do Sol e da Terra com SpiceyPy/CSPICE, para dois observadores numa superfície lunar esférica idealizada.
+ 
+-Por enquanto, `python -m lunar_science` e `lunar-science` apenas imprimem JSON de status `not_implemented`. Não há algoritmos científicos, dados externos ou serviço HTTP.
++Leia [GEOMETRY.md](GEOMETRY.md) para instalação, geração reproduzível de JSON, contratos, fontes e validação. O exemplo calculado é histórico (2007); o conjunto demonstrativo não cobre 2026. A comparação com Horizons está pendente devido ao bloqueio de rede, sem alegação de validação externa concluída.
+ 
+-No checkout completo, instale com `python -m pip install -e './science[dev]'`, partindo da raiz. Execute os testes com `python -m pytest`, dentro de `science/`, e gere wheel/sdist com `python -m build science` na raiz.
++Sem subcomando, `python -m lunar_science` e `lunar-science` preservam o JSON de status `not_implemented` do contrato legado. Não há servidor HTTP, topografia, potência, modelo de enlace ou ranking.
+ 
+-Os testes de integração dependem de `../contracts/`, versionado na raiz do repositório; execute-os no checkout completo. A wheel e a CLI não dependem desses arquivos externos. Veja `../contracts/README.md` e `../AGENTS.md` para coordenação entre equipes.
++Na raiz do checkout: `python -m pip install -e './science[dev]'`. Testes: `python -m pytest` dentro de `science/`; build: `python -m build science` na raiz. Os testes de contrato usam `../contracts/` no checkout completo. A wheel contém os novos schemas necessários à execução independente. As regras de colaboração estão em `../AGENTS.md`.
+diff --git a/science/examples/horizons-comparison.json b/science/examples/horizons-comparison.json
+new file mode 100644
+index 0000000..4324cf1
+--- /dev/null
++++ b/science/examples/horizons-comparison.json
+@@ -0,0 +1,10 @@
++{
++  "status": "blocked_or_invalid_reference",
++  "comparisons": [],
++  "notes": [
++    "Horizons orientation/DE version and spherical observer model must be checked in retained headers.",
++    "Residuals compare different ephemeris/orientation configurations; no physical tolerance assumed.",
++    "Observer coordinate altitude is km above the lunar reference surface; verify Horizons radius in header."
++  ],
++  "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
++}
+diff --git a/science/examples/kernel-set.json b/science/examples/kernel-set.json
+new file mode 100644
+index 0000000..07b0f7f
+--- /dev/null
++++ b/science/examples/kernel-set.json
+@@ -0,0 +1,20 @@
++[
++  {
++    "filename": "de405s_littleendian.bsp",
++    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/de405s_littleendian.bsp",
++    "sha256": "b52400cfa5bdfbb4ce94c578beb999d30d7ab5e715be0cd5628ffbf5d7042236",
++    "reference_md5": "b4bb31ce13a006a4b20c124ad58b933a"
++  },
++  {
++    "filename": "pck00010.tpc",
++    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/pck00010.tpc",
++    "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2",
++    "reference_md5": "da153641f7346bd5b6a1226778e0d51b"
++  },
++  {
++    "filename": "naif0012.tls",
++    "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/naif0012.tls",
++    "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
++    "reference_md5": "25a2fff30b0dedb4d76c06727b1895b1"
++  }
++]
+diff --git a/science/examples/request.json b/science/examples/request.json
+new file mode 100644
+index 0000000..62a85bf
+--- /dev/null
++++ b/science/examples/request.json
+@@ -0,0 +1,22 @@
++{
++  "schema_version": "1.0.0",
++  "frame": "IAU_MOON",
++  "surface_radius_m": 1737400,
++  "sites": [
++    {
++      "id": "south-a",
++      "latitude_deg": -89.5,
++      "longitude_east_deg": 0,
++      "height_m": 0
++    },
++    {
++      "id": "south-b",
++      "latitude_deg": -89,
++      "longitude_east_deg": 90,
++      "height_m": 0
++    }
++  ],
++  "start_utc": "2007-01-01T00:00:00Z",
++  "end_utc": "2007-01-01T03:00:00Z",
++  "step_seconds": 3600
++}
+diff --git a/science/examples/result.json b/science/examples/result.json
+new file mode 100644
+index 0000000..61e78f4
+--- /dev/null
++++ b/science/examples/result.json
+@@ -0,0 +1,249 @@
++{
++  "schema_version": "1.0.0",
++  "request": {
++    "schema_version": "1.0.0",
++    "frame": "IAU_MOON",
++    "surface_radius_m": 1737400,
++    "sites": [
++      {
++        "id": "south-a",
++        "latitude_deg": -89.5,
++        "longitude_east_deg": 0,
++        "height_m": 0
++      },
++      {
++        "id": "south-b",
++        "latitude_deg": -89,
++        "longitude_east_deg": 90,
++        "height_m": 0
++      }
++    ],
++    "start_utc": "2007-01-01T00:00:00Z",
++    "end_utc": "2007-01-01T03:00:00Z",
++    "step_seconds": 3600
++  },
++  "series": [
++    {
++      "site_id": "south-a",
++      "target": "SUN",
++      "samples": [
++        {
++          "utc": "2007-01-01T00:00:00.000Z",
++          "azimuth_deg": 36.3329150910356,
++          "elevation_deg": 1.8439534951569565
++        },
++        {
++          "utc": "2007-01-01T01:00:00.000Z",
++          "azimuth_deg": 35.82741555709542,
++          "elevation_deg": 1.8462721267319704
++        },
++        {
++          "utc": "2007-01-01T02:00:00.000Z",
++          "azimuth_deg": 35.32192128689676,
++          "elevation_deg": 1.8485578700555967
++        }
++      ]
++    },
++    {
++      "site_id": "south-a",
++      "target": "EARTH",
++      "samples": [
++        {
++          "utc": "2007-01-01T00:00:00.000Z",
++          "azimuth_deg": 3.6167981723799603,
++          "elevation_deg": 6.673293716706273
++        },
++        {
++          "utc": "2007-01-01T01:00:00.000Z",
++          "azimuth_deg": 3.6506087736589166,
++          "elevation_deg": 6.686448881479966
++        },
++        {
++          "utc": "2007-01-01T02:00:00.000Z",
++          "azimuth_deg": 3.684189733627422,
++          "elevation_deg": 6.698928575603994
++        }
++      ]
++    },
++    {
++      "site_id": "south-b",
++      "target": "SUN",
++      "samples": [
++        {
++          "utc": "2007-01-01T00:00:00.000Z",
++          "azimuth_deg": 306.2999676792002,
++          "elevation_deg": 2.033331123332807
++        },
++        {
++          "utc": "2007-01-01T01:00:00.000Z",
++          "azimuth_deg": 305.79446211332834,
++          "elevation_deg": 2.0259207902258805
++        },
++        {
++          "utc": "2007-01-01T02:00:00.000Z",
++          "azimuth_deg": 305.2889656262391,
++          "elevation_deg": 2.0184637209002245
++        }
++      ]
++    },
++    {
++      "site_id": "south-b",
++      "target": "EARTH",
++      "samples": [
++        {
++          "utc": "2007-01-01T00:00:00.000Z",
++          "azimuth_deg": 273.4999231042907,
++          "elevation_deg": 6.236095091667542
++        },
++        {
++          "utc": "2007-01-01T01:00:00.000Z",
++          "azimuth_deg": 273.5334596868178,
++          "elevation_deg": 6.249855058696917
++        },
++        {
++          "utc": "2007-01-01T02:00:00.000Z",
++          "azimuth_deg": 273.5667790880111,
++          "elevation_deg": 6.262935714931742
++        }
++      ]
++    }
++  ],
++  "provenance": {
++    "schema_version": "1.0.0",
++    "engine_version": "0.2.0",
++    "spiceypy_version": "8.0.0",
++    "numpy_version": "2.5.4",
++    "cspice_version": "CSPICE_N0067",
++    "frame": "IAU_MOON",
++    "correction": "CN+S",
++    "frame_epoch": "OBSERVER",
++    "time_scale": "UTC input/output; TDB seconds past J2000 internally",
++    "surface_radius_m": 1737400,
++    "horizon_elevation_deg": 0,
++    "azimuth_convention": "north=0, east=90; undefined at zenith/nadir or geographic pole uses supplied longitude meridian and azimuth 0 for vertical rays",
++    "kernels": [
++      {
++        "filename": "de405s_littleendian.bsp",
++        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/de405s_littleendian.bsp",
++        "sha256": "b52400cfa5bdfbb4ce94c578beb999d30d7ab5e715be0cd5628ffbf5d7042236",
++        "type": "SPK",
++        "coverage_et": {
++          "1": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "2": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "3": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "4": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "5": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "6": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "7": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "8": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "9": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "10": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "199": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "299": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "301": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "399": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ],
++          "499": [
++            [
++              -94651137.81606464,
++              315662463.18395346
++            ]
++          ]
++        }
++      },
++      {
++        "filename": "pck00010.tpc",
++        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/pck00010.tpc",
++        "sha256": "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2",
++        "type": "PCK",
++        "coverage_et": {}
++      },
++      {
++        "filename": "naif0012.tls",
++        "url": "https://raw.githubusercontent.com/AndrewAnnex/SpiceyPyTestKernels/main/naif0012.tls",
++        "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
++        "type": "LSK",
++        "coverage_et": {}
++      }
++    ],
++    "horizons_validation": "not_performed_in_engine",
++    "limitations": [
++      "Spherical reference, planetocentric latitude, east longitude [0,360).",
++      "IAU_MOON analytic PCK orientation, not high-accuracy lunar PA/ME orientation.",
++      "No topography, refraction, disk extent, eclipses, power or communication guarantee.",
++      "Flat tangent horizon remains zero at nonzero observer height; no spherical horizon dip.",
++      "Half-open [start,end); steps follow UTC calendar labels (SI spacing changes across leap seconds); millisecond formatting is not an accuracy claim.",
++      "Kernel temporal coverage is restricted; no extrapolation is performed.",
++      "Independent comparison is external to this engine; no physical accuracy certified."
++    ]
++  }
++}
+diff --git a/science/pyproject.toml b/science/pyproject.toml
+index 0f320ad..7e0d898 100644
+--- a/science/pyproject.toml
++++ b/science/pyproject.toml
+@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "lunar-science"
+-version = "0.1.0"
+-description = "Scientific module scaffold for Lunar Landing Site Navigator"
++version = "0.2.0"
++description = "Batch lunar apparent center geometry using NAIF CSPICE"
+ readme = "README.md"
+ requires-python = ">=3.12"
+-dependencies = []
++dependencies = ["spiceypy==8.0.0", "jsonschema==4.23.0"]
+ 
+ [project.optional-dependencies]
+ dev = ["pytest==8.3.5", "jsonschema==4.23.0", "build==1.2.2.post1"]
+@@ -21,3 +21,6 @@ where = ["src"]
+ 
+ [tool.pytest.ini_options]
+ testpaths = ["tests"]
++
++[tool.setuptools.package-data]
++lunar_science = ["schemas/*.json"]
+diff --git a/science/src/lunar_science/__init__.py b/science/src/lunar_science/__init__.py
+index a66b36f..c3ce06c 100644
+--- a/science/src/lunar_science/__init__.py
++++ b/science/src/lunar_science/__init__.py
+@@ -1,4 +1,4 @@
+-"""Scientific integration boundary; no scientific algorithms yet."""
++"""Legacy integration status retained independently of the geometric engine."""
+ 
+ 
+ def get_status() -> dict[str, str]:
+diff --git a/science/src/lunar_science/__main__.py b/science/src/lunar_science/__main__.py
+index 8c77fd5..e2267b5 100644
+--- a/science/src/lunar_science/__main__.py
++++ b/science/src/lunar_science/__main__.py
+@@ -1,12 +1,50 @@
+-"""Print the integration placeholder as UTF-8 JSON."""
++"""Batch CLI: existing status output is preserved when no subcommand is supplied."""
++import argparse
+ import json
++import sys
++from pathlib import Path
++from urllib.request import urlopen
++import hashlib
+ 
+ from lunar_science import get_status
++from lunar_science.geometry import AnalysisError, analyze
+ 
+ 
+-def main() -> None:
+-    print(json.dumps(get_status(), ensure_ascii=False))
++def main():
++    parser = argparse.ArgumentParser()
++    sub = parser.add_subparsers(dest='command')
++    for name in ('fetch-kernels', 'analyze'):
++        p = sub.add_parser(name)
++        p.add_argument('--kernel-set', required=True, type=Path)
++        p.add_argument('--kernel-dir', required=True, type=Path)
++        if name == 'analyze':
++            p.add_argument('--request', required=True, type=Path)
++            p.add_argument('--output', required=True, type=Path)
++    args = parser.parse_args()
++    try:
++        if args.command is None:
++            print(json.dumps(get_status(), ensure_ascii=False))
++            return
++        spec = json.loads(args.kernel_set.read_text())
++        if args.command == 'fetch-kernels':
++            args.kernel_dir.mkdir(parents=True, exist_ok=True)
++            for item in spec:
++                if Path(item['filename']).name != item['filename'] or not item['url'].startswith('https://'):
++                    raise AnalysisError('INVALID_KERNEL_SET', 'HTTPS URL and basename required')
++                dest = args.kernel_dir / item['filename']
++                data = dest.read_bytes() if dest.is_file() else urlopen(item['url'], timeout=60).read()
++                if hashlib.sha256(data).hexdigest() != item['sha256']:
++                    raise AnalysisError('KERNEL_CHECKSUM', item['filename'])
++                dest.write_bytes(data)
++            print('Kernels downloaded and SHA-256 verified', file=sys.stderr)
++        else:
++            result = analyze(json.loads(args.request.read_text()), args.kernel_dir, spec)
++            # No partial output on failure.
++            args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
++    except (AnalysisError, OSError, ValueError, KeyError, TypeError) as exc:
++        print(json.dumps({'error': {'code': getattr(exc, 'code', 'IO_OR_INPUT_ERROR'), 'message': str(exc)}}), file=sys.stderr)
++        sys.exit(2)
+ 
+ 
+-if __name__ == "__main__":
++if __name__ == '__main__':
+     main()
+diff --git a/science/src/lunar_science/geometry.py b/science/src/lunar_science/geometry.py
+new file mode 100644
+index 0000000..df97d4b
+--- /dev/null
++++ b/science/src/lunar_science/geometry.py
+@@ -0,0 +1,135 @@
++"""Topocentric apparent center directions over a spherical lunar reference."""
++import hashlib
++import json
++import math
++from datetime import datetime, timedelta
++from importlib.metadata import version
++from importlib.resources import files
++from pathlib import Path
++
++import jsonschema
++import numpy as np
++import spiceypy as spice
++from spiceypy.utils.exceptions import SpiceyError
++
++
++class AnalysisError(ValueError):
++    def __init__(self, code, message):
++        super().__init__(message)
++        self.code = code
++
++
++def validate(value, name):
++    schema = json.loads(files('lunar_science').joinpath(f'schemas/{name}.v1.schema.json').read_text())
++    try:
++        jsonschema.Draft7Validator(schema).validate(value)
++    except jsonschema.ValidationError as exc:
++        raise AnalysisError('INVALID_INPUT', f'{list(exc.path)}: {exc.message}') from exc
++
++
++def local_basis(latitude_deg, longitude_deg):
++    lat, lon = np.radians([latitude_deg, longitude_deg])
++    return np.array([[-np.sin(lon), np.cos(lon), 0],
++                     [-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)],
++                     [np.cos(lat)*np.cos(lon), np.cos(lat)*np.sin(lon), np.sin(lat)]])
++
++
++def project(vector, basis):
++    east, north, up = basis @ np.asarray(vector)
++    horizontal = math.hypot(east, north)
++    if np.linalg.norm(vector) == 0:
++        raise AnalysisError('INVALID_VECTOR', 'Zero direction vector')
++    # At zenith/nadir azimuth is undefined, represented by the documented 0 convention.
++    az = math.degrees(math.atan2(east, north)) % 360 if horizontal > 1e-14*np.linalg.norm(vector) else 0.0
++    return az, math.degrees(math.atan2(up, horizontal))
++
++
++def load_kernels(directory, spec):
++    rows = []
++    for item in spec:
++        name = item['filename']
++        if Path(name).name != name:
++            raise AnalysisError('INVALID_KERNEL_SET', 'Kernel filename must be a basename')
++        path = Path(directory) / name
++        if not path.is_file():
++            raise AnalysisError('MISSING_KERNEL', f'Missing {name}; run fetch-kernels')
++        digest = hashlib.sha256(path.read_bytes()).hexdigest()
++        if digest != item['sha256']:
++            raise AnalysisError('KERNEL_CHECKSUM', f'Checksum mismatch: {name}')
++        kind = spice.getfat(str(path))[1]
++        coverage = {}
++        if kind == 'SPK':
++            for body in spice.spkobj(str(path)):
++                window = spice.spkcov(str(path), int(body))
++                coverage[str(int(body))] = [list(spice.wnfetd(window, n)) for n in range(spice.wncard(window))]
++        spice.furnsh(str(path))
++        rows.append({'filename': name, 'url': item['url'], 'sha256': digest,
++                     'type': kind, 'coverage_et': coverage})
++    return rows
++
++
++def analyze(request, directory, spec):
++    # CSPICE has process-global kernel state. This batch API owns it, and is not thread safe.
++    validate(request, 'analysis-request')
++    if len({s['id'] for s in request['sites']}) != 2:
++        raise AnalysisError('INVALID_INPUT', 'Site IDs must be distinct')
++    for field in ('start_utc', 'end_utc'):
++        try:
++            datetime.fromisoformat(request[field].replace('Z', '+00:00'))
++        except ValueError as exc:
++            raise AnalysisError('INVALID_INPUT', f'{field}: invalid calendar date (leap-second literals unsupported)') from exc
++    for site in request['sites']:
++        if site['longitude_east_deg'] == 360:
++            raise AnalysisError('INVALID_INPUT', 'Use longitude in [0, 360)')
++        if not all(math.isfinite(site[f]) for f in ('latitude_deg', 'longitude_east_deg', 'height_m')):
++            raise AnalysisError('INVALID_INPUT', 'Coordinates must be finite')
++    spice.kclear()
++    try:
++        kernels = load_kernels(directory, spec)
++        start, end = (spice.utc2et(request[f]) for f in ('start_utc', 'end_utc'))
++        if end <= start:
++            raise AnalysisError('INVALID_INPUT', 'end_utc must be later than start_utc')
++        start_dt = datetime.fromisoformat(request['start_utc'].replace('Z', '+00:00'))
++        end_dt = datetime.fromisoformat(request['end_utc'].replace('Z', '+00:00'))
++        count = math.ceil((end_dt-start_dt).total_seconds()/request['step_seconds'])
++        if count > 100000:
++            raise AnalysisError('SAMPLE_LIMIT', 'Maximum 100000 instants per site/target')
++        epochs = [spice.utc2et((start_dt+timedelta(seconds=i*request['step_seconds'])).isoformat(timespec='milliseconds').replace('+00:00', 'Z')) for i in range(count)]
++        # Probe both requested boundaries as well as every returned sample. SPICE resolves
++        # the complete barycentric chain and retarded epochs, not just a nominal SPK window.
++        series = []
++        for site in request['sites']:
++            basis = local_basis(site['latitude_deg'], site['longitude_east_deg'])
++            observer = basis[2] * ((request['surface_radius_m']+site['height_m'])/1000)
++            for target in ('SUN', 'EARTH'):
++                samples = []
++                for et in [*epochs, end]:
++                    state, _ = spice.spkcpo(target, et, 'IAU_MOON', 'OBSERVER', 'CN+S', observer, 'MOON', 'IAU_MOON')
++                    azimuth, elevation = project(state[:3], basis)
++                    if et < end:
++                        samples.append({'utc': spice.et2utc(et, 'ISOC', 3)+'Z',
++                                        'azimuth_deg': azimuth, 'elevation_deg': elevation})
++                series.append({'site_id': site['id'], 'target': target, 'samples': samples})
++        provenance = {'schema_version': '1.0.0', 'engine_version': version('lunar-science'),
++                      'spiceypy_version': spice.__version__, 'numpy_version': np.__version__,
++                      'cspice_version': spice.tkvrsn('TOOLKIT'), 'frame': 'IAU_MOON',
++                      'correction': 'CN+S', 'frame_epoch': 'OBSERVER',
++                      'time_scale': 'UTC input/output; TDB seconds past J2000 internally',
++                      'surface_radius_m': request['surface_radius_m'], 'horizon_elevation_deg': 0,
++                      'azimuth_convention': 'north=0, east=90; undefined at zenith/nadir or geographic pole uses supplied longitude meridian and azimuth 0 for vertical rays',
++                      'kernels': kernels, 'horizons_validation': 'not_performed_in_engine',
++                      'limitations': ['Spherical reference, planetocentric latitude, east longitude [0,360).',
++                                      'IAU_MOON analytic PCK orientation, not high-accuracy lunar PA/ME orientation.',
++                                      'No topography, refraction, disk extent, eclipses, power or communication guarantee.',
++                                      'Flat tangent horizon remains zero at nonzero observer height; no spherical horizon dip.',
++                                      'Half-open [start,end); steps follow UTC calendar labels (SI spacing changes across leap seconds); millisecond formatting is not an accuracy claim.',
++                                      'Kernel temporal coverage is restricted; no extrapolation is performed.',
++                                      'Independent comparison is external to this engine; no physical accuracy certified.']}
++        result = {'schema_version': '1.0.0', 'request': request, 'series': series, 'provenance': provenance}
++        validate(result, 'analysis-result')
++        return result
++    except SpiceyError as exc:
++        code = 'COVERAGE_ERROR' if any(x in exc.short for x in ('SPKINSUFFDATA', 'NOLEAPSECONDS', 'PCKINSUFFDATA')) else 'SPICE_ERROR'
++        raise AnalysisError(code, exc.short + ': ' + exc.long) from exc
++    finally:
++        spice.kclear()
+diff --git a/science/src/lunar_science/schemas/analysis-request.v1.schema.json b/science/src/lunar_science/schemas/analysis-request.v1.schema.json
+new file mode 100644
+index 0000000..8c96a3b
+--- /dev/null
++++ b/science/src/lunar_science/schemas/analysis-request.v1.schema.json
+@@ -0,0 +1,75 @@
++{
++  "$schema": "http://json-schema.org/draft-07/schema#",
++  "title": "analysis-request 1.0.0",
++  "type": "object",
++  "additionalProperties": false,
++  "properties": {
++    "schema_version": {
++      "const": "1.0.0"
++    },
++    "frame": {
++      "const": "IAU_MOON"
++    },
++    "surface_radius_m": {
++      "const": 1737400
++    },
++    "sites": {
++      "type": "array",
++      "minItems": 2,
++      "maxItems": 2,
++      "items": {
++        "type": "object",
++        "additionalProperties": false,
++        "properties": {
++          "id": {
++            "type": "string",
++            "minLength": 1
++          },
++          "latitude_deg": {
++            "type": "number",
++            "minimum": -90,
++            "maximum": 90
++          },
++          "longitude_east_deg": {
++            "type": "number",
++            "minimum": 0,
++            "exclusiveMaximum": 360
++          },
++          "height_m": {
++            "type": "number",
++            "minimum": 0,
++            "maximum": 10000
++          }
++        },
++        "required": [
++          "id",
++          "latitude_deg",
++          "longitude_east_deg",
++          "height_m"
++        ]
++      }
++    },
++    "start_utc": {
++      "type": "string",
++      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
++    },
++    "end_utc": {
++      "type": "string",
++      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
++    },
++    "step_seconds": {
++      "type": "integer",
++      "minimum": 1,
++      "maximum": 86400
++    }
++  },
++  "required": [
++    "schema_version",
++    "frame",
++    "surface_radius_m",
++    "sites",
++    "start_utc",
++    "end_utc",
++    "step_seconds"
++  ]
++}
+diff --git a/science/src/lunar_science/schemas/analysis-result.v1.schema.json b/science/src/lunar_science/schemas/analysis-result.v1.schema.json
+new file mode 100644
+index 0000000..043fd4c
+--- /dev/null
++++ b/science/src/lunar_science/schemas/analysis-result.v1.schema.json
+@@ -0,0 +1,267 @@
++{
++  "$schema": "http://json-schema.org/draft-07/schema#",
++  "title": "analysis-result 1.0.0",
++  "type": "object",
++  "additionalProperties": false,
++  "properties": {
++    "schema_version": {
++      "const": "1.0.0"
++    },
++    "request": {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "schema_version": {
++          "const": "1.0.0"
++        },
++        "frame": {
++          "const": "IAU_MOON"
++        },
++        "surface_radius_m": {
++          "const": 1737400
++        },
++        "sites": {
++          "type": "array",
++          "minItems": 2,
++          "maxItems": 2,
++          "items": {
++            "type": "object",
++            "additionalProperties": false,
++            "properties": {
++              "id": {
++                "type": "string",
++                "minLength": 1
++              },
++              "latitude_deg": {
++                "type": "number",
++                "minimum": -90,
++                "maximum": 90
++              },
++              "longitude_east_deg": {
++                "type": "number",
++                "minimum": 0,
++                "exclusiveMaximum": 360
++              },
++              "height_m": {
++                "type": "number",
++                "minimum": 0,
++                "maximum": 10000
++              }
++            },
++            "required": [
++              "id",
++              "latitude_deg",
++              "longitude_east_deg",
++              "height_m"
++            ]
++          }
++        },
++        "start_utc": {
++          "type": "string",
++          "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
++        },
++        "end_utc": {
++          "type": "string",
++          "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
++        },
++        "step_seconds": {
++          "type": "integer",
++          "minimum": 1,
++          "maximum": 86400
++        }
++      },
++      "required": [
++        "schema_version",
++        "frame",
++        "surface_radius_m",
++        "sites",
++        "start_utc",
++        "end_utc",
++        "step_seconds"
++      ]
++    },
++    "series": {
++      "type": "array",
++      "minItems": 4,
++      "maxItems": 4,
++      "items": {
++        "type": "object",
++        "additionalProperties": false,
++        "properties": {
++          "site_id": {
++            "type": "string",
++            "minLength": 1
++          },
++          "target": {
++            "enum": [
++              "SUN",
++              "EARTH"
++            ]
++          },
++          "samples": {
++            "type": "array",
++            "minItems": 1,
++            "items": {
++              "type": "object",
++              "additionalProperties": false,
++              "properties": {
++                "utc": {
++                  "type": "string",
++                  "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z$"
++                },
++                "azimuth_deg": {
++                  "type": "number",
++                  "minimum": 0,
++                  "maximum": 360
++                },
++                "elevation_deg": {
++                  "type": "number",
++                  "minimum": -90,
++                  "maximum": 90
++                }
++              },
++              "required": [
++                "utc",
++                "azimuth_deg",
++                "elevation_deg"
++              ]
++            }
++          }
++        },
++        "required": [
++          "site_id",
++          "target",
++          "samples"
++        ]
++      }
++    },
++    "provenance": {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "schema_version": {
++          "const": "1.0.0"
++        },
++        "engine_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "spiceypy_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "numpy_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "cspice_version": {
++          "type": "string",
++          "minLength": 1
++        },
++        "frame": {
++          "const": "IAU_MOON"
++        },
++        "correction": {
++          "const": "CN+S"
++        },
++        "frame_epoch": {
++          "const": "OBSERVER"
++        },
++        "time_scale": {
++          "const": "UTC input/output; TDB seconds past J2000 internally"
++        },
++        "surface_radius_m": {
++          "const": 1737400
++        },
++        "horizon_elevation_deg": {
++          "const": 0
++        },
++        "azimuth_convention": {
++          "type": "string",
++          "minLength": 1
++        },
++        "kernels": {
++          "type": "array",
++          "minItems": 3,
++          "items": {
++            "type": "object",
++            "additionalProperties": false,
++            "properties": {
++              "filename": {
++                "type": "string",
++                "minLength": 1
++              },
++              "url": {
++                "type": "string",
++                "minLength": 1
++              },
++              "sha256": {
++                "type": "string",
++                "pattern": "^[0-9a-f]{64}$"
++              },
++              "type": {
++                "type": "string",
++                "minLength": 1
++              },
++              "coverage_et": {
++                "type": "object",
++                "additionalProperties": {
++                  "type": "array",
++                  "items": {
++                    "type": "array",
++                    "items": {
++                      "type": "number"
++                    },
++                    "minItems": 2,
++                    "maxItems": 2
++                  }
++                }
++              }
++            },
++            "required": [
++              "filename",
++              "url",
++              "sha256",
++              "type",
++              "coverage_et"
++            ]
++          }
++        },
++        "limitations": {
++          "type": "array",
++          "minItems": 1,
++          "items": {
++            "type": "string",
++            "minLength": 1
++          }
++        },
++        "horizons_validation": {
++          "const": "not_performed_in_engine"
++        }
++      },
++      "required": [
++        "schema_version",
++        "engine_version",
++        "spiceypy_version",
++        "numpy_version",
++        "cspice_version",
++        "frame",
++        "correction",
++        "frame_epoch",
++        "time_scale",
++        "surface_radius_m",
++        "horizon_elevation_deg",
++        "azimuth_convention",
++        "kernels",
++        "limitations",
++        "horizons_validation"
++      ]
++    }
++  },
++  "required": [
++    "schema_version",
++    "request",
++    "series",
++    "provenance"
++  ]
++}
+diff --git a/science/src/lunar_science/schemas/scientific-provenance.v1.schema.json b/science/src/lunar_science/schemas/scientific-provenance.v1.schema.json
+new file mode 100644
+index 0000000..d5ca8e7
+--- /dev/null
++++ b/science/src/lunar_science/schemas/scientific-provenance.v1.schema.json
+@@ -0,0 +1,124 @@
++{
++  "$schema": "http://json-schema.org/draft-07/schema#",
++  "title": "scientific-provenance 1.0.0",
++  "type": "object",
++  "additionalProperties": false,
++  "properties": {
++    "schema_version": {
++      "const": "1.0.0"
++    },
++    "engine_version": {
++      "type": "string",
++      "minLength": 1
++    },
++    "spiceypy_version": {
++      "type": "string",
++      "minLength": 1
++    },
++    "numpy_version": {
++      "type": "string",
++      "minLength": 1
++    },
++    "cspice_version": {
++      "type": "string",
++      "minLength": 1
++    },
++    "frame": {
++      "const": "IAU_MOON"
++    },
++    "correction": {
++      "const": "CN+S"
++    },
++    "frame_epoch": {
++      "const": "OBSERVER"
++    },
++    "time_scale": {
++      "const": "UTC input/output; TDB seconds past J2000 internally"
++    },
++    "surface_radius_m": {
++      "const": 1737400
++    },
++    "horizon_elevation_deg": {
++      "const": 0
++    },
++    "azimuth_convention": {
++      "type": "string",
++      "minLength": 1
++    },
++    "kernels": {
++      "type": "array",
++      "minItems": 3,
++      "items": {
++        "type": "object",
++        "additionalProperties": false,
++        "properties": {
++          "filename": {
++            "type": "string",
++            "minLength": 1
++          },
++          "url": {
++            "type": "string",
++            "minLength": 1
++          },
++          "sha256": {
++            "type": "string",
++            "pattern": "^[0-9a-f]{64}$"
++          },
++          "type": {
++            "type": "string",
++            "minLength": 1
++          },
++          "coverage_et": {
++            "type": "object",
++            "additionalProperties": {
++              "type": "array",
++              "items": {
++                "type": "array",
++                "items": {
++                  "type": "number"
++                },
++                "minItems": 2,
++                "maxItems": 2
++              }
++            }
++          }
++        },
++        "required": [
++          "filename",
++          "url",
++          "sha256",
++          "type",
++          "coverage_et"
++        ]
++      }
++    },
++    "limitations": {
++      "type": "array",
++      "minItems": 1,
++      "items": {
++        "type": "string",
++        "minLength": 1
++      }
++    },
++    "horizons_validation": {
++      "const": "not_performed_in_engine"
++    }
++  },
++  "required": [
++    "schema_version",
++    "engine_version",
++    "spiceypy_version",
++    "numpy_version",
++    "cspice_version",
++    "frame",
++    "correction",
++    "frame_epoch",
++    "time_scale",
++    "surface_radius_m",
++    "horizon_elevation_deg",
++    "azimuth_convention",
++    "kernels",
++    "limitations",
++    "horizons_validation"
++  ]
++}
+diff --git a/science/tests/test_geometry.py b/science/tests/test_geometry.py
+new file mode 100644
+index 0000000..04fdc32
+--- /dev/null
++++ b/science/tests/test_geometry.py
+@@ -0,0 +1,121 @@
++"""Synthetic geometry unit tests; real kernel integration is explicitly enabled."""
++import copy
++import json
++import os
++from pathlib import Path
++
++import numpy as np
++import pytest
++from lunar_science.geometry import AnalysisError, analyze, local_basis, project, validate
++
++ROOT = Path(__file__).resolve().parents[2]
++REQUEST = json.loads((ROOT/'science/examples/request.json').read_text())
++SPEC = json.loads((ROOT/'science/examples/kernel-set.json').read_text())
++
++
++@pytest.mark.parametrize('lat,lon', [(0,0),(-89.5,90),(-90,270),(45,180)])
++def test_basis_orthonormal_right_handed(lat, lon):
++    b = local_basis(lat, lon)
++    np.testing.assert_allclose(b @ b.T, np.eye(3), atol=1e-15)
++    np.testing.assert_allclose(np.cross(b[0], b[1]), b[2], atol=1e-15)
++
++
++@pytest.mark.parametrize('vector,expected', [([1,0,0],(0,90)),([0,1,0],(90,0)),([0,0,1],(0,0)),([0,-1,0],(270,0))])
++def test_equatorial_projection_and_east_positive_longitude(vector, expected):
++    assert project(vector, local_basis(0,0)) == pytest.approx(expected)
++    np.testing.assert_allclose(local_basis(0,90)[2], [0,1,0], atol=1e-15)
++
++
++@pytest.mark.parametrize('field,value', [('step_seconds',0),('start_utc','2007-02-30T00:00:00Z'),('start_utc','2007-01-01'),('frame','MOON_ME')])
++def test_invalid_input_before_kernel_access(field,value):
++    r=copy.deepcopy(REQUEST);r[field]=value
++    with pytest.raises(AnalysisError, match='') as exc: analyze(r,'/absent',SPEC)
++    assert exc.value.code == 'INVALID_INPUT'
++
++
++def test_missing_kernel():
++    with pytest.raises(AnalysisError) as exc: analyze(REQUEST,'/absent',SPEC)
++    assert exc.value.code=='MISSING_KERNEL'
++
++
++def test_packaged_schemas_match_contracts():
++    for name in ('analysis-request','analysis-result','scientific-provenance'):
++        filename=name+'.v1.schema.json'
++        assert (ROOT/'contracts'/filename).read_bytes()==(ROOT/'science/src/lunar_science/schemas'/filename).read_bytes()
++
++
++def kernel_dir():
++    value=os.environ.get('LUNAR_KERNEL_DIR')
++    if not value: pytest.skip('Set LUNAR_KERNEL_DIR after checksum-verified fetch for real SPICE integration')
++    return value
++
++
++def test_real_ephemeris_schema_time_and_km_units():
++    result=analyze(REQUEST,kernel_dir(),SPEC)
++    validate(result,'analysis-result');validate(result['provenance'],'scientific-provenance')
++    assert len(result['series'])==4
++    assert all(len(s['samples'])==3 for s in result['series'])
++    assert result['series'][0]['samples'][0]['utc']=='2007-01-01T00:00:00.000Z'
++    # Independent CSPICE topocentric site frame path (SPKPOS in J2000 then PXFORM at observer epoch).
++    import spiceypy as sp
++    try:
++        for item in SPEC: sp.furnsh(str(Path(kernel_dir())/item['filename']))
++        et=sp.utc2et(REQUEST['start_utc']); site=REQUEST['sites'][0]
++        b=local_basis(site['latitude_deg'],site['longitude_east_deg'])
++        obs=b[2]*1737.4
++        direct,_=sp.spkcpo('SUN',et,'J2000','OBSERVER','CN+S',obs,'MOON','IAU_MOON')
++        xyz=sp.pxform('J2000','IAU_MOON',et) @ direct[:3]
++        az,el=project(xyz,b);sample=result['series'][0]['samples'][0]
++        # Floating point path equivalence only, not a physical accuracy claim.
++        assert abs(az-sample['azimuth_deg'])<1e-10
++        assert abs(el-sample['elevation_deg'])<1e-10
++    finally: sp.kclear()
++
++
++@pytest.mark.parametrize('change,code', [({'end_utc':'2006-01-01T00:00:00Z'},'INVALID_INPUT'),({'start_utc':'2026-01-01T00:00:00Z','end_utc':'2026-01-02T00:00:00Z'},'COVERAGE_ERROR')])
++def test_time_bounds_and_missing_spk_coverage(change,code):
++    with pytest.raises(AnalysisError) as exc: analyze(REQUEST|change,kernel_dir(),SPEC)
++    assert exc.value.code==code
++
++
++def test_nonzero_height_changes_real_topocentric_result():
++    directory=kernel_dir(); r=copy.deepcopy(REQUEST)
++    base=analyze(r,directory,SPEC)
++    r['sites'][0]['height_m']=1000
++    higher=analyze(r,directory,SPEC)
++    assert base['series'][1]['samples'][0]['elevation_deg'] != higher['series'][1]['samples'][0]['elevation_deg']
++
++
++def test_corrupt_kernel_is_rejected(tmp_path):
++    (tmp_path/SPEC[0]['filename']).write_bytes(b'not a real kernel')
++    with pytest.raises(AnalysisError) as exc: analyze(REQUEST,tmp_path,SPEC)
++    assert exc.value.code=='KERNEL_CHECKSUM'
++
++
++@pytest.mark.parametrize('field,value', [('longitude_east_deg',360),('longitude_east_deg',-1),('latitude_deg',91),('height_m',float('nan'))])
++def test_invalid_coordinate(field,value):
++    r=copy.deepcopy(REQUEST);r['sites'][0][field]=value
++    with pytest.raises(AnalysisError) as exc: analyze(r,'/absent',SPEC)
++    assert exc.value.code=='INVALID_INPUT'
++
++
++def test_distinct_ids_required():
++    r=copy.deepcopy(REQUEST);r['sites'][1]['id']=r['sites'][0]['id']
++    with pytest.raises(AnalysisError) as exc: analyze(r,'/absent',SPEC)
++    assert exc.value.code=='INVALID_INPUT'
++
++
++def test_zero_vector_rejected():
++    with pytest.raises(AnalysisError): project([0,0,0],local_basis(0,0))
++
++
++def test_cli_invalid_input_exit_and_preserves_existing_output(tmp_path):
++    import subprocess,sys
++    bad=tmp_path/'request.json';bad.write_text('{}')
++    output=tmp_path/'result.json';output.write_text('previous result')
++    run=subprocess.run([sys.executable,'-m','lunar_science','analyze','--request',str(bad),
++        '--kernel-set',str(ROOT/'science/examples/kernel-set.json'),'--kernel-dir','/absent',
++        '--output',str(output)],capture_output=True,text=True)
++    assert run.returncode==2
++    assert json.loads(run.stderr)['error']['code']=='INVALID_INPUT'
++    assert output.read_text()=='previous result'
+diff --git a/science/tools/compare_horizons.py b/science/tools/compare_horizons.py
+new file mode 100644
+index 0000000..fc0ce8f
+--- /dev/null
++++ b/science/tools/compare_horizons.py
+@@ -0,0 +1,53 @@
++"""Fetch and retain Horizons references, report residuals without an invented pass tolerance."""
++import argparse
++import csv
++from datetime import datetime
++import io
++import json
++from pathlib import Path
++from urllib.parse import urlencode
++from urllib.request import urlopen
++
++parser=argparse.ArgumentParser()
++parser.add_argument('--result',type=Path,required=True)
++parser.add_argument('--output',type=Path,required=True)
++args=parser.parse_args()
++result=json.loads(args.result.read_text())
++report={'status':'pending','comparisons':[], 'notes':[
++    'Horizons orientation/DE version and spherical observer model must be checked in retained headers.',
++    'Residuals compare different ephemeris/orientation configurations; no physical tolerance assumed.',
++    'Observer coordinate altitude is km above the lunar reference surface; verify Horizons radius in header.']}
++try:
++    for series in result['series']:
++        site=next(s for s in result['request']['sites'] if s['id']==series['site_id'])
++        times='\n'.join(s['utc'].removesuffix('Z') for s in series['samples'])
++        params={'format':'json','COMMAND':"'10'" if series['target']=='SUN' else "'399'",
++                'CENTER':"'coord@301'",'COORD_TYPE':"'GEODETIC'",
++                'SITE_COORD':f"'{site['longitude_east_deg']},{site['latitude_deg']},{site['height_m']/1000}'",
++                'EPHEM_TYPE':"'OBSERVER'",'MAKE_EPHEM':"'YES'",'TLIST':"'"+times+"'",
++                'QUANTITIES':"'4'",'CSV_FORMAT':"'YES'",'APPARENT':"'AIRLESS'",'EXTRA_PREC':"'YES'", 'TIME_DIGITS':"'FRACSEC'"}
++        url='https://ssd.jpl.nasa.gov/api/horizons.api?'+urlencode(params)
++        raw=json.loads(urlopen(url,timeout=60).read())
++        entry={'site_id':series['site_id'],'target':series['target'],'url':url,'response':raw}
++        report['comparisons'].append(entry)
++        if 'error' in raw: raise ValueError(raw['error'])
++        table=raw['result'].split('$$SOE')[1].split('$$EOE')[0]
++        rows=[row for row in csv.reader(io.StringIO(table)) if row and row[0].strip()]
++        residuals=[]
++        for sample,row in zip(series['samples'],rows,strict=True):
++            # Quantity 4 alone: date, flags, azimuth, elevation, trailing empty CSV column.
++            fields=[x.strip() for x in row if x.strip()]
++            reference_time = datetime.strptime(row[0].strip(), '%Y-%b-%d %H:%M:%S.%f')
++            expected_time = datetime.fromisoformat(sample['utc'].removesuffix('Z'))
++            if reference_time != expected_time: raise ValueError('Horizons time differs from requested sample')
++            az,el=map(float,fields[-2:])
++            residuals.append({'utc':sample['utc'],'azimuth_difference_deg':(sample['azimuth_deg']-az+180)%360-180,
++                              'elevation_difference_deg':sample['elevation_deg']-el})
++        entry['residuals']=residuals
++    report['status']='computed_requires_header_review'
++except (OSError,ValueError,KeyError,IndexError) as exc:
++    report['status']='blocked_or_invalid_reference'
++    report['error']=str(exc)
++finally:
++    args.output.write_text(json.dumps(report,indent=2)+'\n')
++if report['status']=='blocked_or_invalid_reference': raise SystemExit(2)
