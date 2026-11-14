@@ -1,5 +1,7 @@
 # Landing Guide — proposta consolidada e implementação
 
+**Revisão do pacote 1:** a exploração passa a um mapa de superfície em tela inteira, visto de cima em 2D ou inclinado em 3D. O globo permanece somente na entrada. Esta correção substitui as referências à esfera na área de exploração abaixo. Centro, zoom, giro, A/B e instante são compartilhados. A especificação vigente da camada LOLA/SPICE e suas limitações está em [landing-guide-package-1.md](landing-guide-package-1.md).
+
 Base isolada: `feat/lunar-topographic-visibility`, commit `7d8a9f6`. A main consultada em 14/11/2026 está em `23cc0c7` e contém outro pipeline científico. Esta mudança de UX não o incorpora nem altera `science/` ou `contracts/`. O guia de acessibilidade da main foi lido como referência. O portal oficial `/2026/challenges/` retornou CONNECT403; após mudança da política de rede, o índice e a página do desafio retornaram HTTP503, sem conteúdo. A orientação recuperada anteriormente no canal NASA/spaceapps e os contratos existentes sustentam o recorte, sem alegar nova leitura do portal.
 
 ## Arquitetura das telas

@@ -8,7 +8,9 @@ export interface LocationSelection {
   latitude: number;
   longitudeEast: number;
   sourceSiteId?: "south-a" | "south-b";
+  coordinateFrame?: "IAU_MOON" | "MOON_ME_DE421";
 }
+/** Surface camera coordinates use MOON_ME_DE421, independent of analysis sites. */
 export interface ViewCenter {
   latitude: number;
   longitudeEast: number;

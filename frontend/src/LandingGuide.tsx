@@ -7,6 +7,18 @@ import {
   type FormEvent,
 } from "react";
 import { MoonView } from "./MoonView";
+import { SurfaceTerrainView } from "./SurfaceTerrainView";
+import {
+  loadTerrainAssets,
+  solarFrameAt,
+  surfaceHeight,
+} from "./terrain/terrain-data";
+import {
+  applyRotation,
+  geoToStereo,
+  LUNAR_RADIUS_M,
+  worldToGeo,
+} from "./terrain/surface-math";
 import { GuideAnalysis } from "./GuideAnalysis";
 import { GuideIcon } from "./GuideIcon";
 import { GuidePanel } from "./GuidePanel";
@@ -19,7 +31,7 @@ import {
   selectedSample,
   utcLabel,
 } from "./guide-model";
-import type { GuideDataset, Slot } from "./guide-types";
+import type { GuideDataset, LocationSelection, Slot } from "./guide-types";
 import "./landing-guide.css";
 
 type Panel = "charts" | "selection" | "data" | "time" | "help";
@@ -47,6 +59,7 @@ export function LandingGuide({
   const [message, setMessage] = useState(
     "Dois locais hipotéticos prontos para explorar.",
   );
+  const [aim, setAim] = useState<LocationSelection | null>(null);
   const [latitude, setLatitude] = useState(""),
     [longitude, setLongitude] = useState(""),
     [coordinateError, setCoordinateError] = useState("");
@@ -133,9 +146,7 @@ export function LandingGuide({
     requestAnimationFrame(() => triggers.current.charts?.focus());
   }
   function selectLocation(
-    value:
-      | Parameters<typeof demoSelection>[0]
-      | { latitude: number; longitudeEast: number },
+    value: Parameters<typeof demoSelection>[0] | LocationSelection,
   ) {
     const location = typeof value === "string" ? demoSelection(value) : value;
     dispatch({ type: "select", value: location });
@@ -163,7 +174,61 @@ export function LandingGuide({
       );
       return;
     }
-    selectLocation({ latitude: lat, longitudeEast: lon });
+    selectLocation({
+      latitude: lat,
+      longitudeEast: lon,
+      coordinateFrame: "MOON_ME_DE421",
+    });
+  }
+  async function locateSelection(p: LocationSelection) {
+    try {
+      const assets = await loadTerrainAssets();
+      if (p.coordinateFrame === "MOON_ME_DE421") {
+        const [x, y] = geoToStereo(p.latitude, p.longitudeEast);
+        if (surfaceHeight(assets.terrain, x, y) === undefined) {
+          setMessage(
+            "Este local fica fora do recorte LOLA disponível. A vista atual foi preservada.",
+          );
+          return;
+        }
+        dispatch({
+          type: "center",
+          value: { latitude: p.latitude, longitudeEast: p.longitudeEast },
+        });
+        return;
+      }
+      const frame = solarFrameAt(assets.solar, index >= 0 ? state.utc : "");
+      if (!frame) {
+        setMessage(
+          "Escolha um instante coberto para transformar e localizar este ponto no relevo.",
+        );
+        return;
+      }
+      const lat = (p.latitude * Math.PI) / 180,
+        lon = (p.longitudeEast * Math.PI) / 180,
+        r = LUNAR_RADIUS_M;
+      const me = applyRotation(frame.iau_to_me, [
+        r * Math.cos(lat) * Math.cos(lon),
+        r * Math.cos(lat) * Math.sin(lon),
+        r * Math.sin(lat),
+      ]);
+      const location = worldToGeo([
+        me[1] / 1000,
+        (-me[2] - r) / 1000,
+        -me[0] / 1000,
+      ]);
+      dispatch({
+        type: "center",
+        value: {
+          latitude: location.latitude,
+          longitudeEast: location.longitudeEast,
+        },
+      });
+    } catch {
+      setMessage(
+        "Não foi possível carregar a transformação do terreno. Nenhum referencial foi substituído.",
+      );
+    }
   }
   function changePeriod(startDate: string, durationDays: number) {
     dispatch({ type: "period", startDate, durationDays });
@@ -281,35 +346,102 @@ export function LandingGuide({
                 <span>
                   ARI <span className="lg-title-divider">/</span> LANDING GUIDE
                 </span>
-                <strong>
-                  Explore a Lua.
-                  <br />
-                  <em>Compare os horizontes.</em>
-                </strong>
               </div>
-              <div id="guide-map" className="lg-map-wrap">
-                <MoonView
+              <div id="guide-map" className="lg-surface-wrap">
+                <SurfaceTerrainView
                   view={state.view}
                   center={state.center}
+                  zoom={state.zoom}
+                  bearing={state.bearing}
+                  shadows={state.shadows}
+                  utc={index >= 0 ? state.utc : ""}
                   selections={state.selections}
                   selectionMode={state.selectionMode}
                   activeSlot={state.activeSlot}
                   onCenterChange={(value) =>
                     dispatch({ type: "center", value })
                   }
+                  onZoomChange={(value) => dispatch({ type: "zoom", value })}
+                  onBearingChange={(value) =>
+                    dispatch({ type: "bearing", value })
+                  }
+                  onAimChange={setAim}
                   onSelect={selectLocation}
                 />
               </div>
-              <div className="lg-view-caption">
-                <span>
-                  {state.view === "3D"
-                    ? "ESFERA ILUSTRATIVA"
-                    : "MAPA DE COORDENADAS"}
-                </span>
+              <div className="lg-terrain-key">
+                <strong>LOLA · Polo sul lunar</strong>
                 <p>
-                  Sem relevo ou sombras calculadas. A aparência não muda com o
-                  horário.
+                  Fonte 80 m · malha visual 800 m.
+                  <br />
+                  Sombras renderizadas: aproximação.
                 </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={state.shadows}
+                    onChange={(e) =>
+                      dispatch({ type: "shadows", value: e.target.checked })
+                    }
+                  />{" "}
+                  Sombras do Sol
+                </label>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: "dataset", value: "hourly" })}
+                >
+                  Ver exemplo horário
+                </button>
+              </div>
+              <div
+                className="lg-surface-navigation"
+                role="group"
+                aria-label="Navegar na superfície"
+              >
+                <button
+                  type="button"
+                  aria-label="Aproximar mapa"
+                  disabled={state.zoom >= 12}
+                  onClick={() =>
+                    dispatch({ type: "zoom", value: state.zoom * 1.4 })
+                  }
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  aria-label="Afastar mapa"
+                  disabled={state.zoom <= 1}
+                  onClick={() =>
+                    dispatch({ type: "zoom", value: state.zoom / 1.4 })
+                  }
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  aria-label="Restaurar orientação da projeção"
+                  onClick={() => dispatch({ type: "bearing", value: 0 })}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "block",
+                      transform: `rotate(${-state.bearing}deg)`,
+                    }}
+                  >
+                    0° ↑
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Girar mapa 15 graus"
+                  onClick={() =>
+                    dispatch({ type: "bearing", value: state.bearing + 15 })
+                  }
+                >
+                  ↻
+                </button>
               </div>
               <div
                 className="lg-selection-strip"
@@ -332,9 +464,9 @@ export function LandingGuide({
                         {p ? coordinates(p) : "Escolher local"}
                         <small>
                           {p?.sourceSiteId
-                            ? "Local calculado"
+                            ? "Calculado · IAU_MOON"
                             : p
-                              ? "Sem resultados"
+                              ? "Sem análise · ME"
                               : "Sem seleção"}
                         </small>
                       </span>
@@ -346,7 +478,8 @@ export function LandingGuide({
                 <button
                   type="button"
                   className="lg-confirm-center"
-                  onClick={() => selectLocation(state.center)}
+                  disabled={!aim}
+                  onClick={() => aim && selectLocation(aim)}
                 >
                   Confirmar mira como {state.activeSlot}
                 </button>
@@ -460,9 +593,34 @@ export function LandingGuide({
                 </li>
               </ol>
               <p className="lg-note">
-                Geometria não é energia ou comunicação garantida. Não há relevo
-                calculado nem validação independente contra Horizons.
+                O mapa agora usa relevo LOLA real e sombras visuais aproximadas.
+                Os gráficos mantêm o horizonte idealizado de 0°: não incorporam
+                essas sombras. Não há validação independente contra Horizons nem
+                garantia de energia ou comunicação.
               </p>
+              <details>
+                <summary>Relevo, referenciais e sombras</summary>
+                <p>
+                  DEM LDEM_80S_80M V2.0, obtido diretamente do PDS. Fonte a 80
+                  m, asset decimado a 400 m e malha de exibição a 800 m. Alturas
+                  radiais sobre a esfera de 1.737.400 m, com curvatura lunar
+                  preservada.
+                </p>
+                <p>
+                  O terreno usa MOON_ME_DE421. A/B permanecem em IAU_MOON e são
+                  transformados por matrizes SPICE em cada instante. A altura do
+                  observador da análise continua 0 m sobre a esfera; o marcador
+                  não representa automaticamente uma posição no chão do DEM.
+                </p>
+                <p>
+                  A luz é a direção do centro solar, aproximada como paralela.
+                  Sombras GPU têm resolução finita, recorte limitado e luz
+                  ambiente artificial para leitura. Não calculam iluminação
+                  efetiva nem duração de janelas. Abaixo do horizonte polar de
+                  referência, a luz direta é desativada como convenção de
+                  exibição, sem classificar toda a região como noite.
+                </p>
+              </details>
               {!started && (
                 <button className="lg-primary" onClick={start}>
                   Start · Começar <GuideIcon name="arrow" />
@@ -572,16 +730,7 @@ export function LandingGuide({
                       <div className="lg-inline-actions">
                         <button
                           disabled={!p}
-                          onClick={() =>
-                            p &&
-                            dispatch({
-                              type: "center",
-                              value: {
-                                latitude: p.latitude,
-                                longitudeEast: p.longitudeEast,
-                              },
-                            })
-                          }
+                          onClick={() => p && void locateSelection(p)}
                         >
                           Localizar {slot}
                         </button>
@@ -636,8 +785,10 @@ export function LandingGuide({
                     aria-describedby="guide-coordinate-help"
                   />
                   <p id="guide-coordinate-help" className="lg-context">
-                    Longitude de 0° a menos de 360° E. Coordenadas próprias não
-                    executam cálculos. Altura não modelada para seleções livres.
+                    Referencial do terreno: MOON_ME_DE421. Longitude de 0° a
+                    menos de 360° E. Coordenadas próprias não executam análises
+                    científicas. Os locais calculados permanecem definidos em
+                    IAU_MOON e são transformados para o mapa.
                   </p>
                   {coordinateError && (
                     <p role="alert" className="lg-error">
@@ -819,9 +970,10 @@ export function LandingGuide({
                 <option value={2}>2×</option>
               </select>
               <p className="lg-note">
-                Reprodução percorre somente amostras calculadas. Sem movimento
-                físico entre instantes, sombras de relevo ou horários exatos de
-                transição.
+                Reprodução percorre somente amostras calculadas. As sombras do
+                mapa mudam em passos discretos e são aproximações visuais sobre
+                o DEM. Não há cálculo de horários exatos de transição ou duração
+                contínua.
               </p>
               {dataset.error && (
                 <p role="alert" className="lg-error">

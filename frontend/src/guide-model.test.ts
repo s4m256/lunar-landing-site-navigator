@@ -77,6 +77,35 @@ describe("Landing Guide scientific selectors", () => {
     ).toBeUndefined();
   });
 
+  it.each([daily, hourly])(
+    "does not conflate identical MOON_ME coordinates with an IAU_MOON scientific site",
+    (dataset) => {
+      const utc = dataset.timestamps[0];
+      const iauSelection = demoSelection("south-a");
+      expect(iauSelection.coordinateFrame).toBe("IAU_MOON");
+      for (const target of ["SUN", "EARTH"] as const) {
+        const sample = selectedSample(dataset, iauSelection, target, utc);
+        expect(sample).toBeDefined();
+        expect(
+          selectedSample(
+            dataset,
+            { ...iauSelection, coordinateFrame: "MOON_ME_DE421" },
+            target,
+            utc,
+          ),
+        ).toBeUndefined();
+        expect(
+          selectedSample(
+            dataset,
+            { ...iauSelection, coordinateFrame: undefined },
+            target,
+            utc,
+          ),
+        ).toEqual(sample);
+      }
+    },
+  );
+
   it("rejects missing times instead of finding a nearby or interpolated sample", () => {
     for (const utc of [
       "2026-09-01T12:00:00.000Z",

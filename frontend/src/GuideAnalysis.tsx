@@ -53,6 +53,7 @@ function SelectionNote({
           ? `Local calculado: ${selection.sourceSiteId}`
           : "Seleção livre · sem resultados calculados"}
       </span>
+      <span>Referencial: {selection.coordinateFrame ?? "IAU_MOON"}</span>
     </p>
   );
 }
@@ -97,8 +98,8 @@ function ScientificLimits({ dataset }: { dataset: GuideDataset }) {
       </p>
       <p>
         Comunicação operacional e blackout de rádio:{" "}
-        <strong>não calculados</strong>. Sem relevo, sombras topográficas ou
-        avaliação de segurança de pouso.
+        <strong>não calculados</strong>. Estas séries não incorporam as sombras
+        visuais do mapa nem avaliam segurança de pouso.
       </p>
       <details>
         <summary>Fonte, método e limitações</summary>
@@ -110,7 +111,8 @@ function ScientificLimits({ dataset }: { dataset: GuideDataset }) {
         <p>
           Dois locais hipotéticos, a 0 m sobre uma esfera de raio 1.737.400 m.
           Horizonte tangente idealizado em 0°, sem refração, discos finitos ou
-          eclipses. A esfera desenhada é uma ilustração e não um DEM.
+          eclipses. O relevo LOLA e as sombras do mapa são uma camada visual
+          separada e não alteram estes resultados idealizados.
         </p>
         <p>
           Azimute: norte local = 0°, leste local = 90°.{" "}

@@ -50,6 +50,7 @@ export function demoSelection(id: "south-a" | "south-b"): LocationSelection {
     latitude: site.latitude_deg,
     longitudeEast: site.longitude_east_deg,
     sourceSiteId: id,
+    coordinateFrame: "IAU_MOON",
   };
 }
 
@@ -64,6 +65,8 @@ export function selectedSample(
     dataset.error ||
     !dataset.result ||
     !selection?.sourceSiteId ||
+    (selection.coordinateFrame !== undefined &&
+      selection.coordinateFrame !== "IAU_MOON") ||
     !dataset.timestamps.includes(utc)
   ) {
     return undefined;

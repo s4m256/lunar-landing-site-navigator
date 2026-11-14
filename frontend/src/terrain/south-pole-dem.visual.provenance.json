@@ -1,0 +1,41 @@
+{
+  "artifact": "south-pole-dem.visual.json",
+  "artifact_sha256": "39304500707c4974c733d821cc88ee33e8ae7872db178b27a27310ce5e24b660",
+  "artifact_bytes": 1931782,
+  "producer": "tools/prepare-terrain-visual.py",
+  "source_provenance": {
+    "product": "LDEM_80S_80M",
+    "product_version": "V2.0",
+    "data_set_id": "LRO-L-LOLA-4-GDR-V1.0",
+    "product_creation_date": "2017-06-15",
+    "producer_institution": "Goddard Space Flight Center / LRO LOLA team",
+    "source_img_url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.img",
+    "source_img_sha256": "e6591eeea35402ca5e124ca00f5bf0774381a2d4fa919144b455d82b8ff65fdc",
+    "source_img_bytes": 115520000,
+    "source_label_url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.lbl",
+    "source_label_sha256": "107c7558cbf8832e4119d3c8c2b1b272623344275c85378a9b0e03c22876eb33",
+    "source_xml_url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.xml",
+    "source_xml_sha256": "487f8ea74a3f4f0bac67ae70864c70e9149a16bba869d4510f667cae16d077bd",
+    "projection_catalog_url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/catalog/dsmap_polar.cat",
+    "projection_catalog_sha256": "e5f345f60f75f8fef00f7b59b806306616bf195079c537195e6413b8a6501ca9",
+    "source_width": 7600,
+    "source_height": 7600,
+    "source_step_m": 80,
+    "source_sample_type": "little-endian signed int16",
+    "source_height_formula": "height_m = DN * 0.5; planetary_radius_m = height_m + 1737400",
+    "source_row_start": 2520,
+    "source_col_start": 2520,
+    "source_stride": 5,
+    "sampling": "Exact every-fifth source pixel; 80 m grid decimated to 400 m visual mesh; no averaging",
+    "integrity": "Official HTTPS acquisition; byte length and label min/max checked; local pinned SHA256s, not independent physical validation",
+    "publisher_checksum_manifest": "Not found in the inspected volume root; local digest is not advertised as a publisher signature"
+  },
+  "checks": {
+    "source_sha256": "pass",
+    "source_label_fields": "pass",
+    "source_byte_length": "pass",
+    "source_dn_min_max": "pass",
+    "exported_exact_source_samples": 263169,
+    "independent_physical_validation": "not_performed"
+  }
+}

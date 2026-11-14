@@ -227,20 +227,18 @@ describe("shared view and scientific identity", () => {
     expect(within(siteData("B")).getByText("-0,54°")).toBeVisible();
   });
 
-  it("requires an explicit confirmation in center mode and labels its free selection as uncovered", () => {
+  it("does not substitute the camera center for a missing terrain intersection", () => {
     startGuide();
     const selection = openSelection();
     fireEvent.click(
       within(selection).getByRole("button", { name: "Centro · mira" }),
     );
     expect(screen.getByLabelText("Resultados disponíveis: A/B")).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Confirmar mira como A" }),
-    );
-    openData();
     expect(
-      within(siteData("A")).getByText(/Sem resultados para estas coordenadas/),
-    ).toBeVisible();
+      screen.getByRole("button", { name: "Confirmar mira como A" }),
+    ).toBeDisabled();
+    openData();
+    expect(within(siteData("A")).getByText("+0,55°")).toBeVisible();
     expect(within(siteData("B")).getByText("-0,54°")).toBeVisible();
   });
 });
@@ -304,8 +302,14 @@ describe("exact sample timeline and errors", () => {
     ).toBeVisible();
     expect(within(siteData("A")).queryByText("+0,55°")).not.toBeInTheDocument();
     const restoredTime = openTime();
-    fireEvent.click(within(restoredTime).getByRole("button", {name:"Usar primeira amostra disponível"}));
-    expect(within(restoredTime).getByLabelText("Instante selecionado (UTC)")).toHaveValue("2026-09-01T00:00");
+    fireEvent.click(
+      within(restoredTime).getByRole("button", {
+        name: "Usar primeira amostra disponível",
+      }),
+    );
+    expect(
+      within(restoredTime).getByLabelText("Instante selecionado (UTC)"),
+    ).toHaveValue("2026-09-01T00:00");
   });
 
   it("fails closed when the supplied scientific dataset cannot be validated", () => {

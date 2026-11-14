@@ -1,4 +1,5 @@
 import { demoSelection } from "./guide-model";
+import { stereoToGeo } from "./terrain/surface-math";
 import type { Target } from "./scientific-data";
 import type {
   DatasetId,
@@ -24,10 +25,13 @@ export interface GuideState {
   target: Target;
   playing: boolean;
   speed: number;
+  zoom: number;
+  bearing: number;
+  shadows: boolean;
 }
 export const initialGuideState: GuideState = {
   view: "3D",
-  center: { latitude: -70, longitudeEast: 45 },
+  center: stereoToGeo(15000, 7500),
   selectionMode: "cursor",
   activeSlot: "A",
   selections: { A: demoSelection("south-a"), B: demoSelection("south-b") },
@@ -39,6 +43,9 @@ export const initialGuideState: GuideState = {
   target: "SUN",
   playing: false,
   speed: 1,
+  zoom: 1,
+  bearing: 0,
+  shadows: true,
 };
 type Action =
   | { type: "view"; value: ViewMode }
@@ -54,7 +61,10 @@ type Action =
   | { type: "utc"; value: string }
   | { type: "target"; value: Target }
   | { type: "playing"; value: boolean }
-  | { type: "speed"; value: number };
+  | { type: "speed"; value: number }
+  | { type: "zoom"; value: number }
+  | { type: "bearing"; value: number }
+  | { type: "shadows"; value: boolean };
 export function guideReducer(state: GuideState, action: Action): GuideState {
   switch (action.type) {
     case "view":
@@ -119,5 +129,11 @@ export function guideReducer(state: GuideState, action: Action): GuideState {
       return { ...state, playing: action.value };
     case "speed":
       return { ...state, speed: action.value };
+    case "zoom":
+      return { ...state, zoom: Math.max(1, Math.min(12, action.value)) };
+    case "bearing":
+      return { ...state, bearing: ((action.value % 360) + 360) % 360 };
+    case "shadows":
+      return { ...state, shadows: action.value };
   }
 }

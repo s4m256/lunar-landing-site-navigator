@@ -1,5 +1,7 @@
 # Landing Guide — validação da interface
 
+**Registro da primeira versão, anterior ao pacote 1.** A exploração por globo foi substituída por superfície LOLA em tela inteira. Para os novos assets, sombras, verificações e limites, consulte [landing-guide-package-1.md](landing-guide-package-1.md). Os resultados de 133 testes e ausência de DEM descritos neste registro são históricos.
+
 14/11/2026. Base: `feat/lunar-topographic-visibility` / `7d8a9f678ed146dd4b78d21ea634a39b7966d53a`. Branch de trabalho: `feat/landing-guide-experience`.
 
 ## Entrega e decisões
