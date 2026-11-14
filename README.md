@@ -2,6 +2,18 @@
 
 MVP web estático para comparar direções aparentes dos **centros do Sol e da Terra** em dois locais lunares hipotéticos durante 2026. React + TypeScript + Vite exibem efemérides calculadas offline com SPICE; nenhum Python ou backend executa em produção. O projeto não pressupõe vínculo oficial com a NASA.
 
+## Landing Guide — exploração 2D/3D
+
+A entrada apresenta uma Lua ilustrativa, **Start** e **How it works**. Start abre os dois locais calculados com painéis inicialmente fechados. Gráficos, Seleção, Dados e Tempo revelam detalhes sob demanda; a troca 2D/3D preserva seleções, alvo, período e UTC.
+
+- **Seleção:** Cursor escolhe pela superfície; Centro exige confirmar a mira. Lista dos locais calculados e entrada de coordenadas oferecem alternativas por teclado. Seleções livres mostram ausência de resultados, inclusive quando suas coordenadas coincidem com um exemplo: não há cálculo nem aproximação silenciosa.
+- **Tempo:** selecione dataset diário/horário, início e duração da missão, instante UTC, passos ou reprodução. O período filtra amostras reais, com extremos inclusivos. A reprodução para no fim; não calcula posições intermediárias.
+- **Dados e Gráficos:** elevação/azimute e estados amostrados em relação a 0°, tabela equivalente, fonte, hashes e limites. Não calculam energia, comunicação operacional ou blackout de rádio.
+- **Lua:** esfera 3D por projeção ortográfica e mapa 2D de coordenadas. A textura mineral é arte vetorial original, sem correspondência com terreno real. Não há imagem orbital georreferenciada, DEM, iluminação solar ou sombra topográfica calculada.
+- **Interface anterior:** How it works → Interface científica anterior, ou `?interface=legacy`, mantém as telas dos MVPs A/B e o planejamento original. Essa navegação recarrega a página.
+
+Veja a [proposta, wireframes e prioridades](docs/landing-guide-design.md) e a [validação da implementação](docs/landing-guide-validation.md). Esta branch parte do MVP B `7d8a9f6`, para não incorporar o outro pipeline científico atualmente na main junto com uma mudança de UX.
+
 ## Executar a demonstração
 
 Requer Node.js 24 e npm 11. Na raiz:
@@ -23,7 +35,7 @@ A Vercel usa a raiz do repositório, `npm ci --include=dev`, `npm run build` e p
 
 ## MVP B — visibilidade horária, terreno indisponível
 
-Use o botão **Visibilidade horária / MVP B**. O modo original do MVP A e o planejamento livre continuam disponíveis.
+No Landing Guide, abra **Tempo → Conjunto de amostras → MVP B · horário**. A interface anterior mantém o botão **Visibilidade horária / MVP B**, o modo original do MVP A e o planejamento livre.
 
 - Mesmos locais científicos e modelo IAU_MOON/CN+S do MVP A.
 - 15/11/2026 00:00 UTC até 15/12/2026 00:00 UTC, **incluindo ambos os extremos**: 721 timestamps, 720 intervalos de uma hora.
@@ -58,6 +70,14 @@ npm run check:deploy
 ```
 
 O runner de infraestrutura também confere o SHA-256 do artefato auditado. Os testes frontend cobrem o consumidor científico, todos os 1.460 pares amostrados, seleções de locais/alvos/datas, erros e isolamento do planejamento livre.
+
+Aceitação opcional no navegador, com Playwright e Chromium disponíveis, após iniciar `vite preview --host 127.0.0.1 --port 4174` no workspace frontend:
+
+```sh
+PLAYWRIGHT_PATH=/caminho/para/playwright/index.mjs CHROMIUM_PATH=/caminho/para/chromium node scripts/browser-landing-guide.mjs
+```
+
+O runner usa o build estático, guarda capturas/resultados em `/tmp/landing-guide-evidence` e verifica desktop, tablet, celular, seleção, UTC, tabelas e teclado. Essas ferramentas são apenas de teste, não dependências da aplicação em produção.
 
 Para desenvolvimento e reprodução Python (Python 3.12+):
 
