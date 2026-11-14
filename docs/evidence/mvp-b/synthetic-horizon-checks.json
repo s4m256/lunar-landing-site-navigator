@@ -1,0 +1,52 @@
+{
+  "evidence_kind": "analytic_and_explicitly_synthetic_only_not_LOLA",
+  "real_topography_validated": false,
+  "smooth_sphere": {
+    "radius_m": 1737400.0,
+    "observer_height_above_surface_m": 2,
+    "analytic_horizon_dip_deg": -0.08693657193373108,
+    "max_sample_range_m": 12000,
+    "radial_convergence": [
+      {
+        "radial_step_m": 320,
+        "horizon_deg": -0.08697397913262771,
+        "abs_error_deg": 3.740719889662458e-05
+      },
+      {
+        "radial_step_m": 160,
+        "horizon_deg": -0.08697397913262771,
+        "abs_error_deg": 3.740719889662458e-05
+      },
+      {
+        "radial_step_m": 80,
+        "horizon_deg": -0.08693666173793041,
+        "abs_error_deg": 8.980419932691497e-08
+      },
+      {
+        "radial_step_m": 40,
+        "horizon_deg": -0.08693666173793041,
+        "abs_error_deg": 8.980419932691497e-08
+      }
+    ]
+  },
+  "synthetic_peak": {
+    "peak_height_m": 100,
+    "range_m": 1000,
+    "bearing_deg": 10,
+    "angular_convergence": [
+      {
+        "azimuth_step_deg": 20,
+        "maximum_sampled_horizon_deg": -0.016488943108404028
+      },
+      {
+        "azimuth_step_deg": 10,
+        "maximum_sampled_horizon_deg": 5.693940785574536
+      },
+      {
+        "azimuth_step_deg": 5,
+        "maximum_sampled_horizon_deg": 5.693940785574536
+      }
+    ]
+  },
+  "interpretation": "Controlled checks of curvature and ray sampling. Does not establish real LOLA resolution, datum, coverage, nodata or coordinate-frame compatibility."
+}

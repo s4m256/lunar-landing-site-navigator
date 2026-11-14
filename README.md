@@ -1,4 +1,4 @@
-# Lunar Landing Site Navigator — Ari / MVP A
+# Lunar Landing Site Navigator — Ari / MVP A + janela horária MVP B
 
 MVP web estático para comparar direções aparentes dos **centros do Sol e da Terra** em dois locais lunares hipotéticos durante 2026. React + TypeScript + Vite exibem efemérides calculadas offline com SPICE; nenhum Python ou backend executa em produção. O projeto não pressupõe vínculo oficial com a NASA.
 
@@ -20,6 +20,18 @@ npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4173
 ```
 
 A Vercel usa a raiz do repositório, `npm ci --include=dev`, `npm run build` e publica `frontend/dist`, conforme `vercel.json`. Não precisa instalar Python nem baixar kernels. Não foi realizado deploy público nesta integração. Veja [configuração e diagnóstico](docs/deploy.md).
+
+## MVP B — visibilidade horária, terreno indisponível
+
+Use o botão **Visibilidade horária / MVP B**. O modo original do MVP A e o planejamento livre continuam disponíveis.
+
+- Mesmos locais científicos e modelo IAU_MOON/CN+S do MVP A.
+- 15/11/2026 00:00 UTC até 15/12/2026 00:00 UTC, **incluindo ambos os extremos**: 721 timestamps, 720 intervalos de uma hora.
+- Tabela e linhas amostradas lado a lado para centros do Sol/Terra acima do horizonte idealizado de 0°. Mudanças são delimitadas entre amostras, sem horários de eventos ou durações contínuas exatas.
+- **LOLA bloqueado por HTTP 403 no proxy:** nenhum DEM foi adquirido/verificado. Topografia desativada, resultados topográficos `null`; nenhum terreno sintético aparece como relevo lunar. Compatibilidade de datum/projeção/referencial ainda não estabelecida.
+- [Dataset derivado](docs/data/mvp-b-hourly.json), [proveniência e reprodução](docs/mvp-b-visibility.md), [bloqueio e testes topográficos controlados](docs/mvp-b-terrain.md).
+
+As duas gerações do dataset horário foram byte a byte idênticas; 124 amostras coincidentes com o MVP A têm os mesmos valores. São verificações de reprodutibilidade, não validação física independente.
 
 ## Fluxo e limites da demonstração
 

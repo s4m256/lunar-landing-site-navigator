@@ -1,0 +1,21 @@
+{
+  "url": "http://127.0.0.1:4175",
+  "browser": "156.0.8078.79",
+  "checks": [
+    "MVP A preserved; MVP B explicitly displays 721 timestamps / 720 intervals / 720h and unavailable LOLA, no invented topographic data",
+    "All 24 angular values plus 12 ideal-visibility flags match raw JSON across first/middle/last instants, both sites and SUN/EARTH; UTC preserved under America/Sao_Paulo",
+    "Four sampled visibility rows contain 721 marks each, selected marker exact; transitions are explicitly bracketed without continuous duration claims",
+    "Full kernel hashes and limitations visible; downloaded dataset bytes SHA256-identical to committed dataset",
+    "Out-of-coverage date and retained invalid final-day hour show no-data, no table and no selected marker; no nearest-hour fallback",
+    "Original annual MVP A and free-planning modes remain separate and functional",
+    "390px mobile: date/hour/target controls work, no document horizontal overflow, readable 12.0px chart labels, keyboard-scrollable timeline and scrollable comparison table"
+  ],
+  "errors": [],
+  "warnings": [],
+  "resources": [],
+  "screenshots": [
+    "/tmp/mvp-b-desktop.png",
+    "/tmp/mvp-b-mobile.png"
+  ],
+  "pass": true
+}

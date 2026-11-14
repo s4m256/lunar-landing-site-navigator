@@ -971,3 +971,64 @@ summary {
     padding: 0 16px 12px;
   }
 }
+.hourly-hero {
+  min-height: 250px;
+}
+.hourly-hero h1 span {
+  font-size: clamp(28px, 3.5vw, 44px);
+}
+.terrain-unavailable {
+  border-color: #6c5936;
+  background: #282217;
+}
+.planner select {
+  width: 100%;
+  padding: 12px;
+  color: #e8f0f0;
+  background: #0c141c;
+  border: 1px solid #34414c;
+  border-radius: 7px;
+  margin-bottom: 8px;
+}
+.planner label[for="hourly-date"],
+.planner label[for="hourly-hour"] {
+  margin-top: 18px;
+}
+.hourly-chart {
+  display: block;
+  width: 100%;
+  min-width: 740px;
+  height: auto;
+}
+.hourly-chart text {
+  fill: #bfd0d3;
+  font:
+    12px ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.sample-counts {
+  padding: 0 22px 22px;
+  font-size: 12px;
+  color: #b8cdd0;
+}
+.transition-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 20px;
+}
+.transition-columns li {
+  font-size: 12px;
+}
+.transition-columns time {
+  white-space: nowrap;
+}
+@media (max-width: 680px) {
+  .transition-columns {
+    grid-template-columns: 1fr;
+  }
+  .hourly-chart {
+    min-width: 820px;
+  }
+}

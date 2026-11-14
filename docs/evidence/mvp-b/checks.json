@@ -1,0 +1,17 @@
+{
+  "base_commit": "21d539b723f599c11fd60958a562057e2d5a12b5",
+  "branch": "feat/lunar-topographic-visibility",
+  "npm_install": "npm ci --include=dev --cache /workspace/.cache/lunar-npm: exit 0",
+  "infra_tests_passed": 7,
+  "frontend_tests_passed": 93,
+  "python_tests_passed": 117,
+  "python_tests_skipped": 0,
+  "python_command": "LUNAR_KERNEL_DIR=/tmp/mvp-a-historical-kernels .venv/bin/python -m pytest science/tests -ra",
+  "typecheck": "pass",
+  "frontend_build": "pass, non-blocking Vite >500 kB bundle warning",
+  "check_deploy": "pass",
+  "python_wheel_sdist": "pass",
+  "browser": "pass, built static preview, no console/resource errors",
+  "topographic_dataset": "not produced: official terrain acquisition blocked HTTP403",
+  "external_scientific_validation": "not claimed; no independent Horizons reference"
+}

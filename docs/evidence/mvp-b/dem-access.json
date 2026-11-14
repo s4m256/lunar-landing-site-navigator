@@ -1,0 +1,36 @@
+{
+  "scope": "MVP B official LOLA acquisition preflight; no DEM or synthetic replacement acquired",
+  "attempts": [
+    {
+      "purpose": "PDS LOLA candidate product label",
+      "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.lbl",
+      "method": "GET",
+      "attempted_at_utc": "2026-11-14T17:30:29.786634+00:00",
+      "status": "unavailable",
+      "error_type": "URLError",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "purpose": "NASA PGDA product discovery index",
+      "url": "https://pgda.gsfc.nasa.gov/",
+      "method": "GET",
+      "attempted_at_utc": "2026-11-14T17:30:29.799217+00:00",
+      "status": "unavailable",
+      "error_type": "URLError",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "purpose": "NASA LOLA instrument/source index",
+      "url": "https://lola.gsfc.nasa.gov/",
+      "method": "GET",
+      "attempted_at_utc": "2026-11-14T17:30:29.801625+00:00",
+      "status": "unavailable",
+      "error_type": "URLError",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    }
+  ],
+  "topography_status": "unavailable",
+  "verified_product_metadata": null,
+  "verified_dem_sha256": null,
+  "coordinate_compatibility": "not established; IAU_MOON cannot be silently treated as MOON_ME"
+}

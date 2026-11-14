@@ -23,3 +23,12 @@ Use versionamento semântico do contrato. Mudanças incompatíveis, inclusive no
 ## Famílias científicas adicionais
 
 `analysis-request.v1.schema.json`, `analysis-result.v1.schema.json` e `scientific-provenance.v1.schema.json` são contratos novos e independentes (versão 1.0.0 cada). Não substituem nem estendem silenciosamente `science-status` 1.0.0. Veja `../science/GEOMETRY.md` para semântica temporal, unidades, referencial, superfície e limitações. O exemplo calculado está em `../science/examples/result.json`.
+
+
+## Janela horária MVP B
+
+`visibility-window.v1.schema.json` é uma família independente, versão 1.0.0, para o fallback horário sem terreno. Não modifica as famílias anteriores. Incorpora a definição existente de `analysis-result` sem mudar sua semântica.
+
+O produto declara início 15/11/2026 00:00 UTC e fim **inclusivo** 15/12/2026 00:00 UTC: 721 timestamps, 720 intervalos horários. O pedido interno do motor continua semiaberto e termina em 15/12/2026 **01:00 UTC**, para que a última amostra desejada às 00:00 esteja incluída. Não há amostra às 01:00 no produto.
+
+Além do schema, produtor e consumidor verificam locais/coordenadas, quatro pares únicos, grade UTC exata e `ideal_visible == (elevation_deg > 0)`. Igualdade a zero não é classificada como acima do horizonte. Topografia é obrigatoriamente `unavailable` e `topographic_visible` é `null`, distinto de uma série toda falsa ou horizonte de zero. Essa família não aceita terreno real ou sintético: habilitar topografia futuramente exige contrato e testes coordenados após conferência do DEM/referencial.

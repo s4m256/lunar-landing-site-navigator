@@ -8,14 +8,21 @@ import { validateSite, type PlanningSite } from "./planning";
 const status = parseScienceStatus(example);
 
 import { ScienceDemo } from "./ScienceDemo";
+import { HourlyVisibility } from "./HourlyVisibility";
 
 export function App() {
-  const [mode, setMode] = useState<"demo" | "planning">("demo");
+  const [mode, setMode] = useState<"demo" | "planning" | "hourly">("demo");
   return (
     <>
       <div className="mode-switch" role="group" aria-label="Modo de exploração">
         <button aria-pressed={mode === "demo"} onClick={() => setMode("demo")}>
           Demonstração científica 2026
+        </button>
+        <button
+          aria-pressed={mode === "hourly"}
+          onClick={() => setMode("hourly")}
+        >
+          Visibilidade horária / MVP B
         </button>
         <button
           aria-pressed={mode === "planning"}
@@ -26,6 +33,8 @@ export function App() {
       </div>
       {mode === "demo" ? (
         <ScienceDemo />
+      ) : mode === "hourly" ? (
+        <HourlyVisibility />
       ) : (
         <>
           <div className="planning-warning" role="note">
