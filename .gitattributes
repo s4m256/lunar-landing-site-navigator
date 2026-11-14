@@ -1,0 +1,2 @@
+# Preserve the exact upstream PDS label bytes for its published SHA-256.
+frontend/public/terrain/LDEM_4.LBL -text whitespace=-blank-at-eol

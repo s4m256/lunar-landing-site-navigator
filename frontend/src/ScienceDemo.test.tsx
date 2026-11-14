@@ -8,7 +8,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import data from "../../docs/audits/pr4/result-2026.json";
 import { ScienceDemo } from "./ScienceDemo";
-import { App } from "./App";
+import { LegacyApp } from "./LegacyApp";
 
 afterEach(cleanup);
 const changeDate = (date: string) =>
@@ -105,7 +105,7 @@ describe("static scientific demonstration", () => {
     ).toHaveAttribute("download", "result-2026.json");
   });
   it("keeps user-defined coordinates and dates isolated from the scientific demonstration", () => {
-    render(<App />);
+    render(<LegacyApp />);
     expect(screen.getByRole("table")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Planejamento livre" }));
     expect(screen.queryByRole("table")).not.toBeInTheDocument();

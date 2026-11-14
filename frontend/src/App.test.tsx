@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { PlanningApp } from "./App";
+import { PlanningApp } from "./LegacyApp";
 import { parseScienceStatus } from "./contract";
 import example from "../../contracts/examples/science-status.json";
 

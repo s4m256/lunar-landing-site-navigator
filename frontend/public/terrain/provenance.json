@@ -1,0 +1,30 @@
+{
+  "primaryImageUrl": "https://imbrium.mit.edu/DATA/LOLA_GDR/CYLINDRICAL/IMG/LDEM_4.IMG",
+  "primaryLabelUrl": "https://imbrium.mit.edu/DATA/LOLA_GDR/CYLINDRICAL/IMG/LDEM_4.LBL",
+  "acquisition": "Two public GitHub mirrors; original IMG and PDS label agree byte for byte",
+  "primaryArchiveVerified": false,
+  "mirrors": [
+    {
+      "repository": "https://github.com/marianaq11/lunar-terrain-analysis",
+      "commit": "3281471e49abb5c58445ff2a3bfc726409b73424",
+      "imageUrl": "https://raw.githubusercontent.com/marianaq11/lunar-terrain-analysis/3281471e49abb5c58445ff2a3bfc726409b73424/data/LDEM_4.IMG",
+      "labelUrl": "https://raw.githubusercontent.com/marianaq11/lunar-terrain-analysis/3281471e49abb5c58445ff2a3bfc726409b73424/data/LDEM_4.LBL"
+    },
+    {
+      "repository": "https://github.com/rp3gregorio/Lunar-Clean",
+      "commit": "c3de060a9843b7f87bfe516a0af19c3bdbde8bdf",
+      "imageUrl": "https://raw.githubusercontent.com/rp3gregorio/Lunar-Clean/c3de060a9843b7f87bfe516a0af19c3bdbde8bdf/LDEM_4.IMG",
+      "labelUrl": "https://raw.githubusercontent.com/rp3gregorio/Lunar-Clean/c3de060a9843b7f87bfe516a0af19c3bdbde8bdf/LDEM_4.LBL"
+    }
+  ],
+  "sourceImageSha256": "972d66d7f330abca62abc21aae270661516c00dd1a881ec102b94df9563656b5",
+  "sourceImageBytes": 2073600,
+  "sourceLabelSha256": "b5a197b4d417e3b5e0e84f8fe15f9a1d2203b8eb5d7213236c0ffbc86e940cc6",
+  "sourceLabelBytes": 5107,
+  "artifact": "south-a-context.json",
+  "artifactSha256": "226df8a268fd6cdf4d4115a368f6e69051815c64ab74b856d3e2f3a506cd8a7c",
+  "generator": "scripts/prepare-terrain-context.py",
+  "sourceObservedMinDN": -17757,
+  "sourceObservedMaxDN": 21008,
+  "purpose": "Visual context only; no terrain horizon or scientific observer-frame conversion"
+}
