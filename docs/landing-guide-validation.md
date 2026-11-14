@@ -31,6 +31,10 @@ As séries pertencem a `sourceSiteId` e coordenadas exatas, não ao slot visual 
 
 O primeiro comando Python usou por engano um diretório inexistente de kernels e falhou em quatro casos. O comando acima, com o diretório real e hashes verificados pelo consumidor, passou em todos os 117. A primeira rodada frontend também apontou dois testes vinculados à antiga entrada; eles foram mantidos como testes da interface anterior, e os novos fluxos receberam cobertura própria. Nenhuma falha foi convertida em sucesso sem correção e nova execução.
 
+O primeiro workflow remoto foi rejeitado antes de criar jobs: `(Line: 30, Col: 25): Unrecognized named-value: 'runner'` na expressão `runner.temp`. O erro estava herdado em `jobs.science.env`. A única alteração de CI troca esse caminho por `${{ github.workspace }}/.cache/lunar-kernels`, contexto permitido nesse nível. Não muda o conjunto de kernels, seus hashes, comandos científicos ou permissões. O resultado remoto atualizado fica nos checks do PR; os resultados da tabela acima são locais.
+
+A integração GitHub existente gerou automaticamente um Preview Vercel com status Ready. O endereço exige login Vercel; a visita sem sessão chegou à página de autenticação, portanto não foi declarada validação funcional externa. O aplicativo foi exercitado no build estático local. Não houve publicação manual ou promoção para produção.
+
 O build avisa sobre o tamanho do bundle: aproximadamente 1,20 MB minificado / 250 kB gzip, incluindo os JSONs científicos e os validadores. Não se ocultou o aviso. Separação futura do carregamento dos conjuntos pode reduzir o custo inicial, preservando validação e proveniência; não é dependência para executar o MVP estático.
 
 ## Aceitação no navegador

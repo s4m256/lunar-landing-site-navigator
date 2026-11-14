@@ -27,7 +27,7 @@ jobs:
   science:
     runs-on: ubuntu-latest
     env:
-      LUNAR_KERNEL_DIR: ${{ runner.temp }}/lunar-kernels
+      LUNAR_KERNEL_DIR: ${{ github.workspace }}/.cache/lunar-kernels
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
