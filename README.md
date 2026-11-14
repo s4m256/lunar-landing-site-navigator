@@ -3,12 +3,14 @@
 Solução completa em **duas camadas** para o desafio **NASA Space Apps Challenge — Lunar Landing Sites**:
 
 1. **Motor Científico em Python (`science/src/lunar_science/navigator/`)**: pré-computa a partir de dados oficiais da NASA (DEM polar LRO/LOLA `ldem_80s_80m` + kernels SPICE `de421.bsp` / `moon_pa_de421_1900-2050.bpc` em `MOON_ME`, com validação cruzada contra Skyfield e API JPL Horizons) as declividades topográficas, curvas de horizonte geodésicas de 360° (`s_max = 120 km`), visibilidade direta DTE e via satélites relay (LRO e constelação ELFO/LunaNet), eclipse parcial solar (`f_illum`), dimensionamento de bateria e **Landing Score composto (0–100)**.
-2. **Interface Interativa React/TypeScript (`frontend/src/navigator/`)**: carrega o dataset validado por JSON Schema (`contracts/navigator-dataset.v1.schema.json`) e realiza interpolação espacial bilinear instantânea (`< 10 ms`) nas malhas locais `5×5` (`500 m`), análise temporal de 30 dias (`721` horas), perfil polar/topocêntrico de horizonte, curvas de energia/blackout e ranking dinâmico configurável.
+2. **Interface Interativa "Landing Guide" (`frontend/src/landing-guide/` + `frontend/src/navigator/`)**: experiência minimalista centrada na Lua (Tela Inicial `Landing Guide` -> Globo 3D e Projeção Polar 2D sincronizados com controles de canto, comparação A/B e divulgação progressiva conforme WCAG 2.2 AA). Consome o dataset validado por JSON Schema (`contracts/navigator-dataset.v1.schema.json`) com interpolação espacial bilinear instantânea (`< 10 ms`) nas malhas locais `5×5` (`500 m`), fatiamento temporal UTC e alternativa tabular para gráficos.
 
 ## Estrutura e responsabilidades
 
 - `science/src/lunar_science/navigator/`: motor científico (`data_sources.py`, `dem_horizon.py`, `ephemeris.py`, `comms.py`, `solar.py`, `scoring.py`, `pipeline.py`).
-- `frontend/src/navigator/`: componentes interativos (`SouthPoleGridMap.tsx`, `PolarHorizonSkyPlot.tsx`, `PowerCommsCharts.tsx`, `SiteComparisonPanel.tsx`, `math.ts`, `types.ts`).
+- `frontend/src/landing-guide/`: interface Moon-first do MVP (`LunarViewport.tsx`, `HomeOverlay.tsx`, `SelectionPopover.tsx`, `DataDrawer.tsx`, `ChartsDrawer.tsx`, `TimePopover.tsx`, `state.ts`).
+- `frontend/src/navigator/`: componentes científicos reutilizados (`PolarHorizonSkyPlot.tsx`, `math.ts`, `types.ts`, e visualizações originais).
+- `docs/ui-ux/`: arquitetura de telas, wireframes, fluxo A/B, revisão crítica de UX e plano MVP ([`landing-guide-architecture.md`](docs/ui-ux/landing-guide-architecture.md)).
 - `outputs/`: artefatos reprodutíveis organizados (`datasets/`, `reports/`, `validation/`).
 - `docs/accessibility/`: guia de acessibilidade WCAG 2.2 AA e simplicidade cognitiva ([`guia-acessibilidade-e-simplicidade.md`](docs/accessibility/guia-acessibilidade-e-simplicidade.md)).
 - `contracts/`: JSON Schemas (`navigator-dataset.v1.schema.json`, `science-status.schema.json`) compartilhados entre Python (`jsonschema`) e TypeScript (`Ajv`).
