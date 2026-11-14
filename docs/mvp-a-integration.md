@@ -68,3 +68,13 @@ node /tmp/mvp-a-browser/review.mjs
 ```
 
 Os critérios finais SPA-7/Isaac e a autorização de integração/publicação continuam com a equipe. Esta implementação encerra no conjunto demonstrativo definido, sem estender ciência ou adicionar serviços.
+
+## Publicação para revisão
+
+A branch foi enviada ao GitHub com sucesso. A tentativa de `gh pr create --draft --base main --head feat/mvp-a-scientific-integration` foi bloqueada no POST `https://api.github.com/graphql` com `Forbidden`. Nenhum PR em rascunho foi criado por esta execução.
+
+Revisão do diff: https://github.com/s4m256/lunar-landing-site-navigator/compare/main...feat/mvp-a-scientific-integration
+
+Formulário para abertura manual: https://github.com/s4m256/lunar-landing-site-navigator/pull/new/feat/mvp-a-scientific-integration
+
+Não foi acionado deploy público nem merge. Os testes e o servidor descritos acima são locais; não se afirma CI remoto aprovado para um PR que não foi aberto.
