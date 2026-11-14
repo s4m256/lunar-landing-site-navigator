@@ -10,6 +10,7 @@ Solução completa em **duas camadas** para o desafio **NASA Space Apps Challeng
 - `science/src/lunar_science/navigator/`: motor científico (`data_sources.py`, `dem_horizon.py`, `ephemeris.py`, `comms.py`, `solar.py`, `scoring.py`, `pipeline.py`).
 - `frontend/src/navigator/`: componentes interativos (`SouthPoleGridMap.tsx`, `PolarHorizonSkyPlot.tsx`, `PowerCommsCharts.tsx`, `SiteComparisonPanel.tsx`, `math.ts`, `types.ts`).
 - `outputs/`: artefatos reprodutíveis organizados (`datasets/`, `reports/`, `validation/`).
+- `docs/accessibility/`: guia de acessibilidade WCAG 2.2 AA e simplicidade cognitiva ([`guia-acessibilidade-e-simplicidade.md`](docs/accessibility/guia-acessibilidade-e-simplicidade.md)).
 - `contracts/`: JSON Schemas (`navigator-dataset.v1.schema.json`, `science-status.schema.json`) compartilhados entre Python (`jsonschema`) e TypeScript (`Ajv`).
 - `.github/workflows/ci.yml`: testes, tipagem, build do frontend (`check:deploy`) e smoke test da wheel Python.
 
