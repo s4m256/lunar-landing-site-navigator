@@ -1,4 +1,14 @@
-"""Solar disk partial-eclipse illumination, panel power, and survival battery sizing."""
+"""Solar-disk visibility above the terrain horizon, panel power, and survival battery sizing.
+
+``f_illum`` is the fraction of the solar disk above the local terrain horizon (occultation by
+relief). Eclipses of the Sun by the Earth are not modeled.
+
+All summary statistics describe only the time window that is passed in. The committed dataset
+uses 2026-11-15 -> 2026-12-15 (30 days, hourly), the southern-summer extreme of the sub-solar
+latitude, so its illumination values are best-season values, not annual ones. Pass a window of
+at least one seasonal cycle (about one eclipse year, ~346.6 days) for annual statistics;
+``window_coverage`` in the result says what was covered.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +28,10 @@ def compute_solar_illum_fraction(
     horizon_at_sun_az_deg: np.ndarray | float,
     solar_angular_radius_deg: np.ndarray | float,
 ) -> np.ndarray:
-    """Exact circular-segment solar disk fraction f_illum(t) in [0, 1]."""
+    """Fraction f_illum(t) in [0, 1] of the solar disk above the horizon (circular segment).
+
+    Assumes the horizon is a straight line across the 0.53 deg disk and ignores limb darkening.
+    """
     delta_h = np.asarray(sun_el_deg, dtype=np.float64) - np.asarray(
         horizon_at_sun_az_deg, dtype=np.float64
     )
@@ -96,7 +109,14 @@ def analyze_site_solar(
     panel_efficiency: float = DEFAULT_PANEL_EFFICIENCY,
     survival_load_w: float = BASELINE_SURVIVAL_LOAD_W,
 ) -> dict[str, object]:
-    """Compute solar illumination fraction, panel yields (W/m^2 & Wh/m^2), and battery sizing."""
+    """Compute solar illumination fraction, panel yields (W/m^2 & Wh/m^2), and battery sizing.
+
+    The window is whatever the input series cover (any length, uniform ``step_seconds``); the
+    result's ``window_coverage`` records it. Caveats: ``max_continuous_shadow_hours`` is truncated
+    at the window edges; ``sunlit_hours`` counts any non-zero disk fraction; ``min_battery_100w_wh``
+    is ``survival_load_w`` times the longest shadow, without depth of discharge or thermal loads;
+    ``panel_efficiency`` (0.28) and the 100 W load are unsourced engineering placeholders.
+    """
     horiz_at_sun = interpolate_horizon_elev(sun_az_deg, horizon_az_deg, horizon_elev_deg)
     f_illum = compute_solar_illum_fraction(sun_el_deg, horiz_at_sun, solar_angular_radius_deg)
     g_w_m2 = compute_solar_irradiance_w_m2(sun_dist_au)
@@ -134,6 +154,11 @@ def analyze_site_solar(
 
     return {
         "summary": summary,
+        "window_coverage": {
+            "sample_count": int(len(f_illum)),
+            "step_hours": step_hours,
+            "duration_hours": step_hours * max(len(f_illum) - 1, 0),
+        },
         "f_illum": f_illum,
         "g_w_m2": g_w_m2,
         "p_track_w_m2": p_track_w_m2,

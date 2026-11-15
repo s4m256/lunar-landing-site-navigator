@@ -12,6 +12,7 @@ permissions:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,13 +27,16 @@ jobs:
       - run: npm run check:deploy
   science:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install -e './science[dev]'
-      - run: python -m pytest
+      # -ra lists skipped (no cached NAIF kernels) and xfailed (known data findings) tests;
+      # xfail_strict makes an unexpectedly passing xfail fail the job so stale markers are removed.
+      - run: python -m pytest -ra -o xfail_strict=true
         working-directory: science
       - run: python -m build science
       - name: Smoke test the installed wheel outside the checkout

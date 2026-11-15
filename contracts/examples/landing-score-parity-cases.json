@@ -1,0 +1,594 @@
+{
+  "description": "TS <-> Python parity table for the ILLUSTRATIVE landing index. Inputs are SYNTHETIC except the committed_center_* cases (published center summaries); expected values come from lunar_science.navigator.scoring. Regenerate with science/tools/generate_score_parity_cases.py.",
+  "model_version": "1.1.0",
+  "cases": [
+    {
+      "id": "flat_lit_near_psr",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 94.71,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "slope_at_limit_is_not_eliminated",
+      "input": {
+        "slope_deg": 12.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 75.48,
+        "safety_slope_0_100": 23.08,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "slope_just_above_limit_is_eliminated",
+      "input": {
+        "slope_deg": 12.01,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 0.0,
+        "safety_slope_0_100": 0.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": true
+      }
+    },
+    {
+      "id": "slope_above_default_but_below_custom_limit",
+      "input": {
+        "slope_deg": 13.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 14.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 73.55,
+        "safety_slope_0_100": 15.38,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "slope_limit_disabled",
+      "input": {
+        "slope_deg": 30.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": null,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 69.71,
+        "safety_slope_0_100": 0.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "slope_ramp_middle",
+      "input": {
+        "slope_deg": 8.5,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 82.21,
+        "safety_slope_0_100": 50.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "unknown_psr_distance_gets_no_credit",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": null,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 80.51,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 0.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "inside_psr_dark",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.0,
+        "max_continuous_shadow_hours": 721.0,
+        "dte_full_disk_duty_cycle_pct": 0.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 0.0,
+        "is_psr": true,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 43.5,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 0.0,
+        "comms_0_100": 65.0,
+        "science_psr_0_100": 15.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_500",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 500.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 95.51,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 100.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_2750",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 2750.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 89.51,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 60.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_5000",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 5000.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 83.51,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 20.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_5200_former_sentinel_value",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 5200.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 83.39,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 19.2,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_7500",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 7500.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 82.01,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 10.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "psr_distance_beyond_zero",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 20000.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 80.51,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 0.0,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "relay_off_uses_dte_only",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": false,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 91.46,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 80.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "shadow_beyond_scale_is_clamped",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 500.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 84.5,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 63.0,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "custom_weights",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.5,
+          "power": 0.2,
+          "comms": 0.2,
+          "science_psr": 0.1
+        }
+      },
+      "expected": {
+        "total_0_100": 96.5,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "zero_weights",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 80.0,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.0,
+          "power": 0.0,
+          "comms": 0.0,
+          "science_psr": 0.0
+        }
+      },
+      "expected": {
+        "total_0_100": 0.0,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 93.0,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "rounding_tie_goes_to_even",
+      "input": {
+        "slope_deg": 1.0,
+        "mean_illum_fraction": 0.9,
+        "max_continuous_shadow_hours": 10.0,
+        "dte_full_disk_duty_cycle_pct": 12.125,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 800.0,
+        "is_psr": false,
+        "use_relay": false,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 74.49,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 92.17,
+        "comms_0_100": 12.12,
+        "science_psr_0_100": 94.67,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "committed_center_shackleton_ridge",
+      "input": {
+        "slope_deg": 2.0,
+        "mean_illum_fraction": 1.0,
+        "max_continuous_shadow_hours": 0.0,
+        "dte_full_disk_duty_cycle_pct": 35.09,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": 2780.3,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 88.24,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 100.0,
+        "comms_0_100": 77.28,
+        "science_psr_0_100": 59.46,
+        "eliminated": false
+      }
+    },
+    {
+      "id": "committed_center_de_gerlache_rim_2",
+      "input": {
+        "slope_deg": 1.69,
+        "mean_illum_fraction": 0.5497,
+        "max_continuous_shadow_hours": 185.0,
+        "dte_full_disk_duty_cycle_pct": 32.45,
+        "combined_dte_elfo_duty_cycle_pct": 100.0,
+        "psr_distance_m": null,
+        "is_psr": false,
+        "use_relay": true,
+        "slope_limit_deg": 12.0,
+        "weights": {
+          "safety": 0.25,
+          "power": 0.35,
+          "comms": 0.25,
+          "science_psr": 0.15
+        }
+      },
+      "expected": {
+        "total_0_100": 62.66,
+        "safety_slope_0_100": 100.0,
+        "power_0_100": 53.06,
+        "comms_0_100": 76.36,
+        "science_psr_0_100": 0.0,
+        "eliminated": false
+      }
+    }
+  ]
+}

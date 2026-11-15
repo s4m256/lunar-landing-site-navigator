@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "LunarNavigatorDatasetV1",
-  "description": "Precomputed lunar south pole terrain, ephemeris, horizon mask, communications, solar power, and landing score dataset.",
+  "description": "Precomputed lunar south pole terrain, ephemeris, horizon mask, communications, solar power, and illustrative landing score dataset. Version 1.1.0; see contracts/README.md for units, provenance and the semantics the schema cannot express.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@
     "sites"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "generated_utc": { "type": "string", "minLength": 10 },
     "provenance": {
       "type": "object",
@@ -87,8 +87,22 @@
           "additionalProperties": false,
           "required": ["status", "endpoint", "notes"],
           "properties": {
-            "status": { "type": "string", "minLength": 1 },
+            "status": {
+              "enum": [
+                "verified",
+                "failed",
+                "skipped_network_unavailable",
+                "not_requested",
+                "unverified_no_raw_response"
+              ]
+            },
             "endpoint": { "type": "string", "minLength": 1 },
+            "tolerance_deg": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "sample_count": { "type": ["integer", "null"], "minimum": 0 },
+            "raw_responses": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/rawResponse" }
+            },
             "max_sun_az_diff_deg": { "type": ["number", "null"] },
             "max_sun_el_diff_deg": { "type": ["number", "null"] },
             "max_earth_az_diff_deg": { "type": ["number", "null"] },
@@ -119,14 +133,21 @@
             "solar_radius_km": { "type": "number" },
             "earth_radius_km": { "type": "number" },
             "lunar_radius_m": { "type": "number" },
-            "clps_slope_limit_deg": { "type": "number" }
+            "clps_slope_limit_deg": { "type": "number" },
+            "slope_baseline_m": { "type": "number", "exclusiveMinimum": 0 },
+            "psr_search_radius_m": { "type": "number", "exclusiveMinimum": 0 },
+            "psr_lattice_step_m": { "type": "number", "exclusiveMinimum": 0 },
+            "psr_subsolar_lat_extreme_deg": { "type": "number", "minimum": -90, "maximum": 90 },
+            "psr_solar_radius_deg": { "type": "number", "exclusiveMinimum": 0 },
+            "score_is_illustrative": { "const": true }
           }
         },
         "limitations": {
           "type": "array",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
-        }
+        },
+        "migration": { "$ref": "#/definitions/migration" }
       }
     },
     "mission_window": {
@@ -166,6 +187,22 @@
           "type": "array",
           "minItems": 2,
           "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "seasonal_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "duration_days",
+            "subsolar_lat_min_deg",
+            "subsolar_lat_max_deg",
+            "covers_seasonal_cycle"
+          ],
+          "properties": {
+            "duration_days": { "type": "number", "minimum": 0 },
+            "subsolar_lat_min_deg": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+            "subsolar_lat_max_deg": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+            "covers_seasonal_cycle": { "type": "boolean" }
+          }
         }
       }
     },
@@ -208,6 +245,7 @@
             "enum": ["artemis_candidate", "reference_ridge", "psr_contrast"]
           },
           "description": { "type": "string", "minLength": 1 },
+          "coordinates_source": { "type": "string", "minLength": 1 },
           "center": {
             "type": "object",
             "additionalProperties": false,
@@ -232,10 +270,12 @@
                 "minItems": 3,
                 "maxItems": 3
               },
-              "psr_distance_m": { "type": "number", "minimum": 0 },
+              "psr_distance_m": { "type": ["number", "null"], "minimum": 0 },
               "is_psr": { "type": "boolean" },
               "observer_height_m": { "type": "number", "minimum": 0 }
-            }
+            },
+            "if": { "properties": { "is_psr": { "const": true } } },
+            "then": { "properties": { "psr_distance_m": { "const": 0 } } }
           },
           "horizon_elev_deg": {
             "type": "array",
@@ -348,7 +388,33 @@
                   "safety_slope_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
                   "power_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
                   "comms_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
-                  "science_psr_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
+                  "science_psr_0_100": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "eliminated": { "type": "boolean" },
+                  "elimination_reasons": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "enum": ["slope_above_clps_limit"] }
+                  },
+                  "total_without_relay_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
+                },
+                "dependencies": {
+                  "eliminated": ["elimination_reasons"],
+                  "elimination_reasons": ["eliminated"]
+                },
+                "if": {
+                  "required": ["eliminated"],
+                  "properties": { "eliminated": { "const": true } }
+                },
+                "then": {
+                  "properties": {
+                    "total_0_100": { "const": 0 },
+                    "safety_slope_0_100": { "const": 0 },
+                    "elimination_reasons": { "minItems": 1 },
+                    "total_without_relay_0_100": { "const": 0 }
+                  }
+                },
+                "else": {
+                  "properties": { "elimination_reasons": { "maxItems": 0 } }
                 }
               }
             }
@@ -395,7 +461,7 @@
                     "longitude_east_deg": { "type": "number" },
                     "elevation_m": { "type": "number" },
                     "slope_deg": { "type": "number", "minimum": 0, "maximum": 90 },
-                    "psr_distance_m": { "type": "number", "minimum": 0 },
+                    "psr_distance_m": { "type": ["number", "null"], "minimum": 0 },
                     "is_psr": { "type": "boolean" },
                     "horizon_elev_deg": { "type": "array", "items": { "type": "number" } },
                     "mean_illum_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -405,7 +471,9 @@
                     "combined_dte_elfo_duty_cycle_pct": { "type": "number", "minimum": 0, "maximum": 100 },
                     "max_blackout_combined_hours": { "type": "number", "minimum": 0 },
                     "landing_score_0_100": { "type": "number", "minimum": 0, "maximum": 100 }
-                  }
+                  },
+                  "if": { "properties": { "is_psr": { "const": true } } },
+                  "then": { "properties": { "psr_distance_m": { "const": 0 } } }
                 }
               }
             }
@@ -444,7 +512,77 @@
         "perilune_alt_km": { "type": "number" },
         "max_range_km": { "type": "number", "exclusiveMinimum": 0 },
         "antenna_mask_deg": { "type": "number", "minimum": 0 },
-        "freq_ghz": { "type": "number", "exclusiveMinimum": 0 }
+        "freq_ghz": { "type": "number", "exclusiveMinimum": 0 },
+        "hypothetical": { "type": "boolean" },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rawResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_command", "request_url", "retrieved_utc", "response_file", "response_sha256"],
+      "properties": {
+        "target_command": { "type": "string", "minLength": 1 },
+        "request_url": { "type": "string", "minLength": 1 },
+        "retrieved_utc": { "type": "string", "minLength": 10 },
+        "response_file": { "type": "string", "minLength": 1 },
+        "response_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_schema_version",
+        "tool",
+        "tool_version",
+        "source_sha256",
+        "source_frontend_sha256",
+        "stored_scores_rule",
+        "psr_sentinel_nulled",
+        "added",
+        "replaced",
+        "notes"
+      ],
+      "properties": {
+        "from_schema_version": { "const": "1.0.0" },
+        "tool": { "type": "string", "minLength": 1 },
+        "tool_version": { "type": "string", "minLength": 1 },
+        "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "source_frontend_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "stored_scores_rule": { "const": "1.0.0" },
+        "psr_sentinel_nulled": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value_m", "count"],
+          "properties": {
+            "value_m": { "type": "number", "exclusiveMinimum": 0 },
+            "count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "added": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^/" }
+        },
+        "replaced": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "from", "to"],
+            "properties": {
+              "path": { "type": "string", "pattern": "^/" },
+              "from": {},
+              "to": {}
+            }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
       }
     }
   }

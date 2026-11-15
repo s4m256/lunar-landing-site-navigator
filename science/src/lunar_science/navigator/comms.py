@@ -1,4 +1,25 @@
-"""Direct-to-Earth (DTE) and Relay Constellation (ELFO / LRO) link analysis."""
+"""Direct-to-Earth (DTE) and relay line-of-sight analysis (geometry only, no link budget).
+
+All relay presets are HYPOTHETICAL scenarios, not models of operational services:
+
+* ``LRO_PRESET`` reuses the geometry of LRO's 2009-2011 mapping orbit (mean altitude 50 km,
+  circular, polar; Slojkowski, "Lunar Reconnaissance Orbiter Orbit Determination Accuracy
+  Analysis", 24th ISSFD, 2014, which also reports the return to a ~40 x 180 km frozen orbit on
+  2011-12-11). The initial phase (RAAN 0, mean anomaly 0) is arbitrary, the 2026 LRO orbit is
+  different, and LRO is a science orbiter, not a relay for surface assets.
+* ``ELFO_PATHFINDER_PRESET`` / ``ELFO_CONSTELLATION_PRESET``: ESA/SSTL Lunar Pathfinder is planned
+  to operate in an Elliptical Lunar Frozen Orbit (ELFO) with an S-band return link of
+  2200-2290 MHz ("Lunar Pathfinder - Commercial data relay satellite enabling the next
+  generation of lunar missions", 17th International Conference on Space Operations, SpaceOps
+  2023, paper 339). The orbital elements used here (a = 5740 km, e = 0.58, i = 57.8 deg,
+  omega = 90 deg), the initial phases, the 3-satellite phasing, the 5 deg antenna mask and the
+  maximum ranges are not traced to any published source. LunaNet is an interoperability
+  framework, not this constellation.
+
+Propagation is two-body Keplerian; visibility is sampled on the caller's time grid (hourly in the
+pipeline), so outages shorter than one step are not resolved and the hourly ``lro_visible`` series
+aliases the ~1.9 h LRO-like period (only ``lro_duty_cycle_pct`` uses the 5-minute grid).
+"""
 
 from __future__ import annotations
 
@@ -29,6 +50,10 @@ class RelayOrbitPreset:
     max_range_km: float
     antenna_mask_deg: float
     freq_ghz: float
+    #: Published as ``relaySpec.source`` (contract 1.1.0): what is and is not sourced.
+    source: str = "No cited source."
+    #: Published as ``relaySpec.hypothetical``; every preset in this module is a scenario.
+    hypothetical: bool = True
 
     @property
     def satellites_count(self) -> int:
@@ -64,12 +89,25 @@ class RelayOrbitPreset:
             "max_range_km": round(self.max_range_km, 1),
             "antenna_mask_deg": round(self.antenna_mask_deg, 2),
             "freq_ghz": round(self.freq_ghz, 4),
+            "hypothetical": bool(self.hypothetical),
+            "source": self.source,
         }
 
 
+# Hypothetical scenarios: see the module docstring for what is and is not sourced. The ``source``
+# strings restate that docstring (SPA-10); they were not re-checked against the cited papers.
+LRO_PRESET_SOURCE = (
+    "Geometry of LRO's 2009-2011 50 km circular polar mapping orbit (Slojkowski, 24th ISSFD, 2014). "
+    "Initial phase arbitrary; the 2026 LRO orbit differs and LRO is not a relay service."
+)
+ELFO_PRESET_SOURCE = (
+    "Only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are "
+    "published (SpaceOps 2023, paper 339). Elements, phases, phasing, antenna mask and ranges are unsourced."
+)
+
 LRO_PRESET = RelayOrbitPreset(
     key="lro",
-    name="LRO-like Polar Orbiter (50 km)",
+    name="Hypothetical LRO-like polar orbiter (50 km circular, not a relay service)",
     a_km=LUNAR_RADIUS_KM + 50.0,
     e=0.0,
     i_deg=90.0,
@@ -79,11 +117,12 @@ LRO_PRESET = RelayOrbitPreset(
     max_range_km=1200.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.271,
+    source=LRO_PRESET_SOURCE,
 )
 
 ELFO_PATHFINDER_PRESET = RelayOrbitPreset(
     key="elfo_pathfinder",
-    name="ELFO Single Relay (Lunar Pathfinder)",
+    name="Hypothetical ELFO single relay (Lunar Pathfinder-like; elements unsourced)",
     a_km=5740.0,
     e=0.58,
     i_deg=57.8,
@@ -93,11 +132,12 @@ ELFO_PATHFINDER_PRESET = RelayOrbitPreset(
     max_range_km=12000.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.25,
+    source=ELFO_PRESET_SOURCE,
 )
 
 ELFO_CONSTELLATION_PRESET = RelayOrbitPreset(
     key="elfo_constellation",
-    name="ELFO 3-Sat Phased Constellation (LunaNet South Pole)",
+    name="Hypothetical ELFO 3-satellite phased constellation (not an announced system)",
     a_km=5740.0,
     e=0.58,
     i_deg=57.8,
@@ -107,6 +147,7 @@ ELFO_CONSTELLATION_PRESET = RelayOrbitPreset(
     max_range_km=12000.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.25,
+    source=ELFO_PRESET_SOURCE,
 )
 
 RELAY_PRESETS: dict[str, RelayOrbitPreset] = {
@@ -114,6 +155,25 @@ RELAY_PRESETS: dict[str, RelayOrbitPreset] = {
     "elfo_pathfinder": ELFO_PATHFINDER_PRESET,
     "elfo_constellation": ELFO_CONSTELLATION_PRESET,
 }
+
+#: Provenance notes copied into ``provenance.limitations`` of the dataset.
+RELAY_PRESET_LIMITATIONS: tuple[str, ...] = (
+    "Relay presets are hypothetical geometry scenarios. 'lro' reuses LRO's 2009-2011 50 km circular "
+    "polar mapping-orbit geometry (Slojkowski, 24th ISSFD 2014) with an arbitrary initial phase; LRO "
+    "is not a relay service and its 2026 orbit differs. The ELFO elements (a=5740 km, e=0.58, "
+    "i=57.8 deg, omega=90 deg), phases, 3-satellite phasing, 5 deg mask and ranges are unsourced; "
+    "only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar "
+    "Pathfinder are published (SpaceOps 2023, paper 339). LunaNet is a framework, "
+    "not this constellation.",
+    "Communications are line-of-sight only (terrain horizon, 0 deg DTE mask vs 5 deg relay mask, "
+    "range limit, lunar occultation); no link budget, ground-station visibility or interference. "
+    "Visibility is sampled hourly: outages shorter than one hour are not resolved, and the hourly "
+    "lro_visible series aliases the ~1.9 h LRO-like period (lro_duty_cycle_pct at site centers uses "
+    "a 5-minute grid).",
+    "With the hypothetical ELFO constellation enabled, combined_dte_elfo_duty_cycle_pct can saturate "
+    "at 100 % for every site, which floors the illustrative comms score at 65/100 regardless of the "
+    "site; compare with DTE-only values.",
+)
 
 
 def interpolate_horizon_elev(
