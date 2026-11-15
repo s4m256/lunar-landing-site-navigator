@@ -59,3 +59,25 @@ describe('AppLoader: estados de carregamento e erro', () => {
     expect(screen.queryByRole('heading', { name: /Resumo do instante/ })).not.toBeInTheDocument();
   });
 });
+
+describe('CA-8: integridade do JSON publicado', () => {
+  it('o SHA-256 mostrado pela página é o do arquivo de checksum gravado ao lado do JSON servido', async () => {
+    const { bundledDatasetSha256 } = await import('./datasetLoader');
+    const checksum = (await import('./data/south_pole_precomputed.v1.json.sha256?raw')).default;
+    expect(bundledDatasetSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(checksum).toBe(`${bundledDatasetSha256}  south_pole_precomputed.v1.json\n`);
+  });
+
+  it('o painel de origem mostra o link para baixar o JSON e o SHA-256 publicado; o arquivo tem kernels, hashes e o rótulo Horizons honesto', async () => {
+    const { bundledDatasetSha256 } = await import('./datasetLoader');
+    render(<AppLoader loadDataset={() => Promise.resolve(clone())} />);
+    const link = await screen.findByRole('link', { name: 'Baixar o arquivo de dados usado nesta página (JSON)' });
+    expect(link).toHaveAttribute('download');
+    const panel = screen.getByRole('region', { name: 'Origem e limitações dos dados' });
+    expect(panel).toHaveTextContent(`publicado para esse arquivo: ${bundledDatasetSha256}`);
+    const data = clone() as { provenance: { ephemeris: { kernels: Array<{ sha256: string }> }; horizons_validation: { status: string } } };
+    expect(data.provenance.ephemeris.kernels.length).toBeGreaterThan(0);
+    expect(data.provenance.ephemeris.kernels.every((k) => /^[0-9a-f]{64}$/.test(k.sha256))).toBe(true);
+    expect(data.provenance.horizons_validation.status).toBe('unverified_no_raw_response');
+  });
+});

@@ -1,5 +1,13 @@
 # SPA-13 — Checklist de submissão (QA/Deploy)
 
+> **Atualização da integração SPA-12 (`feat/spa-12-integration`).** Este checklist registra a rodada de QA
+> sobre a `main` (seção 6 em diante: números daquela rodada). Na integração: D2 resolvido no contrato 1.1.0
+> (distância desconhecida = `null`), D3 resolvido no código pela SPA-10 (o xfail virou teste normal), D1
+> continua como xfail estrito; F1 (rótulos) e F7 (fórmulas duplicadas) foram tratados no frontend; F5 em parte
+> (o marcador de 5200 m saiu, as 721 h de D1 continuam); o orçamento de JS caiu para 1 MiB porque o dataset
+> deixou de ir no bundle. Resultados
+> atuais dos comandos e o mapa dos critérios de aceite: [`docs/integration.md`](../integration.md).
+
 NASA Space Apps Challenge 2026, desafio "Lunar Landing Site Navigator". Estado avaliado: `main` em
 `23cc0c7` mais a branch `chore/spa-13-qa-submission`, que só altera testes, CI e esta pasta (a
 aplicação publicada é a mesma da `main`). Revisão de 15/11/2026.

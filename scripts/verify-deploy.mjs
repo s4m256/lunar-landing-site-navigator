@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +12,28 @@ const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 // initial JavaScript is ~0.37 MB. 1 MiB leaves headroom and still fails if the dataset is inlined
 // into the bundle again; raise it deliberately, not by accident.
 export const DEFAULT_MAX_JS_BYTES = 1024 * 1024;
+
+// The precomputed dataset is published as a hashed static asset and fetched by the page
+// (docs/integration.md). Its bytes must be exactly the committed copy, whose SHA-256 is recorded
+// next to it in sha256sum format (SPA-7 CA-8).
+export const DATASET_CHECKSUM_FILE = 'frontend/src/data/south_pole_precomputed.v1.json.sha256';
+const DATASET_ASSET = /^south_pole_precomputed\.v1-[\w-]+\.json$/;
+
+async function verifyDataset(root, output, jsAssets) {
+  const line = (await readFile(resolve(root, DATASET_CHECKSUM_FILE), 'utf8')).trim();
+  const expected = /^([0-9a-f]{64}) {2}south_pole_precomputed\.v1\.json$/.exec(line)?.[1];
+  assert(expected, `Invalid checksum line in ${DATASET_CHECKSUM_FILE}`);
+  const assetsDir = resolve(output, 'assets');
+  const names = (await readdir(assetsDir)).filter((name) => DATASET_ASSET.test(name));
+  assert.equal(names.length, 1, `Expected exactly one published dataset asset, found ${names.length}`);
+  const digest = createHash('sha256').update(await readFile(resolve(assetsDir, names[0]))).digest('hex');
+  assert.equal(digest, expected, `Published dataset SHA-256 ${digest} differs from ${DATASET_CHECKSUM_FILE} (${expected})`);
+  // The page must fetch (and offer for download) this exact file.
+  let referenced = false;
+  for (const js of jsAssets) referenced ||= (await readFile(js, 'utf8')).includes(`/assets/${names[0]}`);
+  assert(referenced, `No JavaScript loaded by index.html references assets/${names[0]}`);
+  return { name: names[0], sha256: digest };
+}
 
 function resolveJsBudget(value = process.env.DEPLOY_MAX_JS_BYTES) {
   if (value === undefined || value === '') return DEFAULT_MAX_JS_BYTES;
@@ -77,7 +100,8 @@ export async function verifyDeploy(root = repositoryRoot, { maxJsBytes = resolve
     jsBytes <= maxJsBytes,
     `JavaScript bundle budget exceeded: ${jsBytes} bytes > ${maxJsBytes} bytes (DEPLOY_MAX_JS_BYTES)`,
   );
-  return `Deploy checks passed: root npm workspace, ${config.outputDirectory}, ${scripts} JavaScript bundle(s), ${jsBytes} of ${maxJsBytes} budgeted bytes.`;
+  const dataset = await verifyDataset(root, output, countedJs);
+  return `Deploy checks passed: root npm workspace, ${config.outputDirectory}, ${scripts} JavaScript bundle(s), ${jsBytes} of ${maxJsBytes} budgeted bytes, dataset ${dataset.name} SHA-256 ${dataset.sha256}.`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

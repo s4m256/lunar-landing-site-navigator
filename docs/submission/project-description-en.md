@@ -5,7 +5,9 @@ científica SPA-9. Antes de colar no formulário:
 - resolver todo [CONFIRM ...] e [VERIFY ...]; não inventar o que faltar;
 - conferir os limites de caracteres de cada campo no formulário (não verificados aqui);
 - se a equipe submeter outra branch (ex.: PR #6), reescrever "What it does" e "How it works";
-- se o frontend corrigir os rótulos "verified"/"Skyfield" antes da submissão, remover as notas marcadas [IF UI UNCHANGED].
+- as notas [IF UI UNCHANGED] foram removidas na integração SPA-12: a interface já não mostra "verified" nem
+  "cross-checked with Skyfield" (dataset migrado para o contrato 1.1.0, ver docs/integration.md);
+- os números de testes da seção "What we checked" são da rodada de QA e precisam ser atualizados.
 Não usar: "validated against Horizons", "NASA-validated", "safest site", "recommended landing site".
 -->
 
@@ -77,8 +79,10 @@ Science pipeline (Python, `science/`), run once before deployment:
    Relay satellites follow two-body Kepler orbits with team-defined elements; a satellite counts as
    visible when it is 5° above the terrain horizon, within maximum range, and has a line of sight to the
    Earth that does not cross the Moon. Free-space path loss is reported as an indicator only.
-5. Landing Score (0–100): weighted sum of slope, power, communications and PSR-proximity sub-scores with
-   team-chosen weights (0.25 / 0.35 / 0.25 / 0.15) and thresholds.
+5. Illustrative landing index (0–100): weighted sum of slope, power, communications and PSR-proximity
+   sub-scores with team-chosen weights (0.25 / 0.35 / 0.25 / 0.15) and thresholds, none with a published
+   source (`contracts/landing-score-model.v1.json`, shared by Python and the web app). A slope above the
+   12° placeholder limit sets the index to 0.
 6. Outputs: one JSON dataset validated against a JSON Schema (`contracts/navigator-dataset.v1.schema.json`),
    CSV and Markdown summaries, and a file comparing Sun and Earth directions with JPL Horizons.
 
@@ -100,10 +104,9 @@ settings. No backend, no external requests.
 - JPL Horizons: the repository contains a comparison of Sun and Earth directions at one point on 16
   dates, with maximum separations of 1.3 × 10⁻⁵ degrees (Sun) and 3.6 × 10⁻⁵ degrees (Earth). The raw
   Horizons responses were not retained, no acceptance tolerance was defined, and we could not re-run the
-  query during review. We therefore do not claim validation against Horizons.
-  [IF UI UNCHANGED: The interface still labels this comparison "verified" and says the ephemeris was
-  "cross-checked with Skyfield"; both labels overstate the evidence. The Skyfield check exists only in a
-  test that did not run.]
+  query during review. We therefore do not claim validation against Horizons; the dataset labels this
+  comparison `unverified_no_raw_response`. An older label saying the ephemeris was "cross-checked with
+  Skyfield" was removed: that check never ran.
 - Not verified: the terrain inputs (the DEM file and its checksum could not be re-downloaded during
   review), browsers other than headless Chromium, and accessibility conformance.
 
@@ -119,8 +122,9 @@ settings. No backend, no external requests.
 4. PSR status uses our own geometric criterion, not an official PSR map. Its maximum-Sun envelope fixes
    the sub-solar latitude at 1.543° and is exceeded by up to 0.014° by the computed Sun elevations. The
    PSR flag and the PSR distance use slightly different criteria; the distance is quantized on a 500 m
-   lattice and capped at 5200 m (de Gerlache Rim 2 reports the cap, which means "no PSR found within
-   the search area").
+   lattice, and where the search found no PSR within 5200 m (de Gerlache Rim 2) the dataset has no
+   distance value and the index gives no proximity points. The engine code now uses a single criterion
+   with an ephemeris-derived envelope, but the published dataset has not been regenerated with it.
 5. Communications are geometric only: no ground-station schedule, pointing, link budget or data rate.
    The relay orbits are hypothetical scenarios: the "ELFO" elements are team-defined and the "LRO-like"
    50 km orbit is not LRO's real orbit (LRO is not a relay). With the 3-satellite constellation every
@@ -129,10 +133,9 @@ settings. No backend, no external requests.
 6. Power: fixed cell efficiency, no dust, temperature or degradation; battery = load × longest shadow,
    with no depth-of-discharge or thermal margin. Durations are counted in samples, so always-dark points
    report a 721 h shadow inside a 720 h window.
-7. The Landing Score weights and thresholds are our choices, without published justification,
-   sensitivity analysis or uncertainty. The 12° slope limit declared in the dataset only colors the
-   interface's slope badges; the score does not enforce it (a 12° slope still earns 23 of 100 slope
-   points). The score is an illustrative, adjustable index, not a NASA metric and not a landing
+7. The index weights and thresholds are our choices, without published justification, sensitivity
+   analysis or uncertainty. The 12° slope limit has no cited source either; above it the interface sets
+   a point's index to 0. The index is illustrative and adjustable, not a NASA metric and not a landing
    recommendation.
 8. No uncertainties are propagated or displayed.
 9. Reproducibility: regenerating the dataset requires downloading the DEM and SPICE kernels from NASA
@@ -156,10 +159,9 @@ Vitest and the Node.js test runner; GitHub Actions; static hosting on Vercel.
 
 ### Next steps
 
-Retain raw Horizons responses and test them against a stated tolerance; compute illumination over a
-full year or longer; use a single PSR criterion with an ephemeris-derived envelope; report "no PSR
-found" instead of a capped distance; show scores with and without the hypothetical relay; add
-sensitivity analysis and a hard slope limit; allow arbitrary coordinates.
+Regenerate the dataset with network access so the code fixes reach the data (raw Horizons responses
+tested against a stated tolerance, single PSR criterion, scores with and without the hypothetical relay);
+compute illumination over a full year or longer; add sensitivity analysis; allow arbitrary coordinates.
 
 ## NASA Data
 

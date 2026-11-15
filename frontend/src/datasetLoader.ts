@@ -1,4 +1,5 @@
 import datasetUrl from './data/south_pole_precomputed.v1.json?url';
+import datasetChecksumLine from './data/south_pole_precomputed.v1.json.sha256?raw';
 import { parseNavigatorDataset } from './contract';
 import { findAllIssues } from './navigator/integrity';
 import type { NavigatorDatasetV1 } from './navigator/types';
@@ -45,6 +46,12 @@ export const fetchBundledDataset: DatasetLoader = async (signal) => {
 
 /** URL of the exact file the page reads, for the "download" link in the provenance panel. */
 export const bundledDatasetUrl: string = datasetUrl;
+
+/**
+ * SHA-256 of that file, from the sha256sum line the producer writes next to it. `npm run
+ * check:deploy` checks that the published asset has these bytes (SPA-7 CA-8); the page only shows it.
+ */
+export const bundledDatasetSha256: string | null = /^([0-9a-f]{64}) {2}\S/.exec(datasetChecksumLine)?.[1] ?? null;
 
 /** Schema validation (Ajv) followed by the cross-array checks the schema cannot express. */
 export function validateDataset(raw: unknown): NavigatorDatasetV1 {

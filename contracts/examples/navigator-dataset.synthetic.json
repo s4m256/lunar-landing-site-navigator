@@ -54,7 +54,7 @@
    "max_earth_az_diff_deg": 0.0,
    "max_earth_el_diff_deg": 5e-07,
    "notes": [
-    "Status 'verified': acceptance requires a spherical separation <= 0.001 deg for every epoch and both targets; samples above it: Sun 0, Earth 0.",
+    "Status 'verified': 'verified' only if the spherical separation is <= 0.001 deg at every epoch for both targets; samples above it: Sun 0, Earth 0.",
     "Compared 5 epochs (6 h cadence, 2026-11-15T00:00:00Z -> 2026-11-16T00:00:00Z) at Synthetic A (pit nearby); max separation Sun 4.86e-07 deg, Earth 4.84e-07 deg.",
     "Tolerance rationale: Product-level acceptance threshold proposed in SPA-10, not an accuracy claim for either ephemeris: 0.001 deg (3.6 arcsec) is below 0.4% of the solar angular radius (~0.267 deg) and about 1/40 of one 80 m DEM pixel seen from the 120 km horizon range (~0.038 deg), so differences below it do not change the illumination or line-of-sight products.",
     "Raw Horizons responses with request parameters, retrieval time (2026-11-15T00:00:00Z, 2026-11-15T00:00:00Z) and SHA-256 are retained by write_navigator_outputs in outputs/validation/horizons_raw/.",

@@ -532,8 +532,8 @@ def horizons_provenance_from_report(report: dict[str, Any]) -> dict[str, Any]:
         "max_earth_el_diff_deg": _r(report["max_earth_el_diff_deg"]),
         "notes": [
             (
-                f"Status '{status}': acceptance requires a spherical separation <= {report['tolerance_deg']:g} deg "
-                f"for every epoch and both targets; samples above it: Sun {exceeding['sun']}, Earth {exceeding['earth']}."
+                f"Status '{status}': 'verified' only if the spherical separation is <= {report['tolerance_deg']:g} deg "
+                f"at every epoch for both targets; samples above it: Sun {exceeding['sun']}, Earth {exceeding['earth']}."
             ),
             (
                 f"Compared {report['sample_count']} epochs ({grid.get('step_size', '?')} cadence, "

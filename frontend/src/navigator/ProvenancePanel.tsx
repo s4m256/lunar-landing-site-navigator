@@ -7,6 +7,8 @@ interface ProvenancePanelProps {
   dataset: NavigatorDatasetV1;
   /** Link to the exact file the page reads. */
   datasetUrl?: string;
+  /** Published SHA-256 of that file (CA-8), shown next to the link. */
+  datasetSha256?: string | null;
 }
 
 /**
@@ -48,7 +50,7 @@ function skyfieldLabelRemoved(dataset: NavigatorDatasetV1): boolean {
  * Always-visible provenance and limitations. Text under "O que o arquivo declara" is echoed
  * from the file and marked as such; this page makes no validation claim of its own.
  */
-export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datasetUrl }) => {
+export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datasetUrl, datasetSha256 }) => {
   const { provenance, mission_window: mw, relay_presets: relays } = dataset;
   const hv = provenance.horizons_validation;
   const last = mw.timestamps_utc.length - 1;
@@ -112,9 +114,9 @@ export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datas
         {skyfieldLabelRemoved(dataset) && (
           <li>
             <strong>Sem conferência com o Skyfield</strong>
-            {isAuditedFile ? ' (auditoria)' : ''}. A versão 1.0.0 do arquivo dizia que as posições foram conferidas com
-            o Skyfield; essa conferência nunca rodou (só existe num teste pulado sem os arquivos de efemérides) e o
-            texto foi retirado na migração para a versão 1.1.0.
+            {isAuditedFile ? ' (auditoria)' : ''}. A versão 1.0.0 do arquivo dizia, sem evidência, que as posições foram
+            conferidas com o Skyfield: essa conferência nunca rodou (só existe num teste pulado sem os arquivos de
+            efemérides), e o texto foi retirado na migração para a versão 1.1.0.
           </li>
         )}
         <li>
@@ -180,6 +182,12 @@ export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datas
               Baixar o arquivo de dados usado nesta página (JSON)
             </a>
           )}
+          {datasetUrl && datasetSha256 && (
+            <>
+              . Código de integridade (SHA-256) publicado para esse arquivo: <code className="wrap">{datasetSha256}</code>; compare
+              com o do arquivo baixado (por exemplo, <code>sha256sum</code>).
+            </>
+          )}
         </dd>
 
         {migration && (
@@ -216,7 +224,7 @@ export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datas
 
         <dt>Comparação com o JPL Horizons, segundo o arquivo</dt>
         <dd>
-          Rótulo gravado: <code>{hv.status}</code>. {horizonsStatusText(hv)} Tolerância declarada:{' '}
+          Rótulo declarado pelo arquivo: <code>{hv.status}</code>. {horizonsStatusText(hv)} Tolerância declarada:{' '}
           {hv.tolerance_deg == null ? 'nenhuma' : `${formatNumber(hv.tolerance_deg, 4)}°`}; respostas brutas guardadas:{' '}
           {hv.raw_responses?.length ?? 0}. Diferenças máximas declaradas, não conferidas por esta página: Sol, direção{' '}
           {declared(hv.max_sun_az_diff_deg)} e elevação {declared(hv.max_sun_el_diff_deg)}; Terra, direção{' '}

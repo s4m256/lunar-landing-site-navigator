@@ -54,7 +54,7 @@ O nome do arquivo de schema guarda só a versão principal (`v1`); a versão exa
 
 ### Regras que o schema expressa (1.1.0)
 
-- `horizons_validation.status` ∈ {`verified`, `failed`, `skipped_network_unavailable`, `not_requested`, `unverified_no_raw_response`}.
+- `horizons_validation.status` só aceita `verified`, `failed`, `skipped_network_unavailable`, `not_requested` e `unverified_no_raw_response`.
 - `is_psr = true` ⇒ `psr_distance_m = 0` (centro e nós).
 - `score.eliminated` e `score.elimination_reasons` aparecem juntos; `eliminated = true` ⇒ `total_0_100 = 0`, `safety_slope_0_100 = 0`, `total_without_relay_0_100 = 0` e ao menos um motivo (`slope_above_clps_limit`); `eliminated = false` ⇒ lista vazia.
 - `psr_distance_m`, `tolerance_deg`, `sample_count` e a latitude subsolar aceitam `null`; nenhum outro número aceita.
@@ -82,7 +82,7 @@ Pela política de evolução deste repositório ("mudanças incompatíveis exige
 O dataset commitado foi convertido por `science/tools/migrate_dataset_1_0_to_1_1.py`, sem recalcular números:
 
 - 26 valores `psr_distance_m = 5200.0` (todos em `de_gerlache_rim_2`) viraram `null`. O valor não pode ser distância real na grade de busca da 1.0.0 (a distância real mais próxima fica a 3,8 m dele; teste por enumeração).
-- `verified` virou `unverified_no_raw_response`, com `tolerance_deg: null` e `raw_responses: []`; as notas originais foram mantidas como declaração não reproduzida.
+- O rótulo `verified`, sem suporte, virou `unverified_no_raw_response`, com `tolerance_deg: null` e `raw_responses: []`; as notas originais foram mantidas como declaração não reproduzida.
 - Rótulos trocados pelos do produtor atual (motor sem "cross-checked with Skyfield", nomes de relays "Hypothetical", descrições de sítios corrigidas na SPA-10) e metadados conhecidos acrescentados (`hypothetical`, `source`, `coordinates_source`, `slope_baseline_m` = 2 × 80 m, `psr_search_radius_m` = 5200 m, `psr_lattice_step_m` = 500 m, `score_is_illustrative`, `seasonal_coverage` com 30 dias e `covers_seasonal_cycle: false`, `eliminated: false` nos 10 centros, cujas declividades vão até 4,02°, e limitações).
 - **Ficaram de fora**, porque exigiriam recomputação: `total_without_relay_0_100` (as entradas publicadas são arredondadas e não fixam a segunda casa), a faixa de latitude subsolar (`null`; a 1.0.0 não a registrou), `psr_subsolar_lat_extreme_deg` e `psr_solar_radius_deg` (a 1.0.0 usava dois critérios PSR diferentes) e `sample_count`.
 - Os scores gravados continuam os da regra 1.0.0 (`provenance.migration.stored_scores_rule = "1.0.0"`): em `de_gerlache_rim_2` o termo de ciência vale 19,2 e, nos 24 nós acima de 12°, o índice não foi zerado. A interface recalcula com a regra 1.1.0.

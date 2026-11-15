@@ -9,13 +9,13 @@ Solução completa em **duas camadas** para o desafio **NASA Space Apps Challeng
 
 Os números do dataset commitado em `outputs/` e `frontend/src/data/` foram gerados pelo código **anterior** à tarefa SPA-10 e não foram regenerados (o DEM e os kernels NAIF não estão acessíveis nos ambientes de agentes). Na SPA-12 o arquivo foi convertido para o contrato 1.1.0 por uma migração **estrutural e reversível** (`science/tools/migrate_dataset_1_0_to_1_1.py`): rótulos e metadados mudaram (por exemplo `verified` → `unverified_no_raw_response`, sem "cross-checked with Skyfield", sentinela de 5200 m → `null`), nenhum número foi recalculado. Detalhes em [`contracts/README.md`](contracts/README.md#arquivos-migrados-da-100). O texto abaixo prevalece sobre o que o dataset diz de si mesmo.
 
-**Verificado (com o que e onde):**
+**Reproduzido de forma independente (com o quê e onde; não é validação científica):**
 
 - Direções aparentes de Sol e Terra em `MOON_ME` (`sky_series` dos 10 sítios e colunas `spice_*` de `outputs/validation/horizons_cross_validation.json`): reproduzidas sem SPICE a partir do DE421 distribuído no PyPI, dentro do arredondamento gravado (0,0005° e 1e-5°). Teste `science/tests/test_ephemeris_regression.py`, que roda na CI. Isso confere implementação e convenções (referencial, escalas de tempo, aberração, projeção ENU); não confere o DE421 contra a realidade nem contra o JPL Horizons.
 - Resumos solar, de comunicação e de score dos 10 sítios e 250 nós: recalculados pela auditoria SPA-9 ([`docs/audit/scientific-audit-main.md`](docs/audit/scientific-audit-main.md), feita sobre a versão 1.0.0 do arquivo em `main` 23cc0c7) com diferenças só de arredondamento, dadas as entradas derivadas do DEM.
 - SHA-256 fixados de `moon_080317.tf`, `moon_assoc_me.tf` e `moon_pa_de421_1900-2050.bpc`: iguais aos das cópias do pacote PyPI `lunarsky==1.0.1.post2`.
 
-**Não verificado:**
+**Sem conferência independente:**
 
 - **Comparação com o JPL Horizons.** O `horizons_cross_validation.json` commitado não retém a resposta bruta (URL, parâmetros, cabeçalho, data da consulta), e o rótulo `verified` da versão 1.0.0 era atribuído sem nenhuma tolerância. Não foi reproduzido de forma independente (host bloqueado). O dataset 1.1.0 o rotula `unverified_no_raw_response`. O código atual retém a resposta bruta em `outputs/validation/horizons_raw/` e só usa `verified` dentro de uma tolerância declarada (0,001° por padrão; caso contrário `failed`, com os números).
 - **Conferência com o Skyfield.** Nunca rodou: o único teste que a faz é pulado sem kernels, inclusive na CI. A string `cross-checked with Skyfield` da versão 1.0.0 vinha de um texto fixo do código antigo e foi retirada na migração.
@@ -67,21 +67,24 @@ npm run dev
 
 Sem argumentos, `.venv/bin/python -m lunar_science` preserva o JSON placeholder compatível com `contracts/science-status.schema.json` (status `not_implemented`, o único que esse contrato legado admite); ele não descreve o motor do navegador.
 
-## Validar e gerar artefatos
+## Testes, checagens e artefatos
 
 ```sh
 npm run typecheck
 npm test
 npm run build
-(cd science && ../.venv/bin/python -m pytest)
+npm run check:deploy      # artefatos publicáveis, orçamento de JS e SHA-256 do dataset publicado
+npm run test:infra        # testes do check:deploy e varredura de alegações sem qualificação (CA-9)
+(cd science && ../.venv/bin/python -m pytest -ra -o xfail_strict=true)
 .venv/bin/python -m build science
+.venv/bin/python science/tools/migrate_dataset_1_0_to_1_1.py --check   # dataset 1.1.0 reproduzível
 ```
 
 Frontend: `frontend/dist/`. Python: wheel e distribuição fonte em `science/dist/`. O build frontend também verifica tipos. Os testes validam renderização, contrato compartilhado, rejeição de payloads incompatíveis e saída real da CLI. CI usa instalação npm pelo lockfile. As dependências Python de ferramentas são fixadas em `science/pyproject.toml`; dependências transitivas ainda não possuem lockfile.
 
-## Contrato e próximos passos
+## Contrato, transporte e próximos passos
 
-Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks. Há dois contratos: `science-status.schema.json` (placeholder legado da CLI sem argumentos) e `navigator-dataset.v1.schema.json`, que já contém coordenadas, métricas e o score ilustrativo dos sítios candidatos. Os requisitos científicos desse dataset (fontes dos pesos e limiares, incerteza, janela temporal) ainda não foram definidos com a equipe. Para evoluir: definir entradas, fontes, unidades, proveniência e incerteza; versionar o contrato; atualizar produtor, consumidor e testes juntos. Mudanças propostas estão em `science/AUDIT_FOLLOWUPS.md`.
+Leia [o contrato de dados](contracts/README.md) antes de integrar as stacks e [a integração Python → frontend](docs/integration.md) para o transporte (artefato JSON estático conferido contra o schema nos dois lados, sem API), a regeneração dos artefatos e o mapa dos testes de aceite do MVP. Há dois contratos de dados: `science-status.schema.json` (placeholder legado da CLI sem argumentos) e `navigator-dataset.v1.schema.json` (versão 1.1.0), que contém coordenadas, métricas e o índice ilustrativo dos sítios candidatos; os parâmetros do índice ficam em `contracts/landing-score-model.v1.json`, lido pelo Python e pelo TypeScript. Os requisitos científicos desse dataset (fontes dos pesos e limiares, incerteza, janela temporal) ainda não foram definidos com a equipe. Para evoluir: definir entradas, fontes, unidades, proveniência e incerteza; versionar o contrato; atualizar produtor, consumidor e testes juntos. Pendências da auditoria: `science/AUDIT_FOLLOWUPS.md`.
 
 ## Deploy e integração contínua
 

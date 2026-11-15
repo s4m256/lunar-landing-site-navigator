@@ -16,6 +16,8 @@ export interface AppProps {
   dataset: NavigatorDatasetV1;
   /** Link to the exact file the page reads, shown in the provenance panel. */
   datasetUrl?: string;
+  /** Published SHA-256 of that file, shown next to the link. */
+  datasetSha256?: string | null;
 }
 
 function prefersReducedMotion(): boolean {
@@ -25,7 +27,7 @@ function prefersReducedMotion(): boolean {
 /** Animation step in ms: user-started only, and slower when the system asks for reduced motion. */
 export const ANIMATION_STEP_MS = { normal: 120, reduced: 1000 } as const;
 
-export function App({ dataset, datasetUrl }: AppProps) {
+export function App({ dataset, datasetUrl, datasetSha256 }: AppProps) {
   const timestamps = dataset.mission_window.timestamps_utc;
   const maxEpoch = timestamps.length - 1;
 
@@ -266,7 +268,7 @@ export function App({ dataset, datasetUrl }: AppProps) {
           onChangeConfig={setConfig}
         />
 
-        <ProvenancePanel dataset={dataset} datasetUrl={datasetUrl} />
+        <ProvenancePanel dataset={dataset} datasetUrl={datasetUrl} datasetSha256={datasetSha256} />
       </main>
     </div>
   );

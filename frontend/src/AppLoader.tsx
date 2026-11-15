@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DatasetValidationError } from './contract';
 import {
+  bundledDatasetSha256,
   bundledDatasetUrl,
   DatasetIntegrityError,
   DatasetLoader,
@@ -167,7 +168,7 @@ export function AppLoader({ loadDataset = fetchBundledDataset }: AppLoaderProps)
   return (
     <RenderErrorBoundary>
       <React.Suspense fallback={<LoadingScreen message="Preparando a interface…" />}>
-        <App dataset={state.dataset} datasetUrl={bundledDatasetUrl} />
+        <App dataset={state.dataset} datasetUrl={bundledDatasetUrl} datasetSha256={bundledDatasetSha256} />
       </React.Suspense>
     </RenderErrorBoundary>
   );

@@ -1,5 +1,7 @@
 # SPA-10 — Correções da auditoria científica: pendências e propostas
 
+> **Situação após a integração SPA-12 (branch `feat/spa-12-integration`).** A seção 2 foi aplicada como contrato `navigator-dataset` 1.1.0 e o dataset commitado foi migrado sem recalcular números (`science/tools/migrate_dataset_1_0_to_1_1.py`; detalhes e o que ficou de fora em [`contracts/README.md`](../contracts/README.md#arquivos-migrados-da-100)). `status` ganhou o valor `unverified_no_raw_response` para a comparação herdada. A seção 3 foi aplicada no frontend: fórmulas lidas de `contracts/landing-score-model.v1.json` (fonte única para Python e TypeScript), declividade eliminatória, distância PSR desconhecida sem crédito, rótulos e score sem relay; o teste de paridade sugerido está em `contracts/examples/landing-score-parity-cases.json`. Continuam pendentes: a regeneração com rede (seção 1), a declividade máxima/percentil na área de pouso e os itens da seção 5. O texto abaixo é o registro original da SPA-10.
+
 Proposta para revisão de Samuel Santiago (responsável pela SPA-10), na branch local `fix/spa-10-science-audit-corrections`. Base: auditoria SPA-9 (`docs/audit/scientific-audit-main.md`, branch `docs/spa-9-scientific-audit`, commit `0006025`).
 
 Ambiente desta rodada: `ssd.jpl.nasa.gov`, `naif.jpl.nasa.gov`, `pds-geosciences.wustl.edu` e `ntrs.nasa.gov` bloqueados (HTTP 403 no proxy). Nenhum dataset, relatório ou número em `outputs/` ou `frontend/src/data/` foi regenerado ou editado. `contracts/*.schema.json`, `frontend/` e a CI não foram alterados.
