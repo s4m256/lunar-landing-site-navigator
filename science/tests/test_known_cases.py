@@ -409,6 +409,49 @@ def test_continuous_durations_do_not_exceed_window(dataset: dict, window_hours: 
     assert not offenders, offenders[:5]
 
 
+# Value returned by pipeline._distance_to_psr_patch_m when the coarse search patch holds no PSR point.
+PSR_DISTANCE_FALLBACK_M = 5200.0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "ACHADO SPA-13 (confirma auditoria SPA-9 §6.2): sem PSR na busca grosseira, "
+        "pipeline._distance_to_psr_patch_m devolve o teto de 5200 m, publicado como distância medida e usado "
+        "no score (de_gerlache_rim_2: centro e os 25 nós). Corrigir exige publicar null/flag (mudança de "
+        "contrato) e regenerar o dataset."
+    ),
+)
+def test_psr_distance_is_never_the_search_fallback(dataset: dict) -> None:
+    offenders = []
+    for site in _sites(dataset):
+        points = [("center", site["center"])]
+        points += [(f"node[{n['row']},{n['col']}]", n) for n in site["local_grid"]["nodes"]]
+        offenders += [(site["id"], name) for name, p in points if p["psr_distance_m"] == PSR_DISTANCE_FALLBACK_M]
+    assert not offenders, offenders[:5]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "ACHADO SPA-13 (confirma auditoria SPA-9 §6.2): max_solar_elevation_curve, documentada como limite "
+        "superior em 18,6 anos e usada em is_site_psr e na máscara PSR local, fixa a latitude subsolar em "
+        "-1,543 deg; as elevações do Sol publicadas a excedem em até ~0,014 deg nos 10 sítios (~130 de 721 "
+        "amostras, início da janela). Derivar a envoltória da efeméride e regenerar o dataset."
+    ),
+)
+def test_solar_envelope_upper_bounds_published_sun_elevations(dataset: dict) -> None:
+    offenders = []
+    for site in _sites(dataset):
+        sky = site["sky_series"]
+        envelope = max_solar_elevation_curve(site["center"]["latitude_deg"], np.asarray(sky["sun_az_deg"]))
+        excess = float(np.max(np.asarray(sky["sun_el_deg"]) - envelope))
+        # Published elevations are rounded to 1e-3 deg (error <= 5e-4 deg); the observed excess is ~1.4e-2 deg.
+        if excess > 1e-3:
+            offenders.append((site["id"], round(excess, 4)))
+    assert not offenders, offenders
+
+
 def test_csv_report_matches_dataset_and_is_ranked_by_score(dataset: dict) -> None:
     with REPORT_CSV_PATH.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
