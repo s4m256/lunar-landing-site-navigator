@@ -3,18 +3,40 @@ import {
   LandingSiteEntry,
   LocalGridNode,
   MissionWindow,
+  NavigatorDatasetV1,
   ScoreSummary,
   ScoreWeightsConfig,
 } from './types';
 
 export const SOLAR_CONSTANT_1AU_W_M2 = 1361.0;
 
+/**
+ * science/.../pipeline.py `_distance_to_psr_patch_m` writes this value when its search found no
+ * permanently shadowed point around the site (search radius 5200 m, 500 m lattice). It is a
+ * marker for "not found", not a measured distance (scientific audit SPA-9, section 6.2).
+ */
+export const PSR_NOT_FOUND_MARKER_M = 5200;
+
+/** True when the file's PSR distances for a site are all the "not found" marker. */
+export function psrSearchFoundNothing(site: LandingSiteEntry): boolean {
+  const isMarker = (isPsr: boolean, d: number) => !isPsr && d === PSR_NOT_FOUND_MARKER_M;
+  return (
+    isMarker(site.center.is_psr, site.center.psr_distance_m) &&
+    site.local_grid.nodes.every((n) => isMarker(n.is_psr, n.psr_distance_m))
+  );
+}
+
+/**
+ * Same defaults as the data generator (science/.../scoring.py, solar.py, comms.py). They have
+ * no cited source (audit SPA-9, sections 4.2 and 6.4): examples, not recommendations.
+ */
 export const DEFAULT_CONFIG: EngineeringConfig = {
   panelAreaM2: 4.0,
   panelEfficiency: 0.28,
   panelMode: 'tracking',
   survivalLoadW: 100.0,
   antennaMaskDeg: 5.0,
+  elfoMaxRangeKm: 12000,
   dteMarginMode: 'full_disk',
   relayEnabled: true,
   weights: {
@@ -24,6 +46,21 @@ export const DEFAULT_CONFIG: EngineeringConfig = {
     science_psr: 0.15,
   },
 };
+
+/**
+ * Initial settings of the page. Relays are a hypothetical scenario, so they start excluded and
+ * the user opts in. The antenna mask and range come from the file's relay preset because the
+ * stored constellation visibility was computed with them and cannot be recomputed here.
+ */
+export function initialConfig(dataset: NavigatorDatasetV1): EngineeringConfig {
+  const preset = dataset.relay_presets.elfo_pathfinder;
+  return {
+    ...DEFAULT_CONFIG,
+    relayEnabled: false,
+    antennaMaskDeg: preset.antenna_mask_deg,
+    elfoMaxRangeKm: preset.max_range_km,
+  };
+}
 
 export interface InterpolatedTerrain {
   dxM: number;
@@ -45,9 +82,26 @@ export interface LiveEpochState {
   horizonAtEarthDeg: number;
   dteVisible: boolean;
   elfoPrimaryVisible: boolean;
-  elfoConstellationVisible: boolean;
-  lroVisible: boolean;
-  combinedLinkVisible: boolean;
+  /**
+   * The file stores constellation and LRO-like visibility only for the site centre, for its own
+   * antenna mask. Away from the centre the value does not exist, so it is null (never guessed).
+   */
+  elfoConstellationVisible: boolean | null;
+  lroVisible: boolean | null;
+  /** null when relays are included and their visibility does not exist at this point. */
+  combinedLinkVisible: boolean | null;
+}
+
+export type ScoreUnavailableReason = 'zero_weights' | 'relay_unknown_off_center';
+
+/** Composite index computed on the page. Parts that depend on missing data are null. */
+export interface LiveScore {
+  total_0_100: number | null;
+  safety_slope_0_100: number;
+  power_0_100: number;
+  comms_0_100: number | null;
+  science_psr_0_100: number;
+  unavailableReason: ScoreUnavailableReason | null;
 }
 
 export interface LiveSiteAnalysis {
@@ -63,15 +117,17 @@ export interface LiveSiteAnalysis {
   };
   comms: {
     dteDutyCyclePct: number;
-    elfoConstellationDutyCyclePct: number;
-    lroDutyCyclePct: number;
-    combinedDutyCyclePct: number;
-    relayCoverageGainPct: number;
+    elfoConstellationDutyCyclePct: number | null;
+    lroDutyCyclePct: number | null;
+    combinedDutyCyclePct: number | null;
+    relayCoverageGainPct: number | null;
     maxBlackoutDteHours: number;
-    maxBlackoutCombinedHours: number;
+    maxBlackoutCombinedHours: number | null;
   };
-  score: ScoreSummary;
+  score: LiveScore;
   epochStates: LiveEpochState[];
+  /** True when the analysed point is the site centre (values straight from the file series). */
+  isCenter: boolean;
 }
 
 function clamp(val: number, low: number, high: number): number {
@@ -276,8 +332,8 @@ export function evaluateLiveSite(
 
   let dteCount = 0;
   let elfoCount = 0;
-  let lroCount = 0;
   let combinedCount = 0;
+  let combinedKnown = true;
   const dteFlags = new Array<boolean>(n);
   const combFlags = new Array<boolean>(n);
 
@@ -332,31 +388,25 @@ export function evaluateLiveSite(
     );
     const elfoPrimaryVisible =
       sky.elfo_primary_earth_los[i] &&
-      sky.elfo_primary_range_km[i] <= 12000 &&
+      sky.elfo_primary_range_km[i] <= config.elfoMaxRangeKm &&
       sky.elfo_primary_el_deg[i] > hElfoPrim + config.antennaMaskDeg;
 
-    // For center/grid, scale precomputed 3-sat visibility while respecting mask delta when >5 deg
-    const centerHorizPrim = interpolateHorizon(
-      sky.elfo_primary_az_deg[i],
-      horizonAzDeg,
-      site.horizon_elev_deg,
-    );
-    const terrainDelta = hElfoPrim - centerHorizPrim + (config.antennaMaskDeg - 5.0);
-    const elfoConstellationVisible =
-      sky.elfo_constellation_visible[i] &&
-      (elfoPrimaryVisible || terrainDelta <= 2.5);
-
-    const lroVisible = sky.lro_visible[i];
-    const combinedVisible = config.relayEnabled
-      ? dteVisible || elfoConstellationVisible
-      : dteVisible;
+    // Only the file's own centre series exist; no visibility is inferred for other points.
+    const elfoConstellationVisible = isExactCenter ? sky.elfo_constellation_visible[i] : null;
+    const lroVisible = isExactCenter ? sky.lro_visible[i] : null;
+    let combinedVisible: boolean | null = dteVisible;
+    if (config.relayEnabled) {
+      combinedVisible = dteVisible ? true : elfoConstellationVisible;
+    }
 
     dteFlags[i] = dteVisible;
-    combFlags[i] = combinedVisible;
     if (dteVisible) dteCount++;
     if (elfoConstellationVisible) elfoCount++;
-    if (lroVisible) lroCount++;
-    if (combinedVisible) combinedCount++;
+    if (combinedVisible === null) combinedKnown = false;
+    else {
+      combFlags[i] = combinedVisible;
+      if (combinedVisible) combinedCount++;
+    }
 
     epochStates[i] = {
       fIllum,
@@ -379,26 +429,38 @@ export function evaluateLiveSite(
   const minBatteryWh = config.survivalLoadW * maxContinuousShadowHours;
 
   const dteDutyCyclePct = (dteCount / n) * 100;
-  const elfoConstellationDutyCyclePct = (elfoCount / n) * 100;
-  const combinedDutyCyclePct = (combinedCount / n) * 100;
-  const relayCoverageGainPct = config.relayEnabled ? combinedDutyCyclePct - dteDutyCyclePct : 0;
+  const elfoConstellationDutyCyclePct = isExactCenter ? (elfoCount / n) * 100 : null;
+  const combinedDutyCyclePct = combinedKnown ? (combinedCount / n) * 100 : null;
+  const relayCoverageGainPct =
+    !config.relayEnabled ? 0 : combinedDutyCyclePct === null ? null : combinedDutyCyclePct - dteDutyCyclePct;
 
-  // Use accurate 5-min precomputed LRO duty cycle at center or scaled near center
-  const lroDutyCyclePct = isExactCenter
-    ? site.engineering_summary.comms.lro_duty_cycle_pct
-    : (lroCount / n) * 100;
+  // The file's 5-min LRO-like duty cycle exists for the centre only.
+  const lroDutyCyclePct = isExactCenter ? site.engineering_summary.comms.lro_duty_cycle_pct : null;
 
-  const score = computeCompositeScore(
+  const parts = computeCompositeScore(
     terrain.slopeDeg,
     meanIllumFraction,
     maxContinuousShadowHours,
     dteDutyCyclePct,
-    combinedDutyCyclePct,
+    combinedDutyCyclePct ?? 0,
     terrain.psrDistanceM,
     terrain.isPsr,
     config.weights,
     config.relayEnabled,
   );
+  const w = config.weights;
+  const commsKnown = combinedDutyCyclePct !== null;
+  let unavailableReason: ScoreUnavailableReason | null = null;
+  if (w.safety + w.power + w.comms + w.science_psr <= 0) unavailableReason = 'zero_weights';
+  else if (!commsKnown && w.comms > 0) unavailableReason = 'relay_unknown_off_center';
+  const score: LiveScore = {
+    total_0_100: unavailableReason === null ? parts.total_0_100 : null,
+    safety_slope_0_100: parts.safety_slope_0_100,
+    power_0_100: parts.power_0_100,
+    comms_0_100: commsKnown ? parts.comms_0_100 : null,
+    science_psr_0_100: parts.science_psr_0_100,
+    unavailableReason,
+  };
 
   return {
     terrain,
@@ -418,9 +480,10 @@ export function evaluateLiveSite(
       combinedDutyCyclePct,
       relayCoverageGainPct,
       maxBlackoutDteHours: longestFalseRunHours(dteFlags, stepHours),
-      maxBlackoutCombinedHours: longestFalseRunHours(combFlags, stepHours),
+      maxBlackoutCombinedHours: combinedKnown ? longestFalseRunHours(combFlags, stepHours) : null,
     },
     score,
     epochStates,
+    isCenter: isExactCenter,
   };
 }

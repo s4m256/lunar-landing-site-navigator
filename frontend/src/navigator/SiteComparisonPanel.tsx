@@ -1,202 +1,305 @@
-import React, { useState } from 'react';
-import { LiveSiteAnalysis } from './math';
-import {
-  EngineeringConfig,
-  LandingSiteEntry,
-  NavigatorProvenance,
-  PanelMode,
-  RelayPresets,
-} from './types';
+import React from 'react';
+import { formatDeg, formatHours, formatNumber, formatPct } from './format';
+import { horizonState } from './horizonState';
+import { DEFAULT_CONFIG, LiveScore, LiveSiteAnalysis, PSR_NOT_FOUND_MARKER_M, psrSearchFoundNothing } from './math';
+import { EngineeringConfig, LandingSiteEntry, PanelMode, RelayPresets } from './types';
 
-interface RankedSiteRow {
+interface SiteRow {
   site: LandingSiteEntry;
+  /** Always evaluated at the site centre, the only point with every series in the file. */
   analysis: LiveSiteAnalysis;
 }
 
 interface SiteComparisonPanelProps {
-  rankedSites: RankedSiteRow[];
+  /** Every site, in file order, evaluated at its centre. */
+  rows: SiteRow[];
   selectedSiteId: string;
   config: EngineeringConfig;
-  provenance: NavigatorProvenance;
+  /** Slope value recorded in the file conventions (no cited source). */
+  slopeLimitDeg: number;
   relayPresets: RelayPresets;
+  windowLabel: string;
+  /** null when the requested instant has no sample. */
+  epochIdx: number | null;
+  utcLabel: string | null;
   onSelectSite: (siteId: string) => void;
   onChangeConfig: (next: EngineeringConfig) => void;
 }
 
-function slopeBadgeClass(slopeDeg: number, limitDeg: number): { cls: string; text: string } {
-  if (slopeDeg >= 15) return { cls: 'hazard-high', text: 'Risco (>15°)' };
-  if (slopeDeg >= limitDeg || slopeDeg >= 10) return { cls: 'hazard-warn', text: 'Alerta (10-15°)' };
-  return { cls: 'hazard-ok', text: 'CLPS OK' };
+function scoreText(score: LiveScore): string {
+  if (score.total_0_100 !== null) return `${formatNumber(score.total_0_100, 1)} de 100`;
+  return score.unavailableReason === 'zero_weights' ? 'sem índice (todos os pesos em zero)' : 'sem índice';
 }
 
+const PSR_SEARCH_KM = formatNumber(PSR_NOT_FOUND_MARKER_M / 1000, 1);
+
+function psrText(row: SiteRow): string {
+  if (row.analysis.terrain.isPsr) return 'dentro (marcado no arquivo)';
+  if (psrSearchFoundNothing(row.site)) return `nenhuma encontrada até ${PSR_SEARCH_KM} km`;
+  return `${formatNumber(row.analysis.terrain.psrDistanceM, 0)} m`;
+}
+
+const stateWord = (el: number, ref: number) => (horizonState(el, ref) === 'above' ? 'acima' : 'não está acima');
+
 export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
-  rankedSites,
+  rows,
   selectedSiteId,
   config,
-  provenance,
+  slopeLimitDeg,
   relayPresets,
+  windowLabel,
+  epochIdx,
+  utcLabel,
   onSelectSite,
   onChangeConfig,
 }) => {
-  const [showProvenance, setShowProvenance] = useState(false);
-
   const updateWeight = (key: keyof EngineeringConfig['weights'], value: number) => {
-    onChangeConfig({
-      ...config,
-      weights: { ...config.weights, [key]: value },
-    });
+    onChangeConfig({ ...config, weights: { ...config.weights, [key]: value } });
+  };
+  const ranked = [...rows].sort((a, b) => (b.analysis.score.total_0_100 ?? -1) - (a.analysis.score.total_0_100 ?? -1));
+  const selectedRow = rows.find((r) => r.site.id === selectedSiteId);
+  const constellation = relayPresets.elfo_constellation;
+  const weightsAreDefault = (Object.keys(DEFAULT_CONFIG.weights) as Array<keyof EngineeringConfig['weights']>).every(
+    (k) => config.weights[k] === DEFAULT_CONFIG.weights[k],
+  );
+
+  const siteButton = (site: LandingSiteEntry) => {
+    const selected = site.id === selectedSiteId;
+    return (
+      <>
+        <button type="button" className="link-btn" aria-pressed={selected} onClick={() => onSelectSite(site.id)}>
+          {site.name}
+        </button>
+        {selected && <span className="site-cat-sub">selecionado</span>}
+      </>
+    );
   };
 
   return (
     <div className="comparison-stack">
-      {/* Engineering Parameter Controls */}
-      <div className="panel controls-panel">
-        <div className="panel-head">
-          <div>
-            <span className="eyebrow">Parametrização em Tempo Real (&lt;10 ms)</span>
-            <h2>Arquitetura do Lander, Telecom & Pesos do Score</h2>
-          </div>
-        </div>
+      <section className="panel table-panel" aria-labelledby="comparacao-titulo">
+        <h2 id="comparacao-titulo">7. Comparar os locais</h2>
 
+        <h3 id="comparacao-instante">No instante exibido{utcLabel ? ` (${utcLabel})` : ''}</h3>
+        {epochIdx === null ? (
+          <p className="state-missing">Sem amostra para o instante pedido: nenhum valor é comparado.</p>
+        ) : (
+          <div className="table-scroll" tabIndex={0} role="region" aria-labelledby="comparacao-instante">
+            <table className="ranking-table">
+              <caption className="sr-only">
+                Sol e Terra no centro de cada local, no mesmo instante, na ordem do arquivo
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Local</th>
+                  <th scope="col">Sol: elevação do centro</th>
+                  <th scope="col">Sol x relevo</th>
+                  <th scope="col">Terra: elevação do centro</th>
+                  <th scope="col">Terra x relevo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const st = row.analysis.epochStates[epochIdx];
+                  const sunEl = row.site.sky_series.sun_el_deg[epochIdx];
+                  const earthEl = row.site.sky_series.earth_el_deg[epochIdx];
+                  return (
+                    <tr key={row.site.id} className={row.site.id === selectedSiteId ? 'row-selected' : ''}>
+                      <th scope="row">{siteButton(row.site)}</th>
+                      <td className="mono-cell">{formatDeg(sunEl)}</td>
+                      <td>{stateWord(sunEl, st.horizonAtSunDeg)}</td>
+                      <td className="mono-cell">{formatDeg(earthEl)}</td>
+                      <td>{stateWord(earthEl, st.horizonAtEarthDeg)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <h3 id="comparacao-periodo">No período inteiro do arquivo ({windowLabel})</h3>
+        <p className="field-help">
+          Valores no centro de cada local. O <strong>índice ilustrativo</strong> (0 a 100) soma declive, luz do Sol,
+          linha de visada e proximidade de sombra permanente com os pesos de “Opções avançadas”. Pesos e limites vêm do
+          gerador de dados e não têm fonte citada: serve para explorar escolhas, não para recomendar um local nem medir
+          segurança de pouso.
+        </p>
+        {selectedRow && (
+          <p className="score-hero-pill" role="status">
+            Índice ilustrativo de {selectedRow.site.name}: <strong>{scoreText(selectedRow.analysis.score)}</strong>{' '}
+            <span>
+              (partes: declive {formatNumber(selectedRow.analysis.score.safety_slope_0_100, 0)}, luz do Sol{' '}
+              {formatNumber(selectedRow.analysis.score.power_0_100, 0)}, linha de visada{' '}
+              {selectedRow.analysis.score.comms_0_100 === null ? 'sem dado' : formatNumber(selectedRow.analysis.score.comms_0_100, 0)},
+              sombra permanente {formatNumber(selectedRow.analysis.score.science_psr_0_100, 0)}
+              {config.relayEnabled ? '; inclui o cenário hipotético de retransmissores' : ''})
+            </span>
+          </p>
+        )}
+        <div className="table-scroll" tabIndex={0} role="region" aria-labelledby="comparacao-periodo">
+          <table className="ranking-table">
+            <caption className="sr-only">Locais ordenados pelo índice ilustrativo, valores no centro de cada local</caption>
+            <thead>
+              <tr>
+                <th scope="col">Ordem pelo índice</th>
+                <th scope="col">Local</th>
+                <th scope="col">Declive no centro</th>
+                <th scope="col">Distância até sombra permanente</th>
+                <th scope="col">Disco solar acima do relevo, em média</th>
+                <th scope="col">Maior intervalo com o disco solar todo abaixo do relevo</th>
+                <th scope="col">Tempo com visada direta para a Terra</th>
+                {config.relayEnabled && <th scope="col">Tempo com Terra ou constelação hipotética</th>}
+                <th scope="col">Índice ilustrativo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((row, idx) => {
+                const { site, analysis } = row;
+                const steep = analysis.terrain.slopeDeg > slopeLimitDeg;
+                return (
+                  <tr key={site.id} className={site.id === selectedSiteId ? 'row-selected' : ''}>
+                    <td>{analysis.score.total_0_100 === null ? '—' : idx + 1}</td>
+                    <th scope="row">{siteButton(site)}</th>
+                    <td>
+                      <span className={`hazard-pill ${steep ? 'hazard-warn' : ''}`}>
+                        {formatDeg(analysis.terrain.slopeDeg, 1)} ({steep ? 'acima de' : 'até'} {formatDeg(slopeLimitDeg, 0)})
+                      </span>
+                    </td>
+                    <td className="mono-cell">{psrText(row)}</td>
+                    <td className="mono-cell">{formatPct(analysis.solar.meanIllumFraction * 100)}</td>
+                    <td className="mono-cell">{formatHours(analysis.solar.maxContinuousShadowHours)}</td>
+                    <td className="mono-cell">{formatPct(analysis.comms.dteDutyCyclePct)}</td>
+                    {config.relayEnabled && <td className="mono-cell">{formatPct(analysis.comms.combinedDutyCyclePct)}</td>}
+                    <td className="mono-cell">
+                      <strong>{analysis.score.total_0_100 === null ? 'sem índice' : formatNumber(analysis.score.total_0_100, 1)}</strong>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <ul className="field-help notes-list">
+          <li>
+            {formatDeg(slopeLimitDeg, 0)} é o valor de referência de declive gravado no arquivo, sem fonte citada; não
+            entra no índice e não é critério de segurança. O declive do arquivo usa uma base de 160 m e pode ser maior na
+            escala de um módulo de pouso.
+          </li>
+          <li>
+            “Nenhuma encontrada até {PSR_SEARCH_KM} km”: o gerador grava {PSR_NOT_FOUND_MARKER_M} m quando sua busca não
+            encontra sombra permanente; esse marcador entra no índice como se fosse uma distância.
+          </li>
+          <li>
+            Luz do Sol e linha de visada se referem só ao período do arquivo ({windowLabel}); não representam outras
+            épocas do ano. Veja “Origem e limitações dos dados”.
+          </li>
+        </ul>
+      </section>
+
+      <section className="panel controls-panel" aria-labelledby="avancadas-titulo">
+        <h2 id="avancadas-titulo">Opções avançadas</h2>
+        <p className="field-help">
+          Estes ajustes mudam as estimativas de energia, a linha de visada e o índice ilustrativo. Os valores iniciais
+          são os do gerador de dados, sem fonte citada: exemplos, não recomendações.
+        </p>
         <div className="controls-grid">
           <div className="control-card">
-            <h3>Painel Solar & Bateria</h3>
+            <h3>Painel solar e bateria</h3>
             <label>
-              Configuração do Painel
-              <select
-                value={config.panelMode}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, panelMode: e.target.value as PanelMode })
-                }
-              >
-                <option value="tracking">Vertical c/ Rastreamento Azimutal</option>
-                <option value="fixed_north">Fixo Vertical (Face Norte)</option>
-                <option value="fixed_horiz">Fixo Horizontal (Topo Lander)</option>
+              Posição do painel
+              <select value={config.panelMode} onChange={(e) => onChangeConfig({ ...config, panelMode: e.target.value as PanelMode })}>
+                <option value="tracking">Vertical, girando para acompanhar o Sol</option>
+                <option value="fixed_north">Vertical fixo, voltado para o norte</option>
+                <option value="fixed_horiz">Horizontal fixo, no topo do módulo</option>
               </select>
             </label>
             <label>
-              Área do Painel: <strong>{config.panelAreaM2.toFixed(1)} m²</strong>
+              Área do painel: <strong>{formatNumber(config.panelAreaM2, 1)} m²</strong>
               <input
                 type="range"
                 min={1}
                 max={20}
                 step={0.5}
                 value={config.panelAreaM2}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, panelAreaM2: Number(e.target.value) })
-                }
+                onChange={(e) => onChangeConfig({ ...config, panelAreaM2: Number(e.target.value) })}
               />
             </label>
             <label>
-              Eficiência Célula (η): <strong>{(config.panelEfficiency * 100).toFixed(0)}%</strong>
+              Eficiência do painel: <strong>{formatNumber(config.panelEfficiency * 100, 0)}%</strong>
               <input
                 type="range"
                 min={0.18}
                 max={0.36}
                 step={0.01}
                 value={config.panelEfficiency}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, panelEfficiency: Number(e.target.value) })
-                }
+                onChange={(e) => onChangeConfig({ ...config, panelEfficiency: Number(e.target.value) })}
               />
             </label>
             <label>
-              Carga Sobrevivência (Aviônica+Aquec.): <strong>{config.survivalLoadW} W</strong>
+              Consumo mínimo durante a sombra: <strong>{config.survivalLoadW} W</strong>
               <input
                 type="range"
                 min={40}
                 max={300}
                 step={10}
                 value={config.survivalLoadW}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, survivalLoadW: Number(e.target.value) })
-                }
+                onChange={(e) => onChangeConfig({ ...config, survivalLoadW: Number(e.target.value) })}
               />
             </label>
           </div>
 
           <div className="control-card">
-            <h3>Enlace DTE & Constelação ELFO</h3>
+            <h3>Linha de visada</h3>
+            <label>
+              Quando a Terra conta como visível
+              <select
+                value={config.dteMarginMode}
+                onChange={(e) => onChangeConfig({ ...config, dteMarginMode: e.target.value as 'full_disk' | 'center' })}
+              >
+                <option value="full_disk">Disco inteiro da Terra acima do relevo</option>
+                <option value="center">Centro da Terra acima do relevo</option>
+              </select>
+            </label>
             <label className="toggle-row">
               <input
                 type="checkbox"
                 checked={config.relayEnabled}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, relayEnabled: e.target.checked })
-                }
+                onChange={(e) => onChangeConfig({ ...config, relayEnabled: e.target.checked })}
               />
-              <span>Ativar Rede Satélites Relay (ELFO LunaNet)</span>
-            </label>
-            <label>
-              Critério DTE
-              <select
-                value={config.dteMarginMode}
-                onChange={(e) =>
-                  onChangeConfig({
-                    ...config,
-                    dteMarginMode: e.target.value as 'full_disk' | 'center',
-                  })
-                }
-              >
-                <option value="full_disk">Disco Terrestre Completo (δ⊕ ≈ 0.95°)</option>
-                <option value="center">Centro da Terra Acima do Relevo (0°)</option>
-              </select>
-            </label>
-            <label>
-              Máscara Mínima Antena (α_mask): <strong>{config.antennaMaskDeg.toFixed(0)}°</strong>
-              <input
-                type="range"
-                min={0}
-                max={15}
-                step={1}
-                value={config.antennaMaskDeg}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, antennaMaskDeg: Number(e.target.value) })
-                }
-              />
+              <span>Incluir o cenário hipotético de satélites retransmissores</span>
             </label>
             <div className="orbit-spec-note">
-              ELFO: a={relayPresets.elfo_constellation.a_km} km, e={relayPresets.elfo_constellation.e}, i={relayPresets.elfo_constellation.i_deg}° (apolúnio {relayPresets.elfo_constellation.apolune_alt_km.toFixed(0)} km, P={relayPresets.elfo_constellation.period_hours.toFixed(1)}h).
+              <p>
+                Cenário modelado no arquivo, <strong>não é uma constelação em operação</strong>. Nome no arquivo:{' '}
+                <q lang="en">{constellation.name}</q>; {constellation.satellites_count} satélites, semieixo maior{' '}
+                {formatNumber(constellation.a_km, 0)} km, excentricidade {formatNumber(constellation.e, 2)}, inclinação{' '}
+                {formatDeg(constellation.i_deg, 1)}, período {formatNumber(constellation.period_hours, 1)} h. As fases
+                iniciais dos satélites são arbitrárias.
+              </p>
+              <p>
+                Altura mínima acima do relevo usada no arquivo: {formatDeg(config.antennaMaskDeg, 0)}. Ela não pode ser
+                alterada aqui porque a visibilidade da constelação foi gravada com esse valor.
+              </p>
             </div>
           </div>
 
           <div className="control-card">
-            <h3>Pesos do Landing Score (0–100)</h3>
+            <h3>Pesos do índice ilustrativo</h3>
             <label>
-              Segurança / Declive CLPS: <strong>{Math.round(config.weights.safety * 100)}%</strong>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={config.weights.safety}
-                onChange={(e) => updateWeight('safety', Number(e.target.value))}
-              />
+              Declive do terreno: <strong>{Math.round(config.weights.safety * 100)}%</strong>
+              <input type="range" min={0} max={1} step={0.05} value={config.weights.safety} onChange={(e) => updateWeight('safety', Number(e.target.value))} />
             </label>
             <label>
-              Geração Solar & Sombra: <strong>{Math.round(config.weights.power * 100)}%</strong>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={config.weights.power}
-                onChange={(e) => updateWeight('power', Number(e.target.value))}
-              />
+              Luz do Sol e sombra: <strong>{Math.round(config.weights.power * 100)}%</strong>
+              <input type="range" min={0} max={1} step={0.05} value={config.weights.power} onChange={(e) => updateWeight('power', Number(e.target.value))} />
             </label>
             <label>
-              Telecom DTE + Relay: <strong>{Math.round(config.weights.comms * 100)}%</strong>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={config.weights.comms}
-                onChange={(e) => updateWeight('comms', Number(e.target.value))}
-              />
+              Linha de visada: <strong>{Math.round(config.weights.comms * 100)}%</strong>
+              <input type="range" min={0} max={1} step={0.05} value={config.weights.comms} onChange={(e) => updateWeight('comms', Number(e.target.value))} />
             </label>
             <label>
-              Proximidade Ciência PSR: <strong>{Math.round(config.weights.science_psr * 100)}%</strong>
+              Proximidade de sombra permanente: <strong>{Math.round(config.weights.science_psr * 100)}%</strong>
               <input
                 type="range"
                 min={0}
@@ -206,151 +309,17 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
                 onChange={(e) => updateWeight('science_psr', Number(e.target.value))}
               />
             </label>
+            <button
+              type="button"
+              className="btn btn-small"
+              disabled={weightsAreDefault}
+              onClick={() => onChangeConfig({ ...config, weights: { ...DEFAULT_CONFIG.weights } })}
+            >
+              Restaurar pesos iniciais
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Ranked Candidate Comparison Table */}
-      <div className="panel table-panel">
-        <div className="panel-head">
-          <div>
-            <span className="eyebrow">Matriz Comparativa Multi-Critério</span>
-            <h2>Ranking dos Sítios Candidatos (Artemis III, Cristas & PSR)</h2>
-          </div>
-          <button
-            type="button"
-            className="pill-btn"
-            onClick={() => setShowProvenance((v) => !v)}
-          >
-            {showProvenance ? 'Ocultar Proveniência & Limitações' : 'Ver Proveniência NASA & JPL Horizons'}
-          </button>
-        </div>
-
-        <div className="table-scroll">
-          <table className="ranking-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Sítio de Pouso</th>
-                <th>Coord (Lat, Lon E)</th>
-                <th>Declive</th>
-                <th>Dist. PSR</th>
-                <th>Sol Médio</th>
-                <th>Sombra Máx</th>
-                <th>DTE (%)</th>
-                <th>Comb. (%)</th>
-                <th>Ganho Relay</th>
-                <th>Blackout Comb.</th>
-                <th>Landing Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rankedSites.map(({ site, analysis }, idx) => {
-                const selected = site.id === selectedSiteId;
-                const badge = slopeBadgeClass(
-                  analysis.terrain.slopeDeg,
-                  provenance.conventions.clps_slope_limit_deg,
-                );
-                return (
-                  <tr
-                    key={site.id}
-                    className={selected ? 'row-selected' : ''}
-                    onClick={() => onSelectSite(site.id)}
-                  >
-                    <td>{idx + 1}</td>
-                    <td>
-                      <strong>{site.name}</strong>
-                      <div className="site-cat-sub">{site.category}</div>
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.terrain.latitudeDeg.toFixed(2)}°,{' '}
-                      {analysis.terrain.longitudeEastDeg.toFixed(2)}°
-                    </td>
-                    <td>
-                      <span className={`hazard-pill ${badge.cls}`}>
-                        {analysis.terrain.slopeDeg.toFixed(1)}° ({badge.text})
-                      </span>
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.terrain.isPsr ? 'DENTRO (PSR)' : `${analysis.terrain.psrDistanceM.toFixed(0)} m`}
-                    </td>
-                    <td className="mono-cell">
-                      {(analysis.solar.meanIllumFraction * 100).toFixed(1)}%
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.solar.maxContinuousShadowHours.toFixed(1)} h
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.comms.dteDutyCyclePct.toFixed(1)}%
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.comms.combinedDutyCyclePct.toFixed(1)}%
-                    </td>
-                    <td className="mono-cell gain-cell">
-                      +{analysis.comms.relayCoverageGainPct.toFixed(1)}%
-                    </td>
-                    <td className="mono-cell">
-                      {analysis.comms.maxBlackoutCombinedHours.toFixed(1)} h
-                    </td>
-                    <td>
-                      <div className="score-cell">
-                        <strong>{analysis.score.total_0_100.toFixed(1)}</strong>
-                        <div className="score-bar-track">
-                          <div
-                            className="score-bar-fill"
-                            style={{ width: `${analysis.score.total_0_100}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {showProvenance && (
-          <div className="provenance-box">
-            <h3>Proveniência Científica, Verificação Horizons & Limitações</h3>
-            <div className="prov-cols">
-              <div>
-                <p>
-                  <strong>DEM:</strong> {provenance.dem_product.product_id} (
-                  {provenance.dem_product.resolution_m} m/px, raio R=
-                  {provenance.conventions.lunar_radius_m} m, geodésica 120 km). SHA-256:{' '}
-                  <code>{provenance.dem_product.sha256.slice(0, 16)}...</code>
-                </p>
-                <p>
-                  <strong>Efemérides:</strong> {provenance.ephemeris.engine} em{' '}
-                  <code>{provenance.ephemeris.frame}</code> ({provenance.ephemeris.correction}).
-                </p>
-                <p>
-                  <strong>Validação Cruzada JPL Horizons:</strong>{' '}
-                  <code>{provenance.horizons_validation.status}</code>
-                  {provenance.horizons_validation.max_sun_az_diff_deg != null && (
-                    <span>
-                      {' '}
-                      — Δmax Sol Az/El: {provenance.horizons_validation.max_sun_az_diff_deg}° /{' '}
-                      {provenance.horizons_validation.max_sun_el_diff_deg}°, Terra Az/El:{' '}
-                      {provenance.horizons_validation.max_earth_az_diff_deg}° /{' '}
-                      {provenance.horizons_validation.max_earth_el_diff_deg}°
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div>
-                <strong>Limitações declaradas:</strong>
-                <ul>
-                  {provenance.limitations.map((lim, i) => (
-                    <li key={i}>{lim}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   );
 };
