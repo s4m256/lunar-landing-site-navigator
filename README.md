@@ -1,5 +1,7 @@
 # Lunar Landing Site Navigator
 
+**Entrando na equipe?** Comece pelo [guia de entrada do Ari](docs/team/README.md): estado das branches, frentes playable e minimalista, limites científicos e plano de trabalho.
+
 Solução completa em **duas camadas** para o desafio **NASA Space Apps Challenge — Lunar Landing Sites**:
 
 1. **Motor Científico em Python (`science/src/lunar_science/navigator/`)**: pré-computa a partir de dados oficiais da NASA (DEM polar LRO/LOLA `ldem_80s_80m` + kernels SPICE `de421.bsp` / `moon_pa_de421_1900-2050.bpc` em `MOON_ME`, com validação cruzada contra Skyfield e API JPL Horizons) as declividades topográficas, curvas de horizonte geodésicas de 360° (`s_max = 120 km`), visibilidade direta DTE e via satélites relay (LRO e constelação ELFO/LunaNet), eclipse parcial solar (`f_illum`), dimensionamento de bateria e **Landing Score composto (0–100)**.
