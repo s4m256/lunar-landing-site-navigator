@@ -52,6 +52,18 @@ test('fails when the JavaScript bundle exceeds the size budget', async (t) => {
   assert.match(await verifyDeploy(root, { maxJsBytes: 1024 }), /of 1024 budgeted bytes/);
 });
 
+test('checks module preloads and counts them once towards the budget', async (t) => {
+  const html =
+    '<script type="module" src="/assets/app.js"></script>' +
+    '<link rel="modulepreload" href="/assets/vendor.js"><link rel="modulepreload" href="/assets/app.js">';
+  const root = await fixture(t, html);
+  await assert.rejects(verifyDeploy(root), /ENOENT/);
+  await writeFile(resolve(root, 'frontend/dist/assets/vendor.js'), 'x'.repeat(100));
+  const appBytes = Buffer.byteLength('console.log("fixture");');
+  assert.match(await verifyDeploy(root), new RegExp(`1 JavaScript bundle\\(s\\), ${appBytes + 100} of`));
+  await assert.rejects(verifyDeploy(root, { maxJsBytes: appBytes + 99 }), /bundle budget exceeded/);
+});
+
 test('fails when the lockfile no longer matches the root package', async (t) => {
   const root = await fixture(t);
   const lockPath = resolve(root, 'package-lock.json');

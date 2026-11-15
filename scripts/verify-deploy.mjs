@@ -45,13 +45,16 @@ export async function verifyDeploy(root = repositoryRoot, { maxJsBytes = resolve
 
   const output = await realpath(resolve(root, config.outputDirectory));
   const html = await readFile(resolve(output, 'index.html'), 'utf8');
-  // Vite emits quoted src/href attributes. Inspect scripts and stylesheet links only.
+  // Vite emits quoted src/href attributes. Inspect scripts, module preloads and stylesheet links.
+  // Module preloads are fetched on first load too, so they count towards the JavaScript budget.
   const tags = html.match(/<(?:script|link)\b[^>]*>/gi) ?? [];
   let scripts = 0;
   let jsBytes = 0;
+  const countedJs = new Set();
   for (const tag of tags) {
     const script = /^<script\b/i.test(tag);
-    if (!script && !/\brel=["']stylesheet["']/i.test(tag)) continue;
+    const preload = !script && /\brel=["']modulepreload["']/i.test(tag);
+    if (!script && !preload && !/\brel=["']stylesheet["']/i.test(tag)) continue;
     const url = tag.match(/\b(?:src|href)=["']([^"']+)["']/i)?.[1];
     if (!url) continue;
     assert(!/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url), `Expected a local build asset: ${url}`);
@@ -62,8 +65,9 @@ export async function verifyDeploy(root = repositoryRoot, { maxJsBytes = resolve
     assert(rel && !rel.startsWith('..') && !isAbsolute(rel), `Asset escapes output directory: ${url}`);
     const info = await stat(asset);
     assert(info.isFile() && info.size > 0, `Empty or invalid asset: ${url}`);
-    if (script) {
-      scripts += 1;
+    if (script) scripts += 1;
+    if ((script || preload) && !countedJs.has(asset)) {
+      countedJs.add(asset);
       jsBytes += info.size;
     }
   }
