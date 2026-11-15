@@ -742,6 +742,15 @@ details > summary {
   gap: 1.1rem;
 }
 
+.pair-comparison {
+  margin-bottom: 1.2rem;
+}
+
+.pair-table th[scope='row'] {
+  text-align: left;
+  font-weight: 500;
+}
+
 .controls-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

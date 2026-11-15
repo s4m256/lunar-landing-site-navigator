@@ -2,6 +2,7 @@ import React from 'react';
 import { formatDeg, formatHours, formatNumber, formatPct } from './format';
 import { horizonState } from './horizonState';
 import { DEFAULT_CONFIG, LiveScore, LiveSiteAnalysis, psrSearchFoundNothing } from './math';
+import { PairComparison } from './PairComparison';
 import { EngineeringConfig, LandingSiteEntry, PanelMode, RelayPresets } from './types';
 
 interface SiteRow {
@@ -21,6 +22,11 @@ interface SiteComparisonPanelProps {
   psrSearchRadiusM?: number;
   relayPresets: RelayPresets;
   windowLabel: string;
+  /** File time axis and the period chosen in section 1 (used by the A × B comparison). */
+  timestamps: string[];
+  stepSeconds: number;
+  startIdx: number;
+  endIdx: number;
   /** null when the requested instant has no sample. */
   epochIdx: number | null;
   utcLabel: string | null;
@@ -64,6 +70,10 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
   psrSearchRadiusM,
   relayPresets,
   windowLabel,
+  timestamps,
+  stepSeconds,
+  startIdx,
+  endIdx,
   epochIdx,
   utcLabel,
   onSelectSite,
@@ -96,7 +106,19 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
       <section className="panel table-panel" aria-labelledby="comparacao-titulo">
         <h2 id="comparacao-titulo">7. Comparar os locais</h2>
 
-        <h3 id="comparacao-instante">No instante exibido{utcLabel ? ` (${utcLabel})` : ''}</h3>
+        <PairComparison
+          rows={rows}
+          initialSiteId={selectedSiteId}
+          timestamps={timestamps}
+          stepSeconds={stepSeconds}
+          startIdx={startIdx}
+          endIdx={endIdx}
+          epochIdx={epochIdx}
+          slopeLimitDeg={slopeLimitDeg}
+          psrSearchRadiusM={psrSearchRadiusM}
+        />
+
+        <h3 id="comparacao-instante">Todos os locais no instante exibido{utcLabel ? ` (${utcLabel})` : ''}</h3>
         {epochIdx === null ? (
           <p className="state-missing">Sem amostra para o instante pedido: nenhum valor é comparado.</p>
         ) : (
@@ -134,7 +156,7 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
           </div>
         )}
 
-        <h3 id="comparacao-periodo">No período inteiro do arquivo ({windowLabel})</h3>
+        <h3 id="comparacao-periodo">Todos os locais no período inteiro do arquivo ({windowLabel})</h3>
         <p className="field-help">
           Valores no centro de cada local. O <strong>índice ilustrativo</strong> (0 a 100) soma declive, luz do Sol,
           linha de visada e proximidade de sombra permanente com os pesos de “Opções avançadas”. Pesos e limites vêm do

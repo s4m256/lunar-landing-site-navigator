@@ -256,6 +256,10 @@ export function App({ dataset, datasetUrl }: AppProps) {
           psrSearchRadiusM={dataset.provenance.conventions.psr_search_radius_m}
           relayPresets={dataset.relay_presets}
           windowLabel={windowLabel}
+          timestamps={timestamps}
+          stepSeconds={dataset.mission_window.step_seconds}
+          startIdx={startIdx}
+          endIdx={endIdx}
           epochIdx={shownEpoch}
           utcLabel={utcLabel}
           onSelectSite={handleSelectSite}

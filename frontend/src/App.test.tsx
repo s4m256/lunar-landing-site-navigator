@@ -14,6 +14,8 @@ import {
   interpolateLocalGrid,
 } from './navigator/math';
 import { ANIMATION_STEP_MS, App } from './App';
+import { formatDeg } from './navigator/format';
+import { formatUtc, toInputValue } from './navigator/timeWindow';
 
 const dataset = parseNavigatorDataset(datasetJson);
 const renderApp = () => render(<App dataset={dataset} />);
@@ -161,6 +163,61 @@ describe('Interface: seleção, estados e rótulos honestos', () => {
     expect(screen.getByTestId('instant-summary')).toHaveTextContent(', 15/11/2026 04:00 UTC.');
   });
 
+  it('CA-2/CA-3: compara A e B lado a lado no mesmo instante, cada coluna com os próprios valores', () => {
+    const ts = dataset.mission_window.timestamps_utc;
+    // Pick, from the file itself, two sites and an instant where the Sun is above 0° at one and not at the other.
+    let pick: { a: number; b: number; i: number } | null = null;
+    for (let a = 0; a < dataset.sites.length && !pick; a++) {
+      for (let b = 0; b < dataset.sites.length && !pick; b++) {
+        if (a === b) continue;
+        const i = ts.findIndex(
+          (_t, k) => dataset.sites[a].sky_series.sun_el_deg[k] > 0 && dataset.sites[b].sky_series.sun_el_deg[k] <= 0,
+        );
+        if (i >= 0) pick = { a, b, i };
+      }
+    }
+    expect(pick).not.toBeNull();
+    const { a, b, i } = pick!;
+    const siteA = dataset.sites[a];
+    const siteB = dataset.sites[b];
+    renderApp();
+    fireEvent.change(screen.getByLabelText('Local A'), { target: { value: siteA.id } });
+    fireEvent.change(screen.getByLabelText('Local B'), { target: { value: siteB.id } });
+    setInstant(toInputValue(ts[i]));
+
+    const table = screen.getByRole('table', { name: new RegExp(`\\(A\\) e .*\\(B\\)\\. Instante: ${formatUtc(ts[i])}`) });
+    const rowCells = (name: RegExp) => within(within(table).getByRole('row', { name })).getAllByRole('cell');
+    const elevation = rowCells(/^Sol: elevação do centro/);
+    expect(elevation[0]).toHaveTextContent(formatDeg(siteA.sky_series.sun_el_deg[i]));
+    expect(elevation[1]).toHaveTextContent(formatDeg(siteB.sky_series.sun_el_deg[i]));
+    expect(elevation[0].textContent).not.toEqual(elevation[1].textContent);
+    const ideal = rowCells(/^Sol em relação ao horizonte idealizado/);
+    expect(ideal[0]).toHaveTextContent(/^Acima$/);
+    expect(ideal[1]).toHaveTextContent(/^Não está acima$/);
+    // Earth values also come from each site's own series at the same index.
+    const earth = rowCells(/^Terra: elevação do centro/);
+    expect(earth[0]).toHaveTextContent(formatDeg(siteA.sky_series.earth_el_deg[i]));
+    expect(earth[1]).toHaveTextContent(formatDeg(siteB.sky_series.earth_el_deg[i]));
+    expect(table).not.toHaveTextContent(/iluminad|em sombra|tem energia|sem comunicação/i);
+  });
+
+  it('CA-6 na comparação A × B: instante sem amostra não mostra valores do instante; o período continua', () => {
+    renderApp();
+    setInstant('2026-11-15T03:30');
+    const table = screen.getByRole('table', { name: /Instante: sem amostra para o instante pedido/ });
+    const instantCells = within(within(table).getByRole('row', { name: /^Sol: elevação do centro/ })).getAllByRole('cell');
+    expect(instantCells.map((c) => c.textContent)).toEqual(['sem amostra', 'sem amostra']);
+    expect(within(table).getByRole('row', { name: /^Terra em relação ao relevo/ })).not.toHaveTextContent('°');
+    const period = within(within(table).getByRole('row', { name: /^No período: tempo com visada direta/ })).getAllByRole('cell');
+    expect(period.every((c) => /%$/.test(c.textContent ?? ''))).toBe(true);
+  });
+
+  it('o período da comparação A × B é o escolhido na seção 1', () => {
+    renderApp();
+    fireEvent.change(screen.getByLabelText('Fim do período'), { target: { value: '2026-11-15T23:00' } });
+    expect(screen.getByRole('table', { name: /Período: 15\/11\/2026 00:00 UTC a 15\/11\/2026 23:00 UTC \(24 instantes\)/ })).toBeInTheDocument();
+  });
+
   it('rotula o índice como ilustrativo e o relay como hipotético; relay começa desligado', () => {
     renderApp();
     expect(screen.queryByText(/Landing Score/i)).not.toBeInTheDocument();
@@ -210,7 +267,7 @@ describe('Interface: seleção, estados e rótulos honestos', () => {
 
   it('mostra o marcador de "sombra permanente não encontrada" como texto, não como distância', () => {
     renderApp();
-    const period = screen.getByRole('region', { name: /No período inteiro do arquivo/ });
+    const period = screen.getByRole('region', { name: /no período inteiro do arquivo/i });
     const row = within(period).getByRole('row', { name: /de Gerlache Rim 2/ });
     expect(row).toHaveTextContent('nenhuma encontrada até 5,2 km');
     expect(row).not.toHaveTextContent('5200 m');
