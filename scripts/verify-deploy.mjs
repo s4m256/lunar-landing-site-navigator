@@ -6,8 +6,20 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
+// Budget for the sum of JavaScript referenced by index.html (uncompressed bytes).
+// The precomputed dataset (~1.4 MB) is inlined in the bundle, so the budget leaves
+// headroom above the current ~1.8 MB; raise it deliberately, not by accident.
+export const DEFAULT_MAX_JS_BYTES = 3 * 1024 * 1024;
+
+function resolveJsBudget(value = process.env.DEPLOY_MAX_JS_BYTES) {
+  if (value === undefined || value === '') return DEFAULT_MAX_JS_BYTES;
+  const budget = Number(value);
+  assert(Number.isInteger(budget) && budget > 0, `Invalid DEPLOY_MAX_JS_BYTES: ${value}`);
+  return budget;
+}
+
 // No Vercel credentials or network required: inspect the actual publishable output.
-export async function verifyDeploy(root = repositoryRoot) {
+export async function verifyDeploy(root = repositoryRoot, { maxJsBytes = resolveJsBudget() } = {}) {
   const config = await readJson(resolve(root, 'vercel.json'));
   const pkg = await readJson(resolve(root, 'package.json'));
   const lock = await readJson(resolve(root, 'package-lock.json'));
@@ -18,12 +30,25 @@ export async function verifyDeploy(root = repositoryRoot) {
   assert(pkg.workspaces.includes('frontend'), 'frontend must be an npm workspace');
   assert(lock.packages['frontend'], 'Root lockfile must include the frontend workspace');
   assert(pkg.scripts.build, 'Root build script is required');
+  // `npm ci` only proves the lockfile is in sync if the deploy really installs from it.
+  assert.equal(lock.lockfileVersion, 3, 'Root lockfile must be lockfileVersion 3');
+  assert.deepEqual(
+    lock.packages['']?.workspaces,
+    pkg.workspaces,
+    'Root lockfile workspaces must match package.json (run npm install and commit the lockfile)',
+  );
+  assert.equal(
+    lock.packages['']?.engines?.node,
+    pkg.engines?.node,
+    'Root lockfile engines.node must match package.json',
+  );
 
   const output = await realpath(resolve(root, config.outputDirectory));
   const html = await readFile(resolve(output, 'index.html'), 'utf8');
   // Vite emits quoted src/href attributes. Inspect scripts and stylesheet links only.
   const tags = html.match(/<(?:script|link)\b[^>]*>/gi) ?? [];
   let scripts = 0;
+  let jsBytes = 0;
   for (const tag of tags) {
     const script = /^<script\b/i.test(tag);
     if (!script && !/\brel=["']stylesheet["']/i.test(tag)) continue;
@@ -37,10 +62,17 @@ export async function verifyDeploy(root = repositoryRoot) {
     assert(rel && !rel.startsWith('..') && !isAbsolute(rel), `Asset escapes output directory: ${url}`);
     const info = await stat(asset);
     assert(info.isFile() && info.size > 0, `Empty or invalid asset: ${url}`);
-    if (script) scripts += 1;
+    if (script) {
+      scripts += 1;
+      jsBytes += info.size;
+    }
   }
   assert(scripts > 0, 'Built index.html must reference at least one local JavaScript bundle');
-  return `Deploy checks passed: root npm workspace, ${config.outputDirectory}, ${scripts} JavaScript bundle(s).`;
+  assert(
+    jsBytes <= maxJsBytes,
+    `JavaScript bundle budget exceeded: ${jsBytes} bytes > ${maxJsBytes} bytes (DEPLOY_MAX_JS_BYTES)`,
+  );
+  return `Deploy checks passed: root npm workspace, ${config.outputDirectory}, ${scripts} JavaScript bundle(s), ${jsBytes} of ${maxJsBytes} budgeted bytes.`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
