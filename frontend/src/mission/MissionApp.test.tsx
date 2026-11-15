@@ -63,7 +63,10 @@ vi.mock("./MissionArt", () => ({
   RocketIllustration: ({ phase }: { phase: string }) => (
     <div data-testid="rocket" data-phase={phase} />
   ),
-  PolarMissionMap: ({
+}));
+
+vi.mock("./globe/MissionGlobe", () => ({
+  MissionGlobe: ({
     sites,
     selectedSiteId,
     onSelect,

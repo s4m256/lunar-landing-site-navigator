@@ -2,14 +2,14 @@
 
 ## Escopo entregue
 
-A aplicação abre em uma cena de jogo: astronauta no cenário lunar, falas curtas digitadas e caixa de diálogo na parte inferior. A sequência é apresentação → viagem ilustrativa → conversa de chegada → mapa e análise → pouso ilustrativo → fala final. Conversas e animações podem ser puladas. São quatro observadores científicos hipotéticos e um bônus fora do disco do mapa, sem coordenadas científicas. O usuário não precisa descobrir o bônus para concluir.
+A aplicação abre em uma cena de jogo: astronauta no cenário lunar, falas curtas digitadas e diálogo monoespaçado sem caixa na parte inferior. A sequência é apresentação → viagem ilustrativa → conversa de chegada → mapa e análise → pouso ilustrativo → fala final. Conversas e animações podem ser puladas. São quatro observadores científicos hipotéticos e um bônus separado da superfície, sem coordenadas científicas. O usuário não precisa descobrir o bônus para concluir.
 
 Sol e Terra ficam simultaneamente nos cartões; selecionar um cartão muda o corte explicativo. A data muda o resultado para todos os pontos. O corte conserva a proporção entre os eixos e o sinal do ângulo; raios abaixo do horizonte são tracejados. Não existem interseções de montanhas calculadas nesta versão.
 
 ## Organização
 
 - `MissionApp.tsx`: etapas, decisões, seleção/data, foco, diálogo, download e erros. Viagens de 3,2 s, puláveis e omitidas com movimento reduzido. Abrir “Sobre a missão” pausa animação e contagem de tempo; fechar retoma o tempo restante.
-- `MissionArt.tsx` e `mission.css`: guia com a imagem existente Astronaut, de Poly (CC BY 2.0), nave em SVG e mapa polar esquemático de 80°S a 90°S, quatro botões por latitude/longitude e bônus separado da superfície. Polo no centro; longitude 0° acima e 90° à direita. Crateras ilustrativas.
+- `MissionArt.tsx` e `mission.css`: guia com a imagem existente Astronaut, de Poly (CC BY 2.0), nave em SVG e a versão antiga do mapa esquemático, preservada fora do fluxo principal. A seleção atual usa `globe/MissionGlobe.tsx`, que adapta câmera, coordenadas, marcadores e assets do commit 343d31f, com superfície global LROC e cap polar derivado do DEM LOLA. Ver [fonte e limitações](../frontend/src/mission/globe/README.md).
 - `GameScene.tsx`, `game-scene.css` e `game-shell.css`: cenário em tela cheia com ilustração existente do NASA 3D Resources, astronauta C e movimento ilustrativo da nave; não representam relevo medido do local.
 - `GameDialogue.tsx`, `TypewriterText.tsx` e `SpeechControl.tsx`: o mesmo botão completa a fala ou avança para a próxima; o controle de voz fica na opção recolhida “Voz”. Ver [voz e validação](guide-voice.md) e [crédito da imagem](assets/astronaut.md).
 - `HorizonDiagram.tsx`: corte no azimute selecionado. Origem no horizonte tangente; comprimentos e tamanhos não são distâncias físicas. A animação revela uma direção estática, sem interpolar data ou simular propagação da luz.
@@ -27,7 +27,7 @@ Em telas pequenas, selecionar um local revela o painel por rolagem imediata. Vol
 
 `npm run build:offline` incorpora JavaScript, CSS, ilustrações e dados em `Lunar-Missao.html`, junto de um LEIA-ME. A saída padrão fica no diretório temporário; um argumento escolhe outra pasta. Não depende de CDN ou fetch de recursos para a interface e os dados. As vozes vêm do navegador/dispositivo; algumas dependem de internet. A auditoria usa uma URL Blob, revogada no cleanup.
 
-O build regular Vite permanece disponível. Seu aviso de chunk acima de 500 kB inclui os dados científicos completos e a validação; não foi ocultado. Three.js permanece apenas na experiência anterior.
+O build regular Vite permanece disponível. Seu aviso de chunk acima de 500 kB inclui os dados científicos completos e a validação; não foi ocultado. Three.js é carregado na experiência principal para a seleção lunar; o globo renderiza sob demanda, sem animação orbital contínua.
 
 ## Revisão no navegador
 
@@ -51,8 +51,10 @@ Para a distribuição, sirva a pasta do HTML localmente e use `REVIEW_URL=http:/
 
 ## Validação
 
-TypeScript, 150 testes de frontend, 10 de infraestrutura e 62 de Python passaram; o pacote Python foi construído. Hashes da auditoria anterior preservados e dois lotes novos reproduzidos byte a byte. Isso não constitui validação física independente. Relatórios e capturas de navegador ficam fora do Git, na pasta indicada pelo runner.
+TypeScript, 155 testes de frontend, 10 de infraestrutura e 62 de Python passaram; o pacote Python foi construído. Hashes da auditoria anterior preservados e dois lotes novos reproduzidos byte a byte. Isso não constitui validação física independente. Relatórios e capturas de navegador ficam fora do Git, na pasta indicada pelo runner.
 
-O runner completo passou tanto no build Vite quanto no HTML autocontido (aproximadamente 1,05 MiB), neste último bloqueando requisições HTTP adicionais. Conferiu 24 elevações, 24 azimutes e 12 decisões contra os resultados científicos. Nenhum erro de página ou requisição falhou. Axe não apontou violações nos critérios selecionados para sete estados/visualizações, incluindo celular e diálogos; essa revisão automatizada não certifica conformidade integral ou substitui testes com pessoas.
+O runner completo passou tanto no build Vite quanto no HTML autocontido (aproximadamente 4,34 MiB), neste último bloqueando requisições HTTP adicionais. Conferiu 24 elevações, 24 azimutes e 12 decisões contra os resultados científicos. Nenhum erro de página ou requisição falhou. Axe não apontou violações nos critérios selecionados para sete estados/visualizações, incluindo celular e diálogos; essa revisão automatizada não certifica conformidade integral ou substitui testes com pessoas.
 
 A navegação direta `file://` é bloqueada pela política do Chromium gerenciado neste ambiente. Por isso, os mesmos bytes do HTML foram testados por HTTP local, sem recursos externos. A abertura por duplo clique não foi certificada aqui.
+
+A revisão específica `scripts/globe-browser-review.mjs` verifica WebGL real (SwiftShader no ambiente de teste), detalhe do relevo no framebuffer, enquadramento polar, vista global, alvos de toque, teclado e recuperação por lista após perda/ausência de WebGL. A fonte JetBrains Mono é local, com licença incorporada ao HTML; o diálogo não tem borda nem fundo próprio. A camada polar é sombreada por luz fixa, sem simulação solar. A consistência com o código reaproveitado não constitui validação independente da georreferência ou da transformação MOON_ME/IAU_MOON.

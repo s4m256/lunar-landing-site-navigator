@@ -16,6 +16,10 @@ await copyFile(
   path.join(directory, "Lunar-Missao.html"),
   path.join(directory, "Lunar-Jogo.html"),
 );
+await copyFile(
+  path.join(directory, "Lunar-Missao.html"),
+  path.join(directory, "Lunar-Lua-3D.html"),
+);
 console.log(
   `Link anterior atualizado para a cena de jogo: ${path.join(directory, "Escolher-astronauta.html")}`,
 );

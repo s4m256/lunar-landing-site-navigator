@@ -12,7 +12,11 @@ const browser = await chromium.launch({
   executablePath:
     process.env.CHROMIUM_EXECUTABLE || "/usr/lib/chromium/chromium",
   headless: true,
-  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  args: [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--enable-unsafe-swiftshader",
+  ],
 });
 const report = {
   audibleOutputVerified: false,

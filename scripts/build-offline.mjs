@@ -40,6 +40,7 @@ const bundle = await build({
     ".png": "dataurl",
     ".jpg": "dataurl",
     ".webp": "dataurl",
+    ".woff2": "dataurl",
   },
   plugins: [
     {
@@ -76,6 +77,10 @@ const style = bundle.outputFiles.find((file) =>
 )?.text;
 if (!script || !style)
   throw new Error("The standalone build must contain both JavaScript and CSS.");
+const fontLicense = await readFile(
+  path.join(root, "frontend/src/assets/fonts/OFL.txt"),
+  "utf8",
+);
 const html = `<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -84,6 +89,7 @@ const html = `<!doctype html>
 <style>${style.replace(/<\/style/gi, "<\\/style")}</style>
 </head><body><div id="root"></div>
 <noscript>Ative JavaScript no navegador para explorar a missão lunar.</noscript>
+<script type="text/plain" id="jetbrains-mono-license">${fontLicense.replace(/<\/script/gi, "<\\/script")}</script>
 <script>${script.replace(/<\/script/gi, "<\\/script")}</script>
 </body></html>`;
 await mkdir(directory, { recursive: true });

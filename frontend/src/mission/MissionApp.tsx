@@ -5,7 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { PolarMissionMap } from "./MissionArt";
+import { MissionGlobe } from "./globe/MissionGlobe";
 import { HorizonDiagram } from "./HorizonDiagram";
 import { GameDialogue } from "./GameDialogue";
 import { GameScene, CINEMATIC_DURATION_MS } from "./GameScene";
@@ -410,7 +410,7 @@ export function MissionApp() {
                   <p className="map-caption">
                     Selecione um dos quatro pontos para investigar.
                   </p>
-                  <PolarMissionMap
+                  <MissionGlobe
                     sites={MISSION_SITES}
                     selectedSiteId={selectedSiteId}
                     visitedSiteIds={visitedSiteIds}
@@ -649,6 +649,18 @@ export function MissionApp() {
                   </div>
                 </dl>
                 <p className="mission-asset-credit">
+                  Seleção na Lua: visualização reaproveitada da{" "}
+                  <a href="https://github.com/s4m256/lunar-landing-site-navigator/blob/343d31f/frontend/src/landing-guide/LunarViewport.tsx">
+                    visualização 3D do repositório
+                  </a>
+                  , com o mosaico LROC e a camada polar LOLA já incluídos nessa
+                  versão. O sombreamento mostra o relevo; não representa a
+                  iluminação da data escolhida nem calcula obstruções por
+                  relevo. O terreno é uma referência visual: a fonte usa MOON_ME
+                  e os cálculos usam IAU_MOON, sem transformação entre esses
+                  referenciais.
+                </p>
+                <p className="mission-asset-credit">
                   Cenário: ilustração de terreno lunar do acervo{" "}
                   <a href="https://github.com/nasa/NASA-3D-Resources/blob/11ebb4ee043715aefbba6aeec8a61746fad67fa7/Images%20and%20Textures/Moon%20-%20Lunar%20Terrain/Moon%20-%20Lunar%20Terrain.jpg">
                     NASA 3D Resources
@@ -668,6 +680,17 @@ export function MissionApp() {
                   exibição, disponível no{" "}
                   <a href="https://github.com/google/model-viewer/blob/9c6fea9ac579e618bf2932456d3308309017df00/packages/modelviewer.dev/assets/poster-astronaut.webp">
                     model-viewer
+                  </a>
+                  .
+                </p>
+                <p className="mission-asset-credit">
+                  Fonte do diálogo:{" "}
+                  <a href="https://github.com/JetBrains/JetBrainsMono/tree/v2.304">
+                    JetBrains Mono
+                  </a>
+                  , sob{" "}
+                  <a href="https://github.com/JetBrains/JetBrainsMono/blob/v2.304/OFL.txt">
+                    SIL Open Font License 1.1
                   </a>
                   .
                 </p>

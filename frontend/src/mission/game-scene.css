@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 .game-scene {
   position: relative;
   isolation: isolate;
@@ -50,8 +58,8 @@
   background: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.2),
-    transparent 42%,
-    rgba(0, 0, 0, 0.32)
+    transparent 35%,
+    rgba(0, 0, 0, 0.84)
   );
 }
 .game-scene-guide {
@@ -175,22 +183,17 @@
   }
 }
 
-/* Dialogue is part of the scene, with enough contrast over bright terrain. */
+/* Dialogue sits directly over the scene's lower gradient. */
 .game-dialogue {
-  box-sizing: border-box;
-  width: 100%;
-  padding: clamp(18px, 2.4vw, 28px) clamp(20px, 3vw, 36px);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  background: rgba(5, 8, 13, 0.9);
   color: #f7f8fa;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+  font-family: "JetBrains Mono", monospace;
+  text-shadow: 0 1px 4px #000;
 }
 .game-dialogue-speaker {
   margin-bottom: 10px;
-  color: #c6d1db;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  color: #d5dce3;
+  font-size: 13px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .game-dialogue-text {
@@ -202,31 +205,29 @@
 .game-dialogue-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   align-items: center;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px 20px;
+  margin-top: 12px;
 }
 .lunar-mission .game-dialogue-actions button {
   min-height: 44px;
-  padding: 10px 18px;
-  border: 1px solid #e7edf3;
-  border-radius: 2px;
-  background: #edf1f4;
-  color: #10151c;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  color: #f7f8fa;
   font: inherit;
   font-size: 14px;
-  font-weight: 700;
+  text-shadow: inherit;
   cursor: pointer;
 }
 .lunar-mission .game-dialogue-actions .game-dialogue-skip {
-  background: transparent;
-  color: #edf1f4;
-  border-color: #858f99;
+  color: #c6d1db;
 }
 .lunar-mission .game-dialogue-actions button:hover:not(:disabled) {
-  background: #cbd5df;
-  color: #10151c;
+  color: #fff;
+  border-bottom-width: 2px;
 }
 .lunar-mission .game-dialogue-actions button:focus-visible {
   outline: 3px solid #fff;
@@ -237,17 +238,11 @@
   cursor: default;
 }
 @media (max-width: 600px) {
-  .game-dialogue {
-    padding: 16px;
-  }
   .game-dialogue-text {
     font-size: 18px;
     line-height: 1.4;
   }
   .game-dialogue-actions {
-    margin-top: 14px;
-  }
-  .lunar-mission .game-dialogue-actions button {
-    padding-inline: 14px;
+    margin-top: 10px;
   }
 }

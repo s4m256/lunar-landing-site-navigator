@@ -1,0 +1,118 @@
+.mission-globe {
+  width: 100%;
+}
+.mission-globe-stage {
+  position: relative;
+  width: 100%;
+  height: clamp(320px, 50vw, 500px);
+  overflow: hidden;
+  background: #090d13;
+  touch-action: none;
+}
+.mission-globe-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mission-globe-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.mission-globe-pin span {
+  display: grid;
+  place-items: center;
+  margin: auto;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #111;
+  border-radius: 50%;
+  background: #ecd08b;
+  color: #111;
+  font-weight: 800;
+}
+.mission-globe-pin[aria-pressed="true"] span {
+  background: #fff;
+  outline: 3px solid #ecd08b;
+}
+.mission-globe-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+.mission-globe-controls button,
+.mission-globe-controls summary {
+  min-height: 44px;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  color: #edf1f8;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #8593a6;
+  font-size: 14px;
+}
+.mission-globe-controls summary {
+  display: flex;
+  align-items: center;
+}
+.mission-globe-list {
+  flex: 0 1 auto;
+}
+.mission-globe-list[open] {
+  flex-basis: 100%;
+  order: 2;
+}
+.mission-globe-list-items {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-block: 8px;
+}
+.mission-globe-controls .mission-globe-bonus {
+  min-width: 44px;
+  margin-left: auto;
+}
+.mission-globe-controls button[aria-pressed="true"] {
+  outline: 3px solid #ecd08b;
+}
+.mission-globe-pin:focus-visible,
+.mission-globe-controls button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.mission-globe-unavailable,
+.mission-globe-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  color: white;
+  background: #090d13;
+}
+.mission-globe[data-status="unavailable"] canvas {
+  visibility: hidden;
+}
+.mission-globe[data-status="unavailable"] .mission-globe-stage {
+  height: 160px;
+}
+.mission-globe-credit {
+  font-size: 0.8rem;
+}
+.mission-globe-hint {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #c6d1db;
+}
+.mission-globe-list > summary:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}

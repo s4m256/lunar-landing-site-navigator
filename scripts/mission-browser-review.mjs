@@ -22,7 +22,11 @@ const browser = await chromium.launch({
   executablePath:
     process.env.CHROMIUM_EXECUTABLE || "/usr/lib/chromium/chromium",
   headless: true,
-  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  args: [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--enable-unsafe-swiftshader",
+  ],
 });
 const report = {
   url,
@@ -122,8 +126,9 @@ try {
     .getByRole("button", { name: "Escolher um local", exact: true })
     .click();
   await page.getByRole("heading", { name: "Onde vamos pousar?" }).waitFor();
-  assert.equal(await page.locator(".mission-map-site").count(), 4);
-  assert.equal(await page.locator(".mission-map-bonus").count(), 1);
+  await page.locator('.mission-globe[data-status="ready"]').waitFor();
+  assert.equal(await page.locator(".mission-globe-pin").count(), 4);
+  assert.equal(await page.locator(".mission-globe-bonus").count(), 1);
   const dateSelect = page.getByLabel(/Data da observação/);
   for (const date of selected) {
     await dateSelect.selectOption(date.date);
@@ -195,7 +200,7 @@ try {
   await audit("bonus-dialog");
   await page.keyboard.press("Escape");
   assert.equal(
-    await page.locator(".mission-map-bonus").getAttribute("aria-label"),
+    await page.locator(".mission-globe-bonus").getAttribute("aria-label"),
     "Reabrir bônus educativo",
   );
 
@@ -223,7 +228,7 @@ try {
       );
     }
     const buttons = await page
-      .locator(".mission-map-site")
+      .locator(".mission-globe-pin")
       .evaluateAll((elements) =>
         elements.map((element) => {
           const box = element.getBoundingClientRect();

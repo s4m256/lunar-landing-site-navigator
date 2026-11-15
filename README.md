@@ -2,7 +2,7 @@
 
 Uma missão guiada para aprender por que **local e data** importam em um pouso lunar. Uma astronauta fictícia apresenta a iniciativa CLPS, que envolve entregas robóticas comerciais. O usuário escolhe entre quatro locais hipotéticos, compara as direções do Sol e da Terra e registra uma escolha. Um quinto alvo oferece um bônus educativo opcional.
 
-O início tem formato de diálogo de jogo: astronauta no cenário, caixa de fala com letras aparecendo e um botão que completa a frase ou avança. A imagem do astronauta é de Poly (CC BY 2.0); o terreno ilustrativo vem do NASA 3D Resources. Conversas curtas alternam com viagem e pouso animados de 3,2 segundos, puláveis. Movimento reduzido elimina as animações. É possível pular a conversa e ir direto ao mapa polar esquemático e ao corte do horizonte. A experiência principal dispensa WebGL, vídeos, câmera e servidor científico.
+O início tem formato de diálogo de jogo: astronauta no cenário, fala em fonte monoespaçada, sem caixa, com letras aparecendo e um botão que completa a frase ou avança. A imagem do astronauta é de Poly (CC BY 2.0); o terreno ilustrativo vem do NASA 3D Resources. Conversas curtas alternam com viagem e pouso animados de 3,2 segundos, puláveis. Movimento reduzido elimina as animações. É possível pular a conversa e ir direto ao globo lunar com seleção no polo sul e ao corte do horizonte. A seleção usa a base Three.js e os dados LROC/LOLA já presentes na branch feat/integrate-ai-studio-site. Uma lista de coordenadas permite continuar sem WebGL. A experiência dispensa vídeos, câmera e servidor científico.
 
 ## Abrir sem instalação
 
@@ -41,7 +41,7 @@ Os quatro observadores estão a −85° de latitude planetocêntrica, em longitu
 
 O objetivo exige os **centros** de Sol e Terra acima do horizonte tangente idealizado, usando os valores completos. Em março, B e C atendem; em abril, A; em setembro, D. Há mais de uma escolha possível, sem vencedor fixo. Mudar a data pode mudar o resultado.
 
-**Não calcula interseção com montanhas, sombras, energia produzida, disponibilidade de enlace ou segurança de pouso.** Crateras, nave e personagem são ilustrações. As três datas não permitem inferir janelas contínuas ou horários de nascer/pôr. Fontes, método, limitações e download dos dados completos estão em Sobre a missão.
+**Não calcula interseção com montanhas, sombras, energia produzida, disponibilidade de enlace ou segurança de pouso.** A textura global e o relevo polar são referências visuais LROC/LOLA; o sombreamento fixo não representa a posição atual do Sol. A geometria é esférica e não existe transformação entre o referencial MOON_ME do terreno e o IAU_MOON dos cálculos. Nave e personagem são ilustrativos. As três datas não permitem inferir janelas contínuas ou horários de nascer/pôr. Fontes, método, limitações e download dos dados completos estão em Sobre a missão.
 
 Os cálculos são reais e reproduzíveis, mas não foram validados independentemente contra Horizons. Kernels vieram de distribuições de terceiros com hashes conferidos; a completude atual do LSK não foi confirmada. Reprodução numérica não certifica precisão física. O projeto não pressupõe vínculo oficial com a NASA.
 
