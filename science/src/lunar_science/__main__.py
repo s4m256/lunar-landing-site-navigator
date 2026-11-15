@@ -21,8 +21,12 @@ def _default_cache_dir(repo_root: Path) -> Path:
 def main(argv: list[str] | None = None) -> None:
     args_list = list(sys.argv[1:] if argv is None else argv)
     if not args_list:
+        # Legacy science-status.schema.json placeholder (its only allowed status is
+        # "not_implemented"); it does not describe the navigator engine below.
         print(json.dumps(get_status(), ensure_ascii=False))
         return
+
+    from lunar_science.navigator.ephemeris import DEFAULT_HORIZONS_TOLERANCE_DEG
 
     parser = argparse.ArgumentParser(prog="lunar-science")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -37,22 +41,41 @@ def main(argv: list[str] | None = None) -> None:
     p_pre.add_argument("--repo-root", type=Path, default=None)
     p_pre.add_argument("--cache-dir", type=Path, default=None)
     p_pre.add_argument("--start-utc", default="2026-11-15T00:00:00Z")
-    p_pre.add_argument("--end-utc", default="2026-12-15T00:00:00Z")
+    p_pre.add_argument(
+        "--end-utc",
+        default="2026-12-15T00:00:00Z",
+        help="Default gives 30 days of southern summer only; use >= ~346.6 days for annual statistics.",
+    )
     p_pre.add_argument("--step-seconds", type=int, default=3600)
     p_pre.add_argument("--skip-horizons", action="store_true")
+    p_pre.add_argument("--horizons-tolerance-deg", type=float, default=DEFAULT_HORIZONS_TOLERANCE_DEG)
+    p_pre.add_argument("--horizons-step", default="2 d", help="Horizons STEP_SIZE, e.g. '2 d', '12 h'.")
     p_pre.add_argument("--allow-download", action="store_true")
 
     p_hor = sub.add_parser(
         "validate-horizons",
-        help="Cross-check SPICE MOON_ME topocentric Sun/Earth directions vs JPL Horizons API.",
+        help="Compare SPICE MOON_ME topocentric Sun/Earth directions with the JPL Horizons API.",
     )
     p_hor.add_argument("--cache-dir", type=Path, default=None)
-    p_hor.add_argument("--site-id", default="shackleton_connecting_ridge")
+    p_hor.add_argument("--site-id", default="shackleton_ridge")
     p_hor.add_argument("--lat-deg", type=float, default=-89.45)
     p_hor.add_argument("--lon-east-deg", type=float, default=222.5)
-    p_hor.add_argument("--elevation-m", type=float, default=1400.0)
+    p_hor.add_argument(
+        "--elevation-m",
+        type=float,
+        required=True,
+        help="Site elevation above the 1737.4 km sphere (take it from the DEM/dataset).",
+    )
     p_hor.add_argument("--start-utc", default="2026-11-15T00:00:00Z")
-    p_hor.add_argument("--stop-utc", default="2026-12-14T00:00:00Z")
+    p_hor.add_argument("--stop-utc", default="2026-12-15T00:00:00Z")
+    p_hor.add_argument("--step-size", default="2 d")
+    p_hor.add_argument("--tolerance-deg", type=float, default=DEFAULT_HORIZONS_TOLERANCE_DEG)
+    p_hor.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Write the report and the raw Horizons responses here instead of printing everything.",
+    )
 
     parsed = parser.parse_args(args_list)
     repo_root = getattr(parsed, "repo_root", None) or _default_repo_root()
@@ -78,6 +101,8 @@ def main(argv: list[str] | None = None) -> None:
             step_seconds=parsed.step_seconds,
             allow_download=parsed.allow_download,
             run_horizons_check=not parsed.skip_horizons,
+            horizons_tolerance_deg=parsed.horizons_tolerance_deg,
+            horizons_step_size=parsed.horizons_step,
         )
         paths = write_navigator_outputs(repo_root, dataset, horizons_report)
         print(
@@ -94,7 +119,10 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if parsed.command == "validate-horizons":
-        from lunar_science.navigator.ephemeris import validate_ephemeris_against_horizons
+        from lunar_science.navigator.ephemeris import (
+            validate_ephemeris_against_horizons,
+            write_horizons_validation_artifacts,
+        )
 
         report = validate_ephemeris_against_horizons(
             cache_dir=cache_dir,
@@ -105,8 +133,14 @@ def main(argv: list[str] | None = None) -> None:
             elevation_m=parsed.elevation_m,
             start_utc=parsed.start_utc,
             stop_utc=parsed.stop_utc,
+            step_size=parsed.step_size,
+            tolerance_deg=parsed.tolerance_deg,
         )
-        print(json.dumps(report, indent=2))
+        if parsed.output_dir is not None:
+            paths = write_horizons_validation_artifacts(parsed.output_dir, report)
+            print(json.dumps({"status": report["status"], "outputs": {k: str(v) for k, v in paths.items()}}, indent=2))
+        else:
+            print(json.dumps(report, indent=2))
         return
 
 
