@@ -1,7 +1,31 @@
 import React, { useId, useMemo, useRef, useState } from 'react';
 import { formatDeg, formatNumber } from './format';
-import { InterpolatedTerrain } from './math';
-import { LandingSiteEntry, LocalGridNode } from './types';
+import { InterpolatedTerrain, computeCompositeScore } from './math';
+import { EngineeringConfig, LandingSiteEntry, LocalGridNode } from './types';
+
+/** What the index layer needs from the page settings. */
+export type GridScoreSettings = Pick<EngineeringConfig, 'weights' | 'relayEnabled' | 'slopeLimitDeg'>;
+
+/**
+ * Illustrative index of one grid node, computed here with the shared formula (contract 1.1.0 rule)
+ * from the node summaries stored in the file; null when every weight is zero.
+ */
+export function nodeScore(node: LocalGridNode, settings: GridScoreSettings): number | null {
+  const w = settings.weights;
+  if (w.safety + w.power + w.comms + w.science_psr <= 0) return null;
+  return computeCompositeScore(
+    node.slope_deg,
+    node.mean_illum_fraction,
+    node.max_continuous_shadow_hours,
+    node.dte_full_disk_duty_cycle_pct,
+    node.combined_dte_elfo_duty_cycle_pct,
+    node.psr_distance_m,
+    node.is_psr,
+    w,
+    settings.relayEnabled,
+    settings.slopeLimitDeg,
+  ).total_0_100;
+}
 
 type HeatmapLayer = 'score' | 'slope' | 'illum' | 'comms';
 
@@ -10,6 +34,8 @@ interface SouthPoleGridMapProps {
   selectedSite: LandingSiteEntry;
   liveTerrain: InterpolatedTerrain;
   relayEnabled: boolean;
+  /** Weights, relay option and slope limit used for the index layer. */
+  scoreSettings: GridScoreSettings;
   offsetXNorm: number;
   offsetYNorm: number;
   onSelectSite: (siteId: string) => void;
@@ -27,7 +53,7 @@ function projectStereo(latDeg: number, lonEastDeg: number, scale = 11.5): { x: n
   };
 }
 
-function colorForValue(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean): string {
+function colorForValue(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean, settings: GridScoreSettings): string {
   if (layer === 'slope') {
     // Continuous ramp only; the number printed in each cell carries the value.
     const t = Math.max(0, Math.min(1, 1 - node.slope_deg / 20));
@@ -41,21 +67,24 @@ function colorForValue(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: b
     const pct = (relayEnabled ? node.combined_dte_elfo_duty_cycle_pct : node.dte_full_disk_duty_cycle_pct) / 100;
     return `rgba(${Math.round(22 + (1 - pct) * 80)}, ${Math.round(90 + pct * 130)}, ${Math.round(135 + pct * 115)}, 0.78)`;
   }
-  const s = node.landing_score_0_100 / 100;
+  const score = nodeScore(node, settings);
+  if (score === null) return 'rgba(60, 70, 85, 0.6)';
+  const s = score / 100;
   return `rgba(${Math.round(30 + (1 - s) * 170)}, ${Math.round(65 + s * 165)}, ${Math.round(80 + s * 110)}, 0.78)`;
 }
 
-function metricLabel(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean): string {
+function metricLabel(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean, settings: GridScoreSettings): string {
   if (layer === 'slope') return formatDeg(node.slope_deg, 1);
   if (layer === 'illum') return `${formatNumber(node.mean_illum_fraction * 100, 0)}%`;
   if (layer === 'comms') {
     const v = relayEnabled ? node.combined_dte_elfo_duty_cycle_pct : node.dte_full_disk_duty_cycle_pct;
     return `${formatNumber(v, 0)}%`;
   }
-  return formatNumber(node.landing_score_0_100, 0);
+  const score = nodeScore(node, settings);
+  return score === null ? '—' : formatNumber(score, 0);
 }
 
-function layerOptions(relayEnabled: boolean): Array<{ key: HeatmapLayer; label: string; description: string }> {
+function layerOptions(relayEnabled: boolean, slopeLimitDeg: number): Array<{ key: HeatmapLayer; label: string; description: string }> {
   return [
     { key: 'slope', label: 'Declive (°)', description: 'o declive do terreno em graus' },
     {
@@ -76,8 +105,8 @@ function layerOptions(relayEnabled: boolean): Array<{ key: HeatmapLayer; label: 
         },
     {
       key: 'score',
-      label: 'Índice ilustrativo do arquivo',
-      description: 'o índice ilustrativo gravado no arquivo (pesos iniciais, com o cenário hipotético de retransmissores)',
+      label: 'Índice ilustrativo (pesos atuais)',
+      description: `o índice ilustrativo calculado nesta página para cada ponto da grade, a partir dos resumos gravados no arquivo, com os pesos e a opção de retransmissores atuais; declive acima de ${formatDeg(slopeLimitDeg, 0)} dá índice 0`,
     },
   ];
 }
@@ -89,6 +118,7 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
   selectedSite,
   liveTerrain,
   relayEnabled,
+  scoreSettings,
   offsetXNorm,
   offsetYNorm,
   onSelectSite,
@@ -112,7 +142,7 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
   const gridSize = selectedSite.local_grid.grid_size;
   const spacingM = selectedSite.local_grid.spacing_m;
   const halfSpanM = ((gridSize - 1) / 2) * spacingM;
-  const layers = layerOptions(relayEnabled);
+  const layers = layerOptions(relayEnabled, scoreSettings.slopeLimitDeg);
   const activeLayer = layers.find((l) => l.key === layer) ?? layers[0];
 
   const updateOffsetFromPointer = (clientX: number, clientY: number) => {
@@ -259,13 +289,13 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
                     width={cellW - 2}
                     height={cellW - 2}
                     rx={4}
-                    fill={colorForValue(node, layer, relayEnabled)}
+                    fill={colorForValue(node, layer, relayEnabled, scoreSettings)}
                     stroke={node.is_psr ? '#ffffff' : '#3a536e'}
                     strokeWidth={node.is_psr ? 1.6 : 0.8}
                     strokeDasharray={node.is_psr ? '3 2' : undefined}
                   />
                   <text x={x + cellW / 2} y={y + cellW / 2 + 3.5} textAnchor="middle" className="grid-cell-text">
-                    {metricLabel(node, layer, relayEnabled)}
+                    {metricLabel(node, layer, relayEnabled, scoreSettings)}
                   </text>
                 </g>
               );
@@ -275,8 +305,11 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
             <circle cx={cursorX} cy={cursorY} r={7} fill="none" stroke="#ffffff" strokeWidth={1.8} />
           </svg>
           <p id={`${ids}-grade-desc`} className="map-caption">
-            Cada célula mostra {activeLayer.description}, como gravado no arquivo para aquele ponto; esses valores não
-            mudam com as opções avançadas. Borda tracejada: ponto marcado no arquivo como região permanentemente
+            Cada célula mostra {activeLayer.description}
+            {layer === 'score'
+              ? '; esse índice muda com as opções avançadas.'
+              : ', como gravado no arquivo para aquele ponto; esses valores não mudam com as opções avançadas.'}{' '}
+            Borda tracejada: ponto marcado no arquivo como região permanentemente
             sombreada. A cruz indica o ponto analisado: Δx {signed(liveTerrain.dxM)} m, Δy {signed(liveTerrain.dyM)} m
             do centro, altitude {formatNumber(liveTerrain.elevationM, 0)} m, declive {formatDeg(liveTerrain.slopeDeg, 1)}
             {liveTerrain.dxM === 0 && liveTerrain.dyM === 0 ? ' (centro do local).' : ' (valores interpolados nesta página).'}
@@ -319,7 +352,10 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
             <summary>Ver a grade em tabela</summary>
             <div className="table-scroll" tabIndex={0} role="region" aria-label="Tabela da grade local">
               <table className="ranking-table data-table">
-                <caption>Pontos da grade local de {selectedSite.name}, como gravados no arquivo.</caption>
+                <caption>
+                  Pontos da grade local de {selectedSite.name}, como gravados no arquivo; o índice ilustrativo é calculado
+                  nesta página com os pesos atuais.
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">Δx (m)</th>
@@ -328,7 +364,7 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
                     <th scope="col">Declive (°)</th>
                     <th scope="col">Disco solar acima do relevo, em média (%)</th>
                     <th scope="col">{layers[2].label}</th>
-                    <th scope="col">Índice ilustrativo do arquivo</th>
+                    <th scope="col">Índice ilustrativo (pesos atuais)</th>
                     <th scope="col">Sombra permanente</th>
                   </tr>
                 </thead>
@@ -338,10 +374,10 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
                       <td className="mono-cell">{signed(node.dx_m)}</td>
                       <td className="mono-cell">{signed(node.dy_m)}</td>
                       <td className="mono-cell">{formatNumber(node.elevation_m, 0)}</td>
-                      <td className="mono-cell">{metricLabel(node, 'slope', relayEnabled)}</td>
-                      <td className="mono-cell">{metricLabel(node, 'illum', relayEnabled)}</td>
-                      <td className="mono-cell">{metricLabel(node, 'comms', relayEnabled)}</td>
-                      <td className="mono-cell">{metricLabel(node, 'score', relayEnabled)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'slope', relayEnabled, scoreSettings)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'illum', relayEnabled, scoreSettings)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'comms', relayEnabled, scoreSettings)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'score', relayEnabled, scoreSettings)}</td>
                       <td>{node.is_psr ? 'sim' : 'não'}</td>
                     </tr>
                   ))}

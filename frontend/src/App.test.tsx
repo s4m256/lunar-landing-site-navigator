@@ -189,6 +189,25 @@ describe('Interface: seleção, estados e rótulos honestos', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/de 100/);
   });
 
+  it('declive acima do limite do arquivo zera o índice do ponto da grade (regra 1.1.0), sem usar o índice gravado', () => {
+    const limit = dataset.provenance.conventions.clps_slope_limit_deg;
+    const site = dataset.sites.find((s) => s.local_grid.nodes.some((n) => n.slope_deg > limit))!;
+    const steep = site.local_grid.nodes.find((n) => n.slope_deg > limit)!;
+    expect(steep.landing_score_0_100).toBeGreaterThan(0); // stored 1.0.0 value, not eliminated
+    renderApp();
+    fireEvent.change(screen.getByLabelText('Local'), { target: { value: site.id } });
+    const table = screen.getByRole('table', { name: /Pontos da grade local de/ });
+    const signedM = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(0)}`;
+    const row = within(table)
+      .getAllByRole('row')
+      .find((r) => {
+        const cells = within(r).queryAllByRole('cell');
+        return cells.length > 0 && cells[0].textContent === signedM(steep.dx_m) && cells[1].textContent === signedM(steep.dy_m);
+      })!;
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[6]).toHaveTextContent(/^0$/);
+  });
+
   it('mostra o marcador de "sombra permanente não encontrada" como texto, não como distância', () => {
     renderApp();
     const period = screen.getByRole('region', { name: /No período inteiro do arquivo/ });

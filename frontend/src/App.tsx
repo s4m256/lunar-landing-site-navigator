@@ -216,6 +216,7 @@ export function App({ dataset, datasetUrl }: AppProps) {
             selectedSite={selectedSite}
             liveTerrain={selectedAnalysis.terrain}
             relayEnabled={config.relayEnabled}
+            scoreSettings={config}
             offsetXNorm={offsetXNorm}
             offsetYNorm={offsetYNorm}
             onSelectSite={handleSelectSite}

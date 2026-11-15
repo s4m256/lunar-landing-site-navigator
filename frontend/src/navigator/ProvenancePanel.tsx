@@ -136,9 +136,12 @@ export const ProvenancePanel: React.FC<ProvenancePanelProps> = ({ dataset, datas
             ' Segundo a auditoria, esse período fica perto do verão do hemisfério sul da Lua, o melhor caso de iluminação do ano; não representa o local ao longo do ano.'}
         </li>
         <li>
-          <strong>Declive</strong> (auditoria). Calculado numa base de 160 m, pode subestimar o declive na escala de um
-          módulo de pouso. O limite de {formatNumber(provenance.conventions.clps_slope_limit_deg, 0)}° gravado no arquivo
-          não tem fonte e não entra no índice.
+          <strong>Declive</strong> (auditoria). Calculado numa base de{' '}
+          {formatNumber(conv.slope_baseline_m ?? 2 * provenance.dem_product.resolution_m, 0)} m, pode subestimar o declive
+          na escala de um módulo de pouso. O limite de {formatNumber(conv.clps_slope_limit_deg, 0)}° gravado no arquivo não
+          tem fonte; acima dele esta página dá índice 0 ao ponto.
+          {migration &&
+            ' Os índices gravados no arquivo seguem a regra antiga e não foram zerados; esta página não os usa.'}
         </li>
         <li>
           <strong>Sombra permanente</strong>

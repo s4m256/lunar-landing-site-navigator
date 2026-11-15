@@ -1,3 +1,4 @@
+import scoreModelJson from '../../../contracts/landing-score-model.v1.json';
 import {
   EngineeringConfig,
   LandingSiteEntry,
@@ -7,6 +8,30 @@ import {
   ScoreSummary,
   ScoreWeightsConfig,
 } from './types';
+
+/** contracts/landing-score-model.v1.json: the single source of the illustrative index parameters. */
+export interface LandingScoreModel {
+  model_version: string;
+  illustrative: true;
+  description: string;
+  weights: ScoreWeightsConfig;
+  slope: { full_score_max_deg: number; zero_score_deg: number; default_elimination_limit_deg: number };
+  power: { illumination_weight: number; shadow_weight: number; shadow_scale_hours: number };
+  comms: { relay_combined_weight: number; dte_weight: number };
+  science_psr: {
+    inside_psr_points: number;
+    unknown_distance_points: number;
+    near_max_m: number;
+    near_points: number;
+    ramp_end_m: number;
+    ramp_end_points: number;
+    zero_m: number;
+  };
+  rounding: { decimals: number; ties: 'half_even' };
+}
+
+/** Same file that science/src/lunar_science/navigator/scoring.py reads (packaged copy, byte-identical). */
+export const SCORE_MODEL = scoreModelJson as LandingScoreModel;
 
 export const SOLAR_CONSTANT_1AU_W_M2 = 1361.0;
 
@@ -20,8 +45,9 @@ export function psrSearchFoundNothing(site: LandingSiteEntry): boolean {
 }
 
 /**
- * Same defaults as the data generator (science/.../scoring.py, solar.py, comms.py). They have
- * no cited source (audit SPA-9, sections 4.2 and 6.4): examples, not recommendations.
+ * Same defaults as the data generator (science/.../solar.py, comms.py; score weights and slope limit
+ * from SCORE_MODEL). They have no cited source (audit SPA-9, sections 4.2 and 6.4): examples, not
+ * recommendations.
  */
 export const DEFAULT_CONFIG: EngineeringConfig = {
   panelAreaM2: 4.0,
@@ -32,12 +58,8 @@ export const DEFAULT_CONFIG: EngineeringConfig = {
   elfoMaxRangeKm: 12000,
   dteMarginMode: 'full_disk',
   relayEnabled: true,
-  weights: {
-    safety: 0.25,
-    power: 0.35,
-    comms: 0.25,
-    science_psr: 0.15,
-  },
+  weights: { ...SCORE_MODEL.weights },
+  slopeLimitDeg: SCORE_MODEL.slope.default_elimination_limit_deg,
 };
 
 /**
@@ -52,6 +74,8 @@ export function initialConfig(dataset: NavigatorDatasetV1): EngineeringConfig {
     relayEnabled: false,
     antennaMaskDeg: preset.antenna_mask_deg,
     elfoMaxRangeKm: preset.max_range_km,
+    // The limit the file was produced with (conventions), not the model default.
+    slopeLimitDeg: dataset.provenance.conventions.clps_slope_limit_deg,
   };
 }
 
@@ -95,8 +119,15 @@ export interface LiveScore {
   power_0_100: number;
   comms_0_100: number | null;
   science_psr_0_100: number;
+  /** Slope above the file's clps_slope_limit_deg: the index is 0 whatever the other parts. */
+  eliminated: boolean;
+  /** Same index with direct-to-Earth line of sight only (the relay scenario is hypothetical). */
+  totalWithoutRelay_0_100: number | null;
   unavailableReason: ScoreUnavailableReason | null;
 }
+
+/** Score parts as stored in the contract, plus the elimination flag. */
+export type CompositeScore = ScoreSummary & { eliminated: boolean };
 
 export interface LiveSiteAnalysis {
   terrain: InterpolatedTerrain;
@@ -228,6 +259,36 @@ export function interpolateLocalGrid(
   };
 }
 
+/**
+ * Python's round(value, decimals): nearest decimal of the exact binary value, ties to even.
+ * Number.toFixed breaks ties upwards; a tie is only possible when value * 2^(decimals+1) is an
+ * odd integer (the binary value then sits exactly halfway), and that case is resolved here.
+ */
+export function roundHalfEven(value: number, decimals: number): number {
+  if (!Number.isFinite(value)) return value;
+  const sign = value < 0 ? -1 : 1;
+  const x = Math.abs(value);
+  const j = x * 2 ** (decimals + 1); // exact: scaling by a power of two
+  if (Number.isInteger(j) && j % 2 === 1) {
+    const twice = j * 5 ** decimals; // = 2 * x * 10^decimals, an odd integer
+    const lower = (twice - 1) / 2;
+    return (sign * (lower % 2 === 0 ? lower : lower + 1)) / 10 ** decimals;
+  }
+  return sign * Number(x.toFixed(decimals));
+}
+
+/** True when the slope exceeds the limit (null disables the constraint), as is_slope_eliminated(). */
+export function isSlopeEliminated(slopeDeg: number, slopeLimitDeg: number | null): boolean {
+  return slopeLimitDeg !== null && slopeDeg > slopeLimitDeg;
+}
+
+/**
+ * Illustrative 0-100 index, rule of contract 1.1.0. Mirrors compute_composite_landing_score in
+ * science/src/lunar_science/navigator/scoring.py: same parameters (SCORE_MODEL), same operation
+ * order and same rounding, so both return identical numbers (contracts/examples/
+ * landing-score-parity-cases.json). A slope above the limit sets total and safety to 0; an unknown
+ * PSR distance (null) gets no proximity credit.
+ */
 export function computeCompositeScore(
   slopeDeg: number,
   meanIllumFraction: number,
@@ -238,42 +299,47 @@ export function computeCompositeScore(
   isPsr: boolean,
   weights: ScoreWeightsConfig,
   relayEnabled: boolean,
-): ScoreSummary {
-  const safety = clamp((100 * (15 - slopeDeg)) / 13, 0, 100);
-  const shadowRes = clamp(100 * (1 - maxContinuousShadowHours / 360), 0, 100);
-  const power = clamp(0.7 * (meanIllumFraction * 100) + 0.3 * shadowRes, 0, 100);
+  slopeLimitDeg: number | null = SCORE_MODEL.slope.default_elimination_limit_deg,
+): CompositeScore {
+  const m = SCORE_MODEL;
+  const eliminated = isSlopeEliminated(slopeDeg, slopeLimitDeg);
+  const { full_score_max_deg: full, zero_score_deg: zero } = m.slope;
+  const safety = eliminated ? 0 : clamp((100 * (zero - slopeDeg)) / (zero - full), 0, 100);
+
+  const illumScore = clamp(meanIllumFraction * 100, 0, 100);
+  const shadowRes = clamp(100 * (1 - maxContinuousShadowHours / m.power.shadow_scale_hours), 0, 100);
+  const power = clamp(m.power.illumination_weight * illumScore + m.power.shadow_weight * shadowRes, 0, 100);
+
   const comms = relayEnabled
-    ? clamp(0.65 * combinedDutyPct + 0.35 * dteDutyPct, 0, 100)
+    ? clamp(m.comms.relay_combined_weight * combinedDutyPct + m.comms.dte_weight * dteDutyPct, 0, 100)
     : clamp(dteDutyPct, 0, 100);
 
-  let sciencePsr = 15;
-  if (!isPsr) {
-    // Unknown distance (no PSR found by the search): no proximity credit, as in scoring.py.
-    if (psrDistanceM === null) {
-      sciencePsr = 0;
-    } else if (psrDistanceM <= 500) {
-      sciencePsr = 100;
-    } else if (psrDistanceM <= 5000) {
-      sciencePsr = clamp(100 - (80 * (psrDistanceM - 500)) / 4500, 0, 100);
-    } else {
-      sciencePsr = clamp(20 * (1 - (psrDistanceM - 5000) / 5000), 0, 100);
-    }
-  }
+  const p = m.science_psr;
+  let sciencePsr: number;
+  if (isPsr) sciencePsr = p.inside_psr_points;
+  else if (psrDistanceM === null) sciencePsr = p.unknown_distance_points;
+  else if (psrDistanceM <= p.near_max_m) sciencePsr = p.near_points;
+  else if (psrDistanceM <= p.ramp_end_m)
+    sciencePsr = clamp(
+      p.near_points - ((p.near_points - p.ramp_end_points) * (psrDistanceM - p.near_max_m)) / (p.ramp_end_m - p.near_max_m),
+      0,
+      100,
+    );
+  else sciencePsr = clamp(p.ramp_end_points * (1 - (psrDistanceM - p.ramp_end_m) / (p.zero_m - p.ramp_end_m)), 0, 100);
 
   const wSum = Math.max(weights.safety + weights.power + weights.comms + weights.science_psr, 1e-9);
-  const total =
-    (weights.safety * safety +
-      weights.power * power +
-      weights.comms * comms +
-      weights.science_psr * sciencePsr) /
-    wSum;
+  const total = eliminated
+    ? 0
+    : (weights.safety * safety + weights.power * power + weights.comms * comms + weights.science_psr * sciencePsr) / wSum;
 
+  const d = m.rounding.decimals;
   return {
-    total_0_100: Number(clamp(total, 0, 100).toFixed(2)),
-    safety_slope_0_100: Number(safety.toFixed(2)),
-    power_0_100: Number(power.toFixed(2)),
-    comms_0_100: Number(comms.toFixed(2)),
-    science_psr_0_100: Number(sciencePsr.toFixed(2)),
+    total_0_100: roundHalfEven(clamp(total, 0, 100), d),
+    safety_slope_0_100: roundHalfEven(safety, d),
+    power_0_100: roundHalfEven(power, d),
+    comms_0_100: roundHalfEven(comms, d),
+    science_psr_0_100: roundHalfEven(sciencePsr, d),
+    eliminated,
   };
 }
 
@@ -433,17 +499,21 @@ export function evaluateLiveSite(
   // The file's 5-min LRO-like duty cycle exists for the centre only.
   const lroDutyCyclePct = isExactCenter ? site.engineering_summary.comms.lro_duty_cycle_pct : null;
 
-  const parts = computeCompositeScore(
-    terrain.slopeDeg,
-    meanIllumFraction,
-    maxContinuousShadowHours,
-    dteDutyCyclePct,
-    combinedDutyCyclePct ?? 0,
-    terrain.psrDistanceM,
-    terrain.isPsr,
-    config.weights,
-    config.relayEnabled,
-  );
+  const scoreFor = (relay: boolean) =>
+    computeCompositeScore(
+      terrain.slopeDeg,
+      meanIllumFraction,
+      maxContinuousShadowHours,
+      dteDutyCyclePct,
+      combinedDutyCyclePct ?? 0,
+      terrain.psrDistanceM,
+      terrain.isPsr,
+      config.weights,
+      relay,
+      config.slopeLimitDeg,
+    );
+  const parts = scoreFor(config.relayEnabled);
+  const dteOnly = config.relayEnabled ? scoreFor(false) : parts;
   const w = config.weights;
   const commsKnown = combinedDutyCyclePct !== null;
   let unavailableReason: ScoreUnavailableReason | null = null;
@@ -455,6 +525,8 @@ export function evaluateLiveSite(
     power_0_100: parts.power_0_100,
     comms_0_100: commsKnown ? parts.comms_0_100 : null,
     science_psr_0_100: parts.science_psr_0_100,
+    eliminated: parts.eliminated,
+    totalWithoutRelay_0_100: w.safety + w.power + w.comms + w.science_psr <= 0 ? null : dteOnly.total_0_100,
     unavailableReason,
   };
 

@@ -288,4 +288,6 @@ export interface EngineeringConfig {
   dteMarginMode: 'full_disk' | 'center';
   relayEnabled: boolean;
   weights: ScoreWeightsConfig;
+  /** Slope above which the illustrative index is 0 (file conventions; unsourced). */
+  slopeLimitDeg: number;
 }

@@ -28,9 +28,18 @@ interface SiteComparisonPanelProps {
   onChangeConfig: (next: EngineeringConfig) => void;
 }
 
-function scoreText(score: LiveScore): string {
+function scoreText(score: LiveScore, slopeLimitDeg: number): string {
+  if (score.total_0_100 !== null && score.eliminated) {
+    return `0 de 100 (eliminado: declive acima de ${formatDeg(slopeLimitDeg, 0)})`;
+  }
   if (score.total_0_100 !== null) return `${formatNumber(score.total_0_100, 1)} de 100`;
   return score.unavailableReason === 'zero_weights' ? 'sem índice (todos os pesos em zero)' : 'sem índice';
+}
+
+/** Short value for table cells: the number, "0 (eliminado)" or "sem índice". */
+function scoreCell(total: number | null, eliminated: boolean): string {
+  if (total === null) return 'sem índice';
+  return eliminated ? '0 (eliminado)' : formatNumber(total, 1);
 }
 
 /** "até 5,2 km" from conventions.psr_search_radius_m, or a plain phrase when the file omits it. */
@@ -134,13 +143,16 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
         </p>
         {selectedRow && (
           <p className="score-hero-pill" role="status">
-            Índice ilustrativo de {selectedRow.site.name}: <strong>{scoreText(selectedRow.analysis.score)}</strong>{' '}
+            Índice ilustrativo de {selectedRow.site.name}: <strong>{scoreText(selectedRow.analysis.score, slopeLimitDeg)}</strong>{' '}
             <span>
               (partes: declive {formatNumber(selectedRow.analysis.score.safety_slope_0_100, 0)}, luz do Sol{' '}
               {formatNumber(selectedRow.analysis.score.power_0_100, 0)}, linha de visada{' '}
               {selectedRow.analysis.score.comms_0_100 === null ? 'sem dado' : formatNumber(selectedRow.analysis.score.comms_0_100, 0)},
               sombra permanente {formatNumber(selectedRow.analysis.score.science_psr_0_100, 0)}
               {config.relayEnabled ? '; inclui o cenário hipotético de retransmissores' : ''})
+              {config.relayEnabled && selectedRow.analysis.score.totalWithoutRelay_0_100 !== null && (
+                <> Sem os retransmissores: {scoreCell(selectedRow.analysis.score.totalWithoutRelay_0_100, selectedRow.analysis.score.eliminated)}.</>
+              )}
             </span>
           </p>
         )}
@@ -158,6 +170,7 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
                 <th scope="col">Tempo com visada direta para a Terra</th>
                 {config.relayEnabled && <th scope="col">Tempo com Terra ou constelação hipotética</th>}
                 <th scope="col">Índice ilustrativo</th>
+                {config.relayEnabled && <th scope="col">Índice sem os retransmissores</th>}
               </tr>
             </thead>
             <tbody>
@@ -179,8 +192,11 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
                     <td className="mono-cell">{formatPct(analysis.comms.dteDutyCyclePct)}</td>
                     {config.relayEnabled && <td className="mono-cell">{formatPct(analysis.comms.combinedDutyCyclePct)}</td>}
                     <td className="mono-cell">
-                      <strong>{analysis.score.total_0_100 === null ? 'sem índice' : formatNumber(analysis.score.total_0_100, 1)}</strong>
+                      <strong>{scoreCell(analysis.score.total_0_100, analysis.score.eliminated)}</strong>
                     </td>
+                    {config.relayEnabled && (
+                      <td className="mono-cell">{scoreCell(analysis.score.totalWithoutRelay_0_100, analysis.score.eliminated)}</td>
+                    )}
                   </tr>
                 );
               })}
@@ -189,9 +205,9 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
         </div>
         <ul className="field-help notes-list">
           <li>
-            {formatDeg(slopeLimitDeg, 0)} é o valor de referência de declive gravado no arquivo, sem fonte citada; não
-            entra no índice e não é critério de segurança. O declive do arquivo usa uma base de 160 m e pode ser maior na
-            escala de um módulo de pouso.
+            {formatDeg(slopeLimitDeg, 0)} é o valor de referência de declive gravado no arquivo, sem fonte citada. Acima
+            dele, o índice desta página vale 0 (“eliminado”); isso não é um critério de segurança. O declive do arquivo usa
+            uma base de 160 m e pode ser maior na escala de um módulo de pouso.
           </li>
           <li>
             “Nenhuma encontrada {psrSearchExtent(psrSearchRadiusM)}”: a busca do gerador não achou sombra permanente e o

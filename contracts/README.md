@@ -6,6 +6,7 @@ Os JSON Schemas (draft-07) desta pasta são a fonte normativa. Python valida com
 | --- | --- | --- | --- |
 | Status da CLI (placeholder legado) | 1.0.0 | `science-status.schema.json` | `examples/science-status.json` |
 | Dataset pré-computado do navegador | **1.1.0** | `navigator-dataset.v1.schema.json` | `examples/navigator-dataset.synthetic.json` (sintético) e o dataset commitado |
+| Modelo do índice ilustrativo | 1.1.0 | `landing-score-model.v1.json` (parâmetros) | `examples/landing-score-parity-cases.json` |
 
 O transporte Python → frontend (artefato JSON estático validado nos dois lados, sem API HTTP) está descrito em [`../docs/integration.md`](../docs/integration.md).
 
@@ -88,3 +89,15 @@ O dataset commitado foi convertido por `science/tools/migrate_dataset_1_0_to_1_1
 - `provenance.migration` registra cada valor trocado e cada chave acrescentada; `revert()` da ferramenta reconstrói o arquivo 1.0.0 byte a byte, e os testes conferem o SHA-256 (`source_sha256`, `source_frontend_sha256`).
 
 Ainda não implementado (proposta da auditoria, item 6): declividade máxima e percentil na área de pouso de cada sítio.
+
+## Modelo do índice ilustrativo (`landing-score-model.v1.json`)
+
+Fonte única dos parâmetros do índice 0–100. `science/src/lunar_science/navigator/scoring.py` lê a cópia empacotada (idêntica byte a byte; teste) e `frontend/src/navigator/math.ts` importa este arquivo. As fórmulas existem nas duas linguagens, com a mesma ordem de operações:
+
+- declive `s` (°): eliminado se `s > clps_slope_limit_deg` (do arquivo; padrão `default_elimination_limit_deg`); senão `clamp(100 · (zero − s) / (zero − full))`;
+- potência: `clamp(illumination_weight · clamp(100 · mean_illum_fraction) + shadow_weight · clamp(100 · (1 − max_continuous_shadow_hours / shadow_scale_hours)))`;
+- comunicação: com relays `clamp(relay_combined_weight · combined + dte_weight · dte)`, sem relays `clamp(dte)` (porcentagens);
+- proximidade PSR (m): dentro de PSR `inside_psr_points`; distância `null` → `unknown_distance_points`; até `near_max_m` → `near_points`; rampa linear até `ramp_end_points` em `ramp_end_m` e até 0 em `zero_m`;
+- total: média ponderada pelos `weights` (0 se eliminado), arredondada a `decimals` casas com desempate para o par (o `round()` do Python; o TypeScript implementa o mesmo desempate).
+
+`examples/landing-score-parity-cases.json` é gerado por `science/tools/generate_score_parity_cases.py` a partir do Python (entradas sintéticas mais dois centros do dataset commitado). O teste Python confere que o arquivo ainda é a saída de `scoring.py`; o teste TypeScript (`frontend/src/navigator/scoreParity.test.ts`) exige números idênticos, sem tolerância. Os parâmetros não têm fonte: mudar um deles muda o índice, não sua validade.

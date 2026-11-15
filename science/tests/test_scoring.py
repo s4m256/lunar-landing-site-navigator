@@ -49,3 +49,22 @@ def test_relay_saturation_floors_comms_term() -> None:
     )
     assert with_relay["comms_0_100"] == pytest.approx(65.0)
     assert dte_only["comms_0_100"] == 0.0
+
+
+def test_parity_table_shared_with_the_frontend_is_the_current_python_output() -> None:
+    """contracts/examples/landing-score-parity-cases.json: frontend math.ts must reproduce it exactly
+    (frontend/src/navigator/scoreParity.test.ts); this side checks it still matches scoring.py."""
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location(
+        "generate_score_parity_cases", repo / "science" / "tools" / "generate_score_parity_cases.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    committed = json.loads((repo / "contracts" / "examples" / "landing-score-parity-cases.json").read_text(encoding="utf-8"))
+    assert committed == module.build_cases()
+    ids = {c["id"] for c in committed["cases"]}
+    assert {"slope_just_above_limit_is_eliminated", "unknown_psr_distance_gets_no_credit", "rounding_tie_goes_to_even"} <= ids
