@@ -1,194 +1,238 @@
-import React from 'react';
-import { formatUtcReadable, WindowSlice } from './state';
+import React, { useEffect, useState } from 'react';
+import {
+  DURATION_OPTIONS,
+  DurationDays,
+  formatUtcShort,
+  getDateHourFromIso,
+  parseUtcDateHourToEpochIndex,
+  PlaybackSpeed,
+  SPEED_OPTIONS,
+  WindowSlice,
+} from './state';
 
 interface TimePopoverProps {
-  startDate: string;
-  startHour: number;
-  durationDays: number;
-  dateError: string | null;
-  windowSlice: WindowSlice;
+  timestampsUtc: string[];
   epochIdx: number;
-  currentUtc: string;
+  startIdx: number;
+  durationDays: DurationDays;
+  slice: WindowSlice;
   isPlaying: boolean;
-  speedMultiplier: number;
-  onChangeStartDate: (val: string) => void;
-  onChangeStartHour: (val: number) => void;
-  onChangeDurationDays: (days: number) => void;
-  onUseExamplePeriod: () => void;
-  onChangeEpoch: (idx: number) => void;
+  speed: PlaybackSpeed;
+  onChangeStartIdx: (idx: number) => void;
+  onChangeEpochIdx: (idx: number) => void;
+  onChangeDuration: (days: DurationDays) => void;
   onTogglePlay: () => void;
-  onRestart: () => void;
-  onChangeSpeed: (mult: number) => void;
+  onResetTime: () => void;
+  onChangeSpeed: (speed: PlaybackSpeed) => void;
   onClose: () => void;
 }
 
 export const TimePopover: React.FC<TimePopoverProps> = ({
-  startDate,
-  startHour,
-  durationDays,
-  dateError,
-  windowSlice,
+  timestampsUtc,
   epochIdx,
-  currentUtc,
+  startIdx,
+  durationDays,
+  slice,
   isPlaying,
-  speedMultiplier,
-  onChangeStartDate,
-  onChangeStartHour,
-  onChangeDurationDays,
-  onUseExamplePeriod,
-  onChangeEpoch,
+  speed,
+  onChangeStartIdx,
+  onChangeEpochIdx,
+  onChangeDuration,
   onTogglePlay,
-  onRestart,
+  onResetTime,
   onChangeSpeed,
   onClose,
 }) => {
-  const { startIdx, endIdx } = windowSlice;
-  const clamped = Math.max(startIdx, Math.min(endIdx, epochIdx));
-  const currentFmt = formatUtcReadable(currentUtc);
+  const startIso = timestampsUtc[startIdx] ?? timestampsUtc[0];
+  const initialParsed = getDateHourFromIso(startIso);
+  const [dateInput, setDateInput] = useState<string>(initialParsed.date);
+  const [hourInput, setHourInput] = useState<string>(String(initialParsed.hour));
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const synced = getDateHourFromIso(timestampsUtc[startIdx] ?? timestampsUtc[0]);
+    setDateInput(synced.date);
+    setHourInput(String(synced.hour));
+  }, [startIdx, timestampsUtc]);
+
+  const applyUtcInputs = (nextDate: string, nextHourRaw: string) => {
+    const parsedHour = Number(nextHourRaw);
+    const result = parseUtcDateHourToEpochIndex(nextDate, parsedHour, timestampsUtc);
+    if (!result.valid || result.startIdx === undefined) {
+      setValidationError(result.errorMessage ?? 'Invalid UTC date or hour.');
+      return;
+    }
+    setValidationError(null);
+    onChangeStartIdx(result.startIdx);
+    onChangeEpochIdx(result.startIdx);
+  };
+
+  const handleUseExample = () => {
+    setValidationError(null);
+    onResetTime();
+  };
+
+  const stepEpoch = (deltaHours: number) => {
+    const next = Math.max(slice.startIdx, Math.min(slice.endIdx, epochIdx + deltaHours));
+    onChangeEpochIdx(next);
+  };
+
+  const currentIso = timestampsUtc[epochIdx] ?? timestampsUtc[0];
 
   return (
     <section
-      className="floating-panel panel-time-popover"
-      role="region"
-      aria-label="Controle de Tempo e Animação em UTC"
+      className="popover-card time-popover"
+      role="dialog"
+      aria-label="UTC date, duration, and animation controls"
     >
-      <div className="panel-header">
+      <div className="popover-head">
         <div>
-          <h2>Tempo (UTC)</h2>
-          <p className="panel-sub">Agora: {currentFmt.full}</p>
+          <span className="drawer-eyebrow">Ephemeris Window</span>
+          <h2>Time (UTC)</h2>
         </div>
-        <button type="button" className="btn-icon-close" onClick={onClose} aria-label="Fechar Tempo">
-          Fechar
+        <button
+          type="button"
+          className="btn-close-panel"
+          onClick={onClose}
+          aria-label="Close time controls"
+        >
+          Close
         </button>
       </div>
 
-      {/* Entrada direta por campos (sem depender apenas da barra) */}
-      <div className="time-inputs-grid">
-        <div className="form-group">
-          <label htmlFor="time-start-date">Data inicial (UTC)</label>
-          <input
-            id="time-start-date"
-            type="date"
-            className="ui-input"
-            value={startDate}
-            min="2026-11-15"
-            max="2026-12-14"
-            onChange={(e) => onChangeStartDate(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="time-start-hour">Hora (0–23 UTC)</label>
-          <input
-            id="time-start-hour"
-            type="number"
-            className="ui-input"
-            min={0}
-            max={23}
-            value={startHour}
-            onChange={(e) => onChangeStartHour(Number(e.target.value))}
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="time-duration-days">Duração</label>
-          <select
-            id="time-duration-days"
-            className="ui-select"
-            value={durationDays}
-            onChange={(e) => onChangeDurationDays(Number(e.target.value))}
-          >
-            <option value={1}>1 dia (24 h)</option>
-            <option value={3}>3 dias (72 h)</option>
-            <option value={7}>7 dias</option>
-            <option value={14}>14 dias</option>
-            <option value={30}>30 dias (ciclo completo)</option>
-          </select>
-        </div>
+      <div className="time-current-banner">
+        <span>Current epoch</span>
+        <strong>{formatUtcShort(currentIso)}</strong>
       </div>
 
-      {dateError && (
-        <div className="error-alert" role="alert">
-          {dateError}
+      <div className="time-fields-row">
+        <label className="field-block">
+          <span>Start date (UTC)</span>
+          <input
+            type="date"
+            aria-label="Start date (UTC)"
+            value={dateInput}
+            min={timestampsUtc[0].slice(0, 10)}
+            max={timestampsUtc[timestampsUtc.length - 1].slice(0, 10)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setDateInput(v);
+              applyUtcInputs(v, hourInput);
+            }}
+          />
+        </label>
+
+        <label className="field-block field-hour">
+          <span>Hour UTC (0–23)</span>
+          <input
+            type="number"
+            aria-label="Start hour (0–23 UTC)"
+            min={0}
+            max={23}
+            step={1}
+            value={hourInput}
+            onChange={(e) => {
+              const v = e.target.value;
+              setHourInput(v);
+              applyUtcInputs(dateInput, v);
+            }}
+          />
+        </label>
+      </div>
+
+      {validationError && (
+        <div className="alert-box" role="alert">
+          <p>{validationError}</p>
+          <button type="button" className="btn-secondary-sm" onClick={handleUseExample}>
+            Reset window
+          </button>
         </div>
       )}
 
-      <div className="action-row-wrap">
-        <button type="button" className="btn-secondary-sm" onClick={onUseExamplePeriod}>
-          Usar período de exemplo
-        </button>
-      </div>
+      {!validationError && (
+        <div className="example-row">
+          <span className="muted-caption">
+            2026-11-15 to 2026-12-15 UTC
+          </span>
+          <button type="button" className="btn-link-sm" onClick={handleUseExample}>
+            Reset window
+          </button>
+        </div>
+      )}
 
-      {/* Linha do tempo e passo */}
-      <div className="form-group">
-        <label htmlFor="time-epoch-scrubber">
-          Instante dentro do período (passo +{clamped - startIdx}h de {endIdx - startIdx}h)
-        </label>
-        <input
-          id="time-epoch-scrubber"
-          type="range"
-          min={startIdx}
-          max={endIdx}
-          step={1}
-          value={clamped}
-          aria-valuetext={currentFmt.full}
-          onChange={(e) => onChangeEpoch(Number(e.target.value))}
-        />
-      </div>
-
-      {/* Controles Play/Pause, Passo, Recomeçar e Velocidade */}
-      <div className="playback-row">
-        <button type="button" className="btn-primary-sm" onClick={onTogglePlay}>
-          {isPlaying ? 'Pausar animação' : 'Iniciar animação'}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary-sm"
-          onClick={() => onChangeEpoch(Math.max(startIdx, clamped - 1))}
-          aria-label="Voltar 1 hora"
-        >
-          -1h
-        </button>
-        <button
-          type="button"
-          className="btn-secondary-sm"
-          onClick={() => onChangeEpoch(Math.min(endIdx, clamped + 1))}
-          aria-label="Avançar 1 hora"
-        >
-          +1h
-        </button>
-        <button
-          type="button"
-          className="btn-secondary-sm"
-          onClick={() => onChangeEpoch(Math.min(endIdx, clamped + 6))}
-          aria-label="Avançar 6 horas"
-        >
-          +6h
-        </button>
-        <button type="button" className="btn-secondary-sm" onClick={onRestart}>
-          Recomeçar
-        </button>
-      </div>
-
-      <fieldset className="segmented-fieldset">
-        <legend>Velocidade da animação</legend>
-        <div className="segmented-row">
-          {[1, 3, 6].map((mult) => (
+      <div className="field-block">
+        <span>Window span ({slice.totalHours}h evaluated)</span>
+        <div className="chip-row" role="group" aria-label="Analysis window duration">
+          {DURATION_OPTIONS.map((d) => (
             <button
-              key={mult}
+              key={d}
               type="button"
-              className={`seg-btn ${speedMultiplier === mult ? 'is-active' : ''}`}
-              aria-pressed={speedMultiplier === mult}
-              onClick={() => onChangeSpeed(mult)}
+              className={`choice-btn ${durationDays === d ? 'active' : ''}`}
+              aria-pressed={durationDays === d}
+              onClick={() => onChangeDuration(d)}
             >
-              {mult}×
+              {d} {d === 1 ? 'day' : 'days'}
             </button>
           ))}
         </div>
-      </fieldset>
+        {slice.clampedByEnd && (
+          <p className="muted-caption">
+            Clamped at end of precomputed ephemeris (2026-12-15 00:00 UTC).
+          </p>
+        )}
+      </div>
 
-      <p className="helper-note">
-        Os horários estão em UTC (horário universal). Em 3D, o sombreamento do globo ilustra a posição solar enquanto o cálculo pontual usa o horizonte topográfico real.
+      <label className="field-block">
+        <span>
+          Timeline (hour {epochIdx - slice.startIdx} of {slice.totalHours})
+        </span>
+        <input
+          type="range"
+          aria-label="UTC epoch timeline"
+          min={slice.startIdx}
+          max={slice.endIdx}
+          value={epochIdx}
+          onChange={(e) => onChangeEpochIdx(Number(e.target.value))}
+        />
+      </label>
+
+      <div className="time-transport-row">
+        <button type="button" className="btn-step" onClick={() => stepEpoch(-1)}>
+          −1h
+        </button>
+        <button type="button" className="btn-step" onClick={() => stepEpoch(1)}>
+          +1h
+        </button>
+        <button type="button" className="btn-step" onClick={() => stepEpoch(6)}>
+          +6h
+        </button>
+        <button type="button" className="btn-primary-sm" onClick={onTogglePlay}>
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <button type="button" className="btn-secondary-sm" onClick={onResetTime}>
+          Reset
+        </button>
+      </div>
+
+      <div className="speed-row">
+        <span>Speed</span>
+        <div className="chip-row" role="group" aria-label="Playback speed">
+          {SPEED_OPTIONS.map((sp) => (
+            <button
+              key={sp}
+              type="button"
+              className={`choice-btn ${speed === sp ? 'active' : ''}`}
+              aria-pressed={speed === sp}
+              onClick={() => onChangeSpeed(sp)}
+            >
+              {sp}×
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="honest-note">
+        Times in UTC. All metrics use local 80 m/px LOLA horizons and SPICE MOON_ME ephemeris.
       </p>
     </section>
   );

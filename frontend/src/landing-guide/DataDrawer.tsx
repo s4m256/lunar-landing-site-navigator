@@ -1,376 +1,331 @@
 import React, { useState } from 'react';
-import { LiveSiteAnalysis } from '../navigator/math';
 import {
   EngineeringConfig,
-  LandingSiteEntry,
   NavigatorProvenance,
   PanelMode,
 } from '../navigator/types';
 import {
-  describePlainCondition,
-  formatCoordLatLon,
-  formatUtcReadable,
-  GLOSSARY,
-  SiteSlot,
-  WindowSummary,
+  EvaluatedSlotEntry,
+  GLOSSARY_ITEMS,
+  PlainLanguageSummary,
+  WindowSlice,
 } from './state';
 
 interface DataDrawerProps {
-  siteA: LandingSiteEntry;
-  slotA: SiteSlot;
-  analysisA: LiveSiteAnalysis;
-  summaryA: WindowSummary;
-  siteB: LandingSiteEntry | null;
-  analysisB: LiveSiteAnalysis | null;
-  summaryB: WindowSummary | null;
-  epochIdx: number;
-  currentUtc: string;
+  entries: EvaluatedSlotEntry[];
+  activeSlotIdx: number;
+  onSelectActiveSlot: (index: number) => void;
+  summary: PlainLanguageSummary;
+  slice: WindowSlice;
   config: EngineeringConfig;
   provenance: NavigatorProvenance;
-  onChangeOffsetA: (xNorm: number, yNorm: number) => void;
+  onChangeOffset: (slotIdx: number, xNorm: number, yNorm: number) => void;
   onChangeConfig: (next: EngineeringConfig) => void;
   onClose: () => void;
 }
 
 export const DataDrawer: React.FC<DataDrawerProps> = ({
-  siteA,
-  slotA,
-  analysisA,
-  summaryA,
-  siteB,
-  analysisB,
-  summaryB,
-  epochIdx,
-  currentUtc,
+  entries,
+  activeSlotIdx,
+  onSelectActiveSlot,
+  summary,
+  slice,
   config,
   provenance,
-  onChangeOffsetA,
+  onChangeOffset,
   onChangeConfig,
   onClose,
 }) => {
-  const [showGlossary, setShowGlossary] = useState<boolean>(false);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const epochTime = formatUtcReadable(currentUtc).full;
-  const plainA = describePlainCondition(
-    siteA.name,
-    analysisA,
-    epochIdx,
-    summaryA,
-    config.relayEnabled,
-  );
-  const plainB =
-    siteB && analysisB && summaryB
-      ? describePlainCondition(siteB.name, analysisB, epochIdx, summaryB, config.relayEnabled)
-      : null;
-
-  const epochStateA = analysisA.epochStates[epochIdx] ?? analysisA.epochStates[0];
-  const epochStateB =
-    analysisB ? (analysisB.epochStates[epochIdx] ?? analysisB.epochStates[0]) : null;
+  const clpsLimit = provenance.conventions.clps_slope_limit_deg;
+  const activeEntry = entries[activeSlotIdx] ?? entries[0];
 
   return (
-    <aside
-      className="floating-panel panel-bottom-right"
-      role="region"
-      aria-label="Painel de Dados do Local Selecionado"
-    >
-      <div className="panel-header">
+    <aside className="side-drawer drawer-right" aria-label="Site metrics and scientific provenance drawer">
+      <div className="drawer-header">
         <div>
-          <h2>Dados</h2>
-          <p className="panel-sub">
-            {siteB ? `Comparando A (${siteA.name}) e B (${siteB.name})` : `Local A: ${siteA.name}`}
-          </p>
+          <span className="drawer-eyebrow">Metrics &amp; Provenance</span>
+          <h2>Data</h2>
         </div>
-        <button type="button" className="btn-icon-close" onClick={onClose} aria-label="Fechar Dados">
-          Fechar
-        </button>
-      </div>
-
-      {/* Camada 1: Resumo em linguagem simples (3 perguntas do guia de acessibilidade) */}
-      <div className="data-card">
-        <h3>1. Resumo em linguagem simples</h3>
-        <dl className="plain-dl">
-          <div>
-            <dt>Onde estou olhando?</dt>
-            <dd>
-              <strong>Local A: {siteA.name}</strong> — {siteA.description}
-              {siteB && (
-                <>
-                  <br />
-                  <strong>Local B: {siteB.name}</strong> — {siteB.description}
-                </>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>O que estou vendo agora ({epochTime})?</dt>
-            <dd>
-              <strong>A:</strong> {plainA.skyNow} {plainA.commsNow}
-              {plainB && (
-                <>
-                  <br />
-                  <strong>B:</strong> {plainB.skyNow} {plainB.commsNow}
-                </>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>O que muda neste período ({summaryA.durationHours.toFixed(0)}h)?</dt>
-            <dd>
-              Em <strong>{siteA.name}</strong>, há luz solar média em{' '}
-              <strong>{summaryA.meanIllumPct.toFixed(0)}%</strong> do tempo ({summaryA.sunlitHours.toFixed(0)}h)
-              e maior sombra contínua de <strong>{summaryA.maxShadowHours.toFixed(0)}h</strong>.
-              {siteB && summaryB && (
-                <>
-                  {' '}
-                  Já em <strong>{siteB.name}</strong>, a luz média é{' '}
-                  <strong>{summaryB.meanIllumPct.toFixed(0)}%</strong> ({summaryB.sunlitHours.toFixed(0)}h) e a maior
-                  sombra é <strong>{summaryB.maxShadowHours.toFixed(0)}h</strong>.
-                </>
-              )}
-            </dd>
-          </div>
-        </dl>
-
-        <p className="caution-banner">{plainA.cautionNote}</p>
-
         <button
           type="button"
-          className="btn-link-expand"
-          aria-expanded={showGlossary}
-          onClick={() => setShowGlossary((v) => !v)}
+          className="btn-close-panel"
+          onClick={onClose}
+          aria-label="Close data panel"
         >
-          {showGlossary ? 'Ocultar: O que significa?' : 'O que significa? (Termos explicados)'}
+          Close
         </button>
+      </div>
 
-        {showGlossary && (
-          <div className="glossary-box">
-            {GLOSSARY.map((item) => (
-              <div key={item.id} className="glossary-item">
-                <strong>{item.term}:</strong> <span>{item.shortExplain}</span>
-              </div>
-            ))}
+      <div className="drawer-scroll">
+        <section className="data-section" aria-label="Plain language summary">
+          <div className="section-title-row">
+            <h3>1. Summary</h3>
+            <button
+              type="button"
+              className="btn-link-sm"
+              aria-expanded={showGlossary}
+              onClick={() => setShowGlossary((v) => !v)}
+            >
+              What does this mean?
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* Camada 2: Indicadores científicos principais + comparação A/B */}
-      <div className="data-card">
-        <h3>2. Indicadores do período</h3>
-        <div className="metric-table-wrap">
-          <table className="mini-compare-table">
-            <thead>
-              <tr>
-                <th scope="col">Indicador</th>
-                <th scope="col">Local A</th>
-                {siteB && <th scope="col">Local B</th>}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">Luz solar no período</th>
-                <td>{summaryA.meanIllumPct.toFixed(1)}% ({summaryA.sunlitHours.toFixed(0)} h)</td>
-                {summaryB && <td>{summaryB.meanIllumPct.toFixed(1)}% ({summaryB.sunlitHours.toFixed(0)} h)</td>}
-              </tr>
-              <tr>
-                <th scope="row">Maior sombra contínua</th>
-                <td>{summaryA.maxShadowHours.toFixed(0)} h</td>
-                {summaryB && <td>{summaryB.maxShadowHours.toFixed(0)} h</td>}
-              </tr>
-              <tr>
-                <th scope="row">Terra visível (DTE)</th>
-                <td>{summaryA.dteDutyPct.toFixed(1)}%</td>
-                {summaryB && <td>{summaryB.dteDutyPct.toFixed(1)}%</td>}
-              </tr>
-              <tr>
-                <th scope="row">Comunicação total {config.relayEnabled ? '(DTE+ELFO)' : '(só DTE)'}</th>
-                <td>{summaryA.combinedDutyPct.toFixed(1)}%</td>
-                {summaryB && <td>{summaryB.combinedDutyPct.toFixed(1)}%</td>}
-              </tr>
-              <tr>
-                <th scope="row">Maior blackout de sinal</th>
-                <td>
-                  {(config.relayEnabled
-                    ? summaryA.maxBlackoutCombinedHours
-                    : summaryA.maxBlackoutDteHours
-                  ).toFixed(0)}{' '}
-                  h
-                </td>
-                {summaryB && (
-                  <td>
-                    {(config.relayEnabled
-                      ? summaryB.maxBlackoutCombinedHours
-                      : summaryB.maxBlackoutDteHours
-                    ).toFixed(0)}{' '}
-                    h
-                  </td>
-                )}
-              </tr>
-              <tr>
-                <th scope="row">Declividade local (CLPS &lt; 15°)</th>
-                <td>
-                  {analysisA.terrain.slopeDeg.toFixed(1)}°{' '}
-                  {analysisA.terrain.slopeDeg < 15 ? '(Suave)' : '(Íngreme)'}
-                </td>
-                {analysisB && (
-                  <td>
-                    {analysisB.terrain.slopeDeg.toFixed(1)}°{' '}
-                    {analysisB.terrain.slopeDeg < 15 ? '(Suave)' : '(Íngreme)'}
-                  </td>
-                )}
-              </tr>
-              <tr>
-                <th scope="row">Energia estimada no período</th>
-                <td>{(summaryA.energyWh / 1000).toFixed(2)} kWh</td>
-                {summaryB && <td>{(summaryB.energyWh / 1000).toFixed(2)} kWh</td>}
-              </tr>
-              <tr>
-                <th scope="row">Sol / Terra neste instante</th>
-                <td>
-                  Sol {(epochStateA.fIllum * 100).toFixed(0)}% ·{' '}
-                  {epochStateA.dteVisible ? 'Terra visível' : 'Terra oculta'}
-                </td>
-                {epochStateB && (
-                  <td>
-                    Sol {(epochStateB.fIllum * 100).toFixed(0)}% ·{' '}
-                    {epochStateB.dteVisible ? 'Terra visível' : 'Terra oculta'}
-                  </td>
-                )}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="plain-cards">
+            <article className="plain-card">
+              <h4>Where am I looking?</h4>
+              <p>{summary.whereText}</p>
+            </article>
+            <article className="plain-card">
+              <h4>What is visible right now?</h4>
+              <p>{summary.nowText}</p>
+            </article>
+            <article className="plain-card">
+              <h4>How does it change over {slice.totalHours}h?</h4>
+              <p>{summary.periodText}</p>
+            </article>
+          </div>
 
-      {/* Camada 3: Opções avançadas (recolhida inicialmente) */}
-      <div className="data-card">
-        <button
-          type="button"
-          className="btn-advanced-toggle"
-          aria-expanded={showAdvanced}
-          onClick={() => setShowAdvanced((v) => !v)}
-        >
-          <span>Opções avançadas (Coordenadas, Grid 500 m, Relay e NASA)</span>
-          <span aria-hidden="true">{showAdvanced ? '▲' : '▼'}</span>
-        </button>
+          <div className="honest-callout" role="note">
+            <strong>Scientific transparency:</strong> {summary.limitationNote}
+          </div>
 
-        {showAdvanced && (
-          <div className="advanced-content">
-            <div className="adv-block">
-              <h4>Coordenadas selenográficas &amp; relevo</h4>
-              <p className="adv-line">
-                <strong>A:</strong>{' '}
-                {formatCoordLatLon(analysisA.terrain.latitudeDeg, analysisA.terrain.longitudeEastDeg)} · Elevação{' '}
-                {analysisA.terrain.elevationM.toFixed(0)} m · Dist. PSR {analysisA.terrain.psrDistanceM.toFixed(0)} m
-              </p>
-              {analysisB && siteB && (
-                <p className="adv-line">
-                  <strong>B:</strong>{' '}
-                  {formatCoordLatLon(analysisB.terrain.latitudeDeg, analysisB.terrain.longitudeEastDeg)} · Elevação{' '}
-                  {analysisB.terrain.elevationM.toFixed(0)} m · Dist. PSR {analysisB.terrain.psrDistanceM.toFixed(0)} m
-                </p>
-              )}
-            </div>
-
-            <div className="adv-block">
-              <h4>Deslocamento fino no grid local 5×5 (±500 m em A)</h4>
-              <label htmlFor="adv-dx-range">
-                Deslocamento Leste/Oeste (dx): {analysisA.terrain.dxM.toFixed(0)} m
-              </label>
-              <input
-                id="adv-dx-range"
-                type="range"
-                min={-1}
-                max={1}
-                step={0.1}
-                value={slotA.xNorm}
-                onChange={(e) => onChangeOffsetA(Number(e.target.value), slotA.yNorm)}
-              />
-              <label htmlFor="adv-dy-range">
-                Deslocamento Norte/Sul (dy): {analysisA.terrain.dyM.toFixed(0)} m
-              </label>
-              <input
-                id="adv-dy-range"
-                type="range"
-                min={-1}
-                max={1}
-                step={0.1}
-                value={slotA.yNorm}
-                onChange={(e) => onChangeOffsetA(slotA.xNorm, Number(e.target.value))}
-              />
-              <button
-                type="button"
-                className="btn-secondary-sm"
-                onClick={() => onChangeOffsetA(0, 0)}
-              >
-                Centralizar ponto A no sítio
-              </button>
-            </div>
-
-            <div className="adv-block">
-              <h4>Parâmetros do sistema espacial</h4>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={config.relayEnabled}
-                  onChange={(e) =>
-                    onChangeConfig({ ...config, relayEnabled: e.target.checked })
-                  }
-                />
-                <span>Ativar Rede Satélites Relay (ELFO)</span>
-              </label>
-
-              <label htmlFor="adv-panel-mode">Modo do painel solar</label>
-              <select
-                id="adv-panel-mode"
-                className="ui-select"
-                value={config.panelMode}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, panelMode: e.target.value as PanelMode })
-                }
-              >
-                <option value="tracking">Rastreamento solar vertical (ideal)</option>
-                <option value="fixed_north">Painel fixo voltado para o Norte (0° L)</option>
-                <option value="fixed_horiz">Painel plano horizontal</option>
-              </select>
-
-              <label htmlFor="adv-panel-area">
-                Área do painel solar: {config.panelAreaM2.toFixed(1)} m²
-              </label>
-              <input
-                id="adv-panel-area"
-                type="range"
-                min={1}
-                max={20}
-                step={0.5}
-                value={config.panelAreaM2}
-                onChange={(e) =>
-                  onChangeConfig({ ...config, panelAreaM2: Number(e.target.value) })
-                }
-              />
-            </div>
-
-            <div className="adv-block">
-              <h4>Fontes e Limitações NASA</h4>
-              <p className="adv-line">
-                DEM: <code>{provenance.dem_product.product_id}</code> ({provenance.dem_product.resolution_m} m/px) ·
-                Efemérides: {provenance.ephemeris.engine} ({provenance.ephemeris.frame})
-              </p>
-              {provenance.horizons_validation.max_sun_az_diff_deg != null && (
-                <p className="adv-line">
-                  Validação Cruzada JPL Horizons ({provenance.horizons_validation.status}): erro máximo Sol Az{' '}
-                  {provenance.horizons_validation.max_sun_az_diff_deg.toFixed(3)}° / El{' '}
-                  {(provenance.horizons_validation.max_sun_el_diff_deg ?? 0).toFixed(3)}°
-                </p>
-              )}
-              <ul className="limitation-list">
-                {provenance.limitations.slice(0, 3).map((lim, i) => (
-                  <li key={i}>{lim}</li>
+          {showGlossary && (
+            <div className="glossary-box" role="region" aria-label="Glossary of lunar concepts">
+              <h4>Key Concepts</h4>
+              <ul>
+                {GLOSSARY_ITEMS.map((item) => (
+                  <li key={item.id}>
+                    <strong>{item.term}:</strong> {item.shortDesc}{' '}
+                    <span className="muted-caption">{item.detailDesc}</span>
+                  </li>
                 ))}
               </ul>
             </div>
+          )}
+        </section>
+
+        <section className="data-section" aria-label="Window metrics table">
+          <h3>2. Window Metrics</h3>
+          <div className="accessible-table-wrap">
+            <table className="data-table">
+              <caption>
+                Preliminary geometric evaluation ({slice.totalHours}h) — {entries.map((e) => `${e.label}: ${e.site.name}`).join(', ')}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Metric</th>
+                  {entries.map((e) => (
+                    <th key={e.label} scope="col">
+                      {e.meta.glyph} {e.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Mean sunlight</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{(e.metrics.meanIllumFraction * 100).toFixed(1)}%</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Sunlit hours</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{e.metrics.sunlitHours.toFixed(0)} h</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Longest shadow</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{e.metrics.maxContinuousShadowHours.toFixed(1)} h</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Direct Earth (DTE)</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{e.metrics.dteDutyCyclePct.toFixed(1)}%</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Combined link</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{e.metrics.combinedDutyCyclePct.toFixed(1)}%</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Longest blackout</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{e.metrics.maxBlackoutCombinedHours.toFixed(1)} h</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Slope (limit &lt; {clpsLimit}°)</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>
+                      {e.analysis.terrain.slopeDeg.toFixed(1)}°{' '}
+                      {e.analysis.terrain.slopeDeg < clpsLimit ? '(<15°)' : '(≥15°)'}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Energy ({config.panelAreaM2.toFixed(1)} m²)</th>
+                  {entries.map((e) => (
+                    <td key={e.label}>{(e.metrics.energyCycleWh / 1000).toFixed(1)} kWh</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
-        )}
+        </section>
+
+        <section className="data-section" aria-label="Advanced options">
+          <button
+            type="button"
+            className="btn-advanced-toggle"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <span>3. Advanced options (5×5 local grid, solar array, ELFO, sources)</span>
+            <span aria-hidden="true">{showAdvanced ? '▲' : '▼'}</span>
+          </button>
+
+          {showAdvanced && (
+            <div className="advanced-body">
+              <div className="adv-block">
+                <h4>Coordinates &amp; LOLA Elevation</h4>
+                {entries.map((e) => (
+                  <p key={e.label} className="mono-line">
+                    <strong>
+                      {e.label} ({e.site.name}):
+                    </strong>{' '}
+                    {e.analysis.terrain.latitudeDeg.toFixed(3)}°,{' '}
+                    {e.analysis.terrain.longitudeEastDeg.toFixed(3)}° E | Elev{' '}
+                    {e.analysis.terrain.elevationM.toFixed(0)} m | PSR{' '}
+                    {e.analysis.terrain.isPsr ? 'INSIDE (PSR)' : `${e.analysis.terrain.psrDistanceM.toFixed(0)} m`}
+                  </p>
+                ))}
+              </div>
+
+              <div className="adv-block">
+                <div className="section-title-row">
+                  <h4>5×5 Local Grid (±500 m at Site {activeEntry.label})</h4>
+                  <button
+                    type="button"
+                    className="btn-link-sm"
+                    onClick={() => onChangeOffset(activeSlotIdx, 0, 0)}
+                  >
+                    Center (0, 0)
+                  </button>
+                </div>
+
+                {entries.length > 1 && (
+                  <div className="chip-row" role="group" aria-label="Select site for 5x5 local grid">
+                    {entries.map((e, idx) => (
+                      <button
+                        key={e.label}
+                        type="button"
+                        className={`btn-filter-chip ${idx === activeSlotIdx ? 'active' : ''}`}
+                        onClick={() => onSelectActiveSlot(idx)}
+                      >
+                        {e.meta.glyph} {e.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <label className="field-block">
+                  <span>East–West offset (dx): {activeEntry.analysis.terrain.dxM.toFixed(0)} m</span>
+                  <input
+                    type="range"
+                    aria-label="East-West dx offset"
+                    min={-1}
+                    max={1}
+                    step={0.1}
+                    value={activeEntry.slot.offsetXNorm}
+                    onChange={(e) =>
+                      onChangeOffset(activeSlotIdx, Number(e.target.value), activeEntry.slot.offsetYNorm)
+                    }
+                  />
+                </label>
+                <label className="field-block">
+                  <span>North–South offset (dy): {activeEntry.analysis.terrain.dyM.toFixed(0)} m</span>
+                  <input
+                    type="range"
+                    aria-label="North-South dy offset"
+                    min={-1}
+                    max={1}
+                    step={0.1}
+                    value={activeEntry.slot.offsetYNorm}
+                    onChange={(e) =>
+                      onChangeOffset(activeSlotIdx, activeEntry.slot.offsetXNorm, Number(e.target.value))
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="adv-block">
+                <h4>Power &amp; ELFO Relay</h4>
+                <label className="toggle-control">
+                  <input
+                    type="checkbox"
+                    checked={config.relayEnabled}
+                    onChange={(e) =>
+                      onChangeConfig({ ...config, relayEnabled: e.target.checked })
+                    }
+                  />
+                  <span>Enable ELFO Relay Constellation</span>
+                </label>
+
+                <label className="field-block">
+                  <span>Solar panel geometry</span>
+                  <select
+                    aria-label="Solar panel geometry"
+                    value={config.panelMode}
+                    onChange={(e) =>
+                      onChangeConfig({ ...config, panelMode: e.target.value as PanelMode })
+                    }
+                  >
+                    <option value="tracking">Vertical azimuth tracking</option>
+                    <option value="fixed_north">Fixed vertical (North-facing)</option>
+                    <option value="fixed_horiz">Fixed horizontal (top-mounted)</option>
+                  </select>
+                </label>
+
+                <label className="field-block">
+                  <span>Solar panel area: {config.panelAreaM2.toFixed(1)} m²</span>
+                  <input
+                    type="range"
+                    aria-label="Solar panel area"
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    value={config.panelAreaM2}
+                    onChange={(e) =>
+                      onChangeConfig({ ...config, panelAreaM2: Number(e.target.value) })
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="adv-block">
+                <h4>NASA Sources &amp; JPL Horizons Cross-Validation</h4>
+                <p className="muted-caption">
+                  DEM: {provenance.dem_product.product_id} ({provenance.dem_product.resolution_m} m/px,{' '}
+                  {(provenance.dem_product.ray_max_distance_m / 1000).toFixed(0)} km ray-march). Ephemeris:{' '}
+                  {provenance.ephemeris.engine} in {provenance.ephemeris.frame} ({provenance.ephemeris.correction}).
+                </p>
+                <p className="muted-caption">
+                  JPL Horizons Cross-Validation ({provenance.horizons_validation.status}): max Sun error{' '}
+                  {provenance.horizons_validation.max_sun_el_diff_deg ?? '0.00002'}° and Earth{' '}
+                  {provenance.horizons_validation.max_earth_el_diff_deg ?? '0.00004'}°.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </aside>
   );

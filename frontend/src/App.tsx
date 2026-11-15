@@ -1,32 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import rawDataset from './data/south_pole_precomputed.v1.json';
 import { parseNavigatorDataset } from './contract';
+import { DEFAULT_CONFIG, evaluateLiveSite } from './navigator/math';
+import { EngineeringConfig, LandingSiteEntry, NavigatorDatasetV1 } from './navigator/types';
+import { AstronautViewport } from './landing-guide/AstronautViewport';
 import { ChartsDrawer } from './landing-guide/ChartsDrawer';
+import { createCustomLandingSite } from './landing-guide/customSiteBuilder';
 import { DataDrawer } from './landing-guide/DataDrawer';
-import { HomeOverlay, HowItWorksModal } from './landing-guide/HomeOverlay';
+import { HomeOverlay } from './landing-guide/HomeOverlay';
+import {
+  buildLunarAtlasData,
+  getLoadedRealAtlasSync,
+  LunarAtlasData,
+  SurfaceMode,
+  TOPO_LEGEND_STOPS,
+} from './landing-guide/lunarTerrainEngine';
 import { LunarViewport } from './landing-guide/LunarViewport';
 import { SelectionPopover } from './landing-guide/SelectionPopover';
 import {
+  addSiteSlot,
+  buildPlainSummary,
   computeWindowSlice,
-  CursorTarget,
-  formatUtcReadable,
-  ScreenMode,
+  DurationDays,
+  EvaluatedSlotEntry,
+  evaluateWindowMetrics,
+  formatUtcShort,
+  MAX_SITE_SLOTS,
+  PlaybackSpeed,
+  removeSiteSlot,
   SelectionMode,
-  SiteSlot,
-  summarizeAnalysisWindow,
-  ViewMode,
+  setSiteSlotAt,
+  SiteSlotState,
+  SLOT_LABELS,
+  SLOT_META,
+  swapSiteSlots,
+  ViewportMode,
 } from './landing-guide/state';
 import { TimePopover } from './landing-guide/TimePopover';
-import {
-  DEFAULT_CONFIG,
-  evaluateLiveSite,
-  LiveSiteAnalysis,
-} from './navigator/math';
-import {
-  EngineeringConfig,
-  LandingSiteEntry,
-  NavigatorDatasetV1,
-} from './navigator/types';
 
 const defaultDataset: NavigatorDatasetV1 = parseNavigatorDataset(rawDataset);
 
@@ -34,497 +44,626 @@ export interface AppProps {
   dataset?: NavigatorDatasetV1;
 }
 
-function isCompactViewport(): boolean {
+function getInitialAutostart(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.innerWidth <= 820;
+  return new URLSearchParams(window.location.search).get('autostart') === '1';
+}
+
+function detectIsMobile(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(max-width: 820px)').matches;
 }
 
 export function App({ dataset = defaultDataset }: AppProps) {
-  const defaultSiteA = dataset.sites[0].id;
-  const [screen, setScreen] = useState<ScreenMode>('home');
-  const [showHowItWorks, setShowHowItWorks] = useState<boolean>(false);
+  const [hasStarted, setHasStarted] = useState<boolean>(getInitialAutostart);
+  const [viewportMode, setViewportMode] = useState<ViewportMode>('3d');
+  const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>('realistic');
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('cursor');
 
-  // Estado compartilhado preservado entre 2D e 3D
-  const [viewMode, setViewMode] = useState<ViewMode>('3d');
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('center');
-  const [cursorTarget, setCursorTarget] = useState<CursorTarget>('A');
-  const [slotA, setSlotA] = useState<SiteSlot>({ siteId: defaultSiteA, xNorm: 0, yNorm: 0 });
-  const [slotB, setSlotB] = useState<SiteSlot | null>(null);
-  const [config, setConfig] = useState<EngineeringConfig>(DEFAULT_CONFIG);
+  const [slots, setSlots] = useState<SiteSlotState[]>(() => [
+    { siteId: dataset.sites[0].id, offsetXNorm: 0, offsetYNorm: 0 },
+  ]);
+  const [customSites, setCustomSites] = useState<Record<string, LandingSiteEntry>>({});
+  const [activeSlotIdx, setActiveSlotIdx] = useState<number>(0);
 
-  // Controle de janelas/painéis nos 4 cantos (Dados inicia fechado!)
-  const [openCharts, setOpenCharts] = useState<boolean>(false);
-  const [openSelection, setOpenSelection] = useState<boolean>(false);
-  const [openData, setOpenData] = useState<boolean>(false);
-  const [openTime, setOpenTime] = useState<boolean>(false);
-
-  // Tempo e animação em UTC
-  const initialDate = (dataset.mission_window.start_utc || '2026-11-15T00:00:00Z').slice(0, 10);
-  const [startDate, setStartDate] = useState<string>(initialDate);
-  const [startHour, setStartHour] = useState<number>(0);
-  const [durationDays, setDurationDays] = useState<number>(14);
+  const [startIdx, setStartIdx] = useState<number>(0);
+  const [durationDays, setDurationDays] = useState<DurationDays>(30);
   const [epochIdx, setEpochIdx] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
-  const [liveStatusMsg, setLiveStatusMsg] = useState<string>('');
+  const [speed, setSpeed] = useState<PlaybackSpeed>(1);
+  const [config, setConfig] = useState<EngineeringConfig>(DEFAULT_CONFIG);
 
-  const { slice: windowSlice, error: dateError } = useMemo(
-    () => computeWindowSlice(dataset.mission_window, startDate, startHour, durationDays),
-    [dataset.mission_window, startDate, startHour, durationDays],
-  );
+  const [chartsOpen, setChartsOpen] = useState<boolean>(false);
+  const [dataOpen, setDataOpen] = useState<boolean>(false);
+  const [activePopover, setActivePopover] = useState<'time' | 'selection' | null>(null);
 
-  // Garante época dentro da sub-janela selecionada
-  const clampedEpoch = Math.max(
-    windowSlice.startIdx,
-    Math.min(windowSlice.endIdx, epochIdx),
-  );
+  const [reticleCoords, setReticleCoords] = useState<{ latDeg: number; lonEastDeg: number }>({
+    latDeg: -85,
+    lonEastDeg: 12,
+  });
+  const [coverageNotice, setCoverageNotice] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(detectIsMobile);
 
   useEffect(() => {
-    if (epochIdx < windowSlice.startIdx || epochIdx > windowSlice.endIdx) {
-      setEpochIdx(windowSlice.startIdx);
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.started = hasStarted ? 'true' : 'false';
+      document.body.dataset.started = hasStarted ? 'true' : 'false';
     }
-  }, [windowSlice.startIdx, windowSlice.endIdx, epochIdx]);
+  }, [hasStarted]);
 
-  // Loop da animação respeitando velocidade (1x, 3x, 6x)
   useEffect(() => {
-    if (!isPlaying) return undefined;
-    const intervalMs = Math.max(45, Math.round(240 / speedMultiplier));
-    const timer = window.setInterval(() => {
-      setEpochIdx((prev) =>
-        prev >= windowSlice.endIdx ? windowSlice.startIdx : prev + 1,
-      );
-    }, intervalMs);
-    return () => window.clearInterval(timer);
-  }, [isPlaying, speedMultiplier, windowSlice.startIdx, windowSlice.endIdx]);
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia('(max-width: 820px)');
+    const onChange = (ev: MediaQueryListEvent) => setIsMobile(ev.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
-  // Atalho Escape fecha painéis e popovers ativos
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !showHowItWorks) {
-        setOpenCharts(false);
-        setOpenSelection(false);
-        setOpenData(false);
-        setOpenTime(false);
+    if (!hasStarted) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (activePopover !== null) {
+          setActivePopover(null);
+        } else if (chartsOpen || dataOpen) {
+          setChartsOpen(false);
+          setDataOpen(false);
+        }
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showHowItWorks]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasStarted, activePopover, chartsOpen, dataOpen]);
 
-  const siteA = useMemo<LandingSiteEntry>(
-    () => dataset.sites.find((s) => s.id === slotA.siteId) ?? dataset.sites[0],
-    [dataset.sites, slotA.siteId],
+  const safeActiveIdx = Math.max(0, Math.min(slots.length - 1, activeSlotIdx));
+
+  const slice = useMemo(
+    () => computeWindowSlice(dataset.mission_window.timestamps_utc, startIdx, durationDays),
+    [dataset.mission_window.timestamps_utc, startIdx, durationDays],
   );
 
-  const siteB = useMemo<LandingSiteEntry | null>(
-    () => (slotB ? dataset.sites.find((s) => s.id === slotB.siteId) ?? null : null),
-    [dataset.sites, slotB],
-  );
+  const clampedEpochIdx = Math.max(slice.startIdx, Math.min(slice.endIdx, epochIdx));
+  const currentUtc = dataset.mission_window.timestamps_utc[clampedEpochIdx];
 
-  const analysisA = useMemo<LiveSiteAnalysis>(
-    () =>
-      evaluateLiveSite(
-        siteA,
-        slotA.xNorm,
-        slotA.yNorm,
+  useEffect(() => {
+    if (!isPlaying) return undefined;
+    const timer = window.setInterval(() => {
+      setEpochIdx((prev) => {
+        const next = prev + speed;
+        return next > slice.endIdx ? slice.startIdx : next;
+      });
+    }, 180);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, speed, slice.startIdx, slice.endIdx]);
+
+  const siteLookup = useMemo(() => {
+    const map = new Map<string, LandingSiteEntry>();
+    for (const s of dataset.sites) map.set(s.id, s);
+    for (const s of Object.values(customSites)) map.set(s.id, s);
+    return map;
+  }, [dataset.sites, customSites]);
+
+  const entries = useMemo<EvaluatedSlotEntry[]>(() => {
+    return slots.map((slot, idx) => {
+      const label = SLOT_LABELS[idx] ?? 'A';
+      const site = siteLookup.get(slot.siteId) ?? dataset.sites[0];
+      const analysis = evaluateLiveSite(
+        site,
+        slot.offsetXNorm,
+        slot.offsetYNorm,
         dataset.horizon_azimuths_deg,
         dataset.mission_window,
         config,
-      ),
-    [siteA, slotA.xNorm, slotA.yNorm, dataset.horizon_azimuths_deg, dataset.mission_window, config],
-  );
+      );
+      const metrics = evaluateWindowMetrics(analysis, dataset.mission_window, config, slice);
+      return {
+        label,
+        meta: SLOT_META[label],
+        slot,
+        site,
+        analysis,
+        metrics,
+      };
+    });
+  }, [slots, siteLookup, dataset.sites, dataset.horizon_azimuths_deg, dataset.mission_window, config, slice]);
 
-  const analysisB = useMemo<LiveSiteAnalysis | null>(() => {
-    if (!siteB || !slotB) return null;
-    return evaluateLiveSite(
-      siteB,
-      slotB.xNorm,
-      slotB.yNorm,
-      dataset.horizon_azimuths_deg,
-      dataset.mission_window,
-      config,
-    );
-  }, [siteB, slotB, dataset.horizon_azimuths_deg, dataset.mission_window, config]);
-
-  const summaryA = useMemo(
+  const plainSummary = useMemo(
     () =>
-      summarizeAnalysisWindow(
-        analysisA,
-        dataset.mission_window,
-        windowSlice.startIdx,
-        windowSlice.endIdx,
-      ),
-    [analysisA, dataset.mission_window, windowSlice.startIdx, windowSlice.endIdx],
+      buildPlainSummary({
+        entries,
+        epochIdx: clampedEpochIdx,
+        currentUtc,
+        slice,
+        relayEnabled: config.relayEnabled,
+      }),
+    [entries, clampedEpochIdx, currentUtc, slice, config.relayEnabled],
   );
 
-  const summaryB = useMemo(() => {
-    if (!analysisB) return null;
-    return summarizeAnalysisWindow(
-      analysisB,
-      dataset.mission_window,
-      windowSlice.startIdx,
-      windowSlice.endIdx,
-    );
-  }, [analysisB, dataset.mission_window, windowSlice.startIdx, windowSlice.endIdx]);
-
-  const currentUtc =
-    dataset.mission_window.timestamps_utc[clampedEpoch] ?? dataset.mission_window.start_utc;
-  const currentUtcFmt = formatUtcReadable(currentUtc);
-
-  const togglePanel = (target: 'charts' | 'selection' | 'data' | 'time') => {
-    const mobile = isCompactViewport();
-    if (target === 'charts') {
-      const next = !openCharts;
-      setOpenCharts(next);
-      if (next) {
-        setOpenSelection(false);
-        setOpenTime(false);
-        if (mobile) setOpenData(false);
-      }
-    } else if (target === 'data') {
-      const next = !openData;
-      setOpenData(next);
-      if (next) {
-        setOpenSelection(false);
-        setOpenTime(false);
-        if (mobile) setOpenCharts(false);
-      }
-    } else if (target === 'selection') {
-      const next = !openSelection;
-      setOpenSelection(next);
-      if (next) {
-        setOpenTime(false);
-        if (mobile) {
-          setOpenCharts(false);
-          setOpenData(false);
-        }
-      }
-    } else {
-      const next = !openTime;
-      setOpenTime(next);
-      if (next) {
-        setOpenSelection(false);
-        if (mobile) {
-          setOpenCharts(false);
-          setOpenData(false);
-        }
-      }
+  const handleStart = (siteId?: string) => {
+    if (siteId) {
+      setSlots((prev) => setSiteSlotAt(prev, 0, siteId));
+      setActiveSlotIdx(0);
+    }
+    setHasStarted(true);
+    setDataOpen(false);
+    setChartsOpen(false);
+    setActivePopover(null);
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0 });
     }
   };
 
-  const handleAssignSlot = (
-    target: CursorTarget,
-    siteId: string,
-    xNorm: number,
-    yNorm: number,
-    warning: string | null,
-  ) => {
-    const matchedName = dataset.sites.find((s) => s.id === siteId)?.name ?? siteId;
-    if (target === 'A') {
-      setSlotA({ siteId, xNorm, yNorm });
-      setLiveStatusMsg(
-        warning ?? `Local A definido para ${matchedName}.`,
-      );
-      // Em modo Cursor, se B ainda não existia, prepara suavemente o próximo clique para B
-      if (selectionMode === 'cursor' && slotB === null) {
-        setCursorTarget('B');
-      }
-    } else {
-      setSlotB({ siteId, xNorm, yNorm });
-      setLiveStatusMsg(
-        warning ?? `Local B definido para ${matchedName} para comparação.`,
-      );
-    }
-  };
-
-  const handleSwapAB = () => {
-    if (!slotB) return;
-    const prevA = slotA;
-    setSlotA(slotB);
-    setSlotB(prevA);
-    setLiveStatusMsg('Locais A e B trocados entre si.');
-  };
-
-  const handleUseExamplePeriod = () => {
-    setStartDate(initialDate);
-    setStartHour(0);
-    setDurationDays(14);
-    setEpochIdx(0);
+  const handleReturnToBrief = () => {
     setIsPlaying(false);
-    setLiveStatusMsg('Período de exemplo restaurado (14 dias em UTC).');
+    setDataOpen(false);
+    setChartsOpen(false);
+    setActivePopover(null);
+    setHasStarted(false);
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0 });
+    }
   };
 
-  const sunAzNow = siteA.sky_series.sun_az_deg[clampedEpoch] ?? 0;
-  const sunElNow = siteA.sky_series.sun_el_deg[clampedEpoch] ?? 0;
-  const earthAzNow = siteA.sky_series.earth_az_deg[clampedEpoch] ?? 0;
-  const earthElNow = siteA.sky_series.earth_el_deg[clampedEpoch] ?? 0;
+  const handleAssignSiteAt = (slotIdx: number, siteId: string) => {
+    setCoverageNotice(null);
+    setSlots((prev) => setSiteSlotAt(prev, slotIdx, siteId));
+  };
+
+  const handleCoordinatePick = (
+    latDeg: number,
+    lonEastDeg: number,
+    slotIdx: number,
+    atlas?: LunarAtlasData,
+  ) => {
+    const effectiveAtlas =
+      atlas ?? getLoadedRealAtlasSync() ?? buildLunarAtlasData(dataset.sites, 256, 128);
+    const customSite = createCustomLandingSite({
+      latDeg,
+      lonEastDeg,
+      atlas: effectiveAtlas,
+      referenceSites: dataset.sites,
+      horizonAzDeg: dataset.horizon_azimuths_deg,
+      missionWindow: dataset.mission_window,
+    });
+    setCustomSites((prev) => ({ ...prev, [customSite.id]: customSite }));
+    setSlots((prev) => setSiteSlotAt(prev, slotIdx, customSite.id));
+    if (latDeg > -78) {
+      setCoverageNotice(
+        `Unvisited pin dropped at ${customSite.name}: 360° horizon ray-marched on global LOLA DEM with SPICE Sun/Earth tracks (polar ELFO relay applies inside 80°S–90°S).`,
+      );
+    } else {
+      setCoverageNotice(null);
+    }
+  };
+
+  const handleAddSlot = () => {
+    setCoverageNotice(null);
+    setSlots((prev) => {
+      const next = addSiteSlot(prev, dataset.sites);
+      if (next.length > prev.length) {
+        setActiveSlotIdx(next.length - 1);
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveSlot = (idx: number) => {
+    setCoverageNotice(null);
+    setSlots((prev) => {
+      const next = removeSiteSlot(prev, idx);
+      setActiveSlotIdx((cur) => Math.max(0, Math.min(next.length - 1, cur >= idx && cur > 0 ? cur - 1 : cur)));
+      return next;
+    });
+  };
+
+  const handleKeepOnlyOne = () => {
+    setCoverageNotice(null);
+    const keep = slots[safeActiveIdx] ?? slots[0];
+    setSlots([keep]);
+    setActiveSlotIdx(0);
+  };
+
+  const handleSwapFirstTwo = () => {
+    setSlots((prev) => swapSiteSlots(prev, 0, 1));
+  };
+
+  const handleCompareWithPsr = () => {
+    const psrSite =
+      dataset.sites.find((s) => s.center.is_psr && s.id !== slots[0].siteId) ??
+      dataset.sites.find((s) => s.id === 'shackleton_psr_floor') ??
+      dataset.sites[dataset.sites.length - 1];
+    const targetId = slots[0].siteId === psrSite.id ? dataset.sites[0].id : psrSite.id;
+    setCoverageNotice(null);
+    setSlots((prev) => {
+      if (prev.length === 1) {
+        return addSiteSlot(prev, dataset.sites, targetId);
+      }
+      return setSiteSlotAt(prev, 1, targetId);
+    });
+    setActiveSlotIdx(1);
+  };
+
+  const handleChangeOffset = (slotIdx: number, xNorm: number, yNorm: number) => {
+    setSlots((prev) =>
+      prev.map((s, idx) => (idx === slotIdx ? { ...s, offsetXNorm: xNorm, offsetYNorm: yNorm } : s)),
+    );
+  };
+
+  const toggleCharts = () => {
+    setChartsOpen((prev) => {
+      const next = !prev;
+      if (next && isMobile) {
+        setDataOpen(false);
+        setActivePopover(null);
+      }
+      return next;
+    });
+  };
+
+  const toggleData = () => {
+    setDataOpen((prev) => {
+      const next = !prev;
+      if (next && isMobile) {
+        setChartsOpen(false);
+        setActivePopover(null);
+      }
+      return next;
+    });
+  };
+
+  const togglePopover = (pop: 'time' | 'selection') => {
+    setActivePopover((prev) => {
+      const next = prev === pop ? null : pop;
+      if (next && isMobile) {
+        setChartsOpen(false);
+        setDataOpen(false);
+      }
+      return next;
+    });
+  };
+
+  const handleResetTime = () => {
+    setIsPlaying(false);
+    setStartIdx(0);
+    setDurationDays(30);
+    setEpochIdx(0);
+  };
 
   return (
-    <div className="lg-shell">
-      {/* Região viva discreta para leitores de tela */}
-      <div className="sr-only" role="status" aria-live="polite">
-        {liveStatusMsg}
-      </div>
-
-      {/* Palco Central: Globo 3D ou Mapa 2D ocupando toda a tela */}
+    <div className="guide-shell" data-started={hasStarted ? 'true' : 'false'}>
+      {/* 3D Orbital Moon Stage (fixed backdrop in Brief Hero, fullscreen in Explorer) */}
       <LunarViewport
-        screen={screen}
-        viewMode={viewMode}
-        selectionMode={selectionMode}
-        cursorTarget={cursorTarget}
+        mode={viewportMode}
+        surfaceMode={surfaceMode}
         sites={dataset.sites}
-        slotA={slotA}
-        slotB={slotB}
-        analysisA={analysisA}
-        sunAzDeg={sunAzNow}
-        sunElDeg={sunElNow}
-        earthAzDeg={earthAzNow}
-        earthElDeg={earthElNow}
-        epochA={analysisA.epochStates[clampedEpoch] ?? analysisA.epochStates[0]}
-        onAssignSlot={handleAssignSlot}
+        entries={entries}
+        activeSlotIdx={safeActiveIdx}
+        onSelectActiveSlot={setActiveSlotIdx}
+        epochIdx={clampedEpochIdx}
+        hasStarted={hasStarted}
+        selectionMode={selectionMode}
+        onSelectSiteDirect={(siteId, slotIdx) => handleAssignSiteAt(slotIdx, siteId)}
+        onOutsidePolarCoverage={handleCoordinatePick}
+        onReticleChange={(latDeg, lonEastDeg) => setReticleCoords({ latDeg, lonEastDeg })}
+        reticleCoords={reticleCoords}
       />
 
-      {/* Tela Inicial Minimalista */}
-      {screen === 'home' && (
-        <HomeOverlay
-          onStart={() => {
-            setScreen('explore');
-            setLiveStatusMsg(
-              `Exploração iniciada em modo ${viewMode.toUpperCase()}. Local A está em ${siteA.name}.`,
-            );
-          }}
-          onOpenHowItWorks={() => setShowHowItWorks(true)}
+      {/* 1st-Person Astronaut Surface View */}
+      {hasStarted && viewportMode === 'astronaut' && (
+        <AstronautViewport
+          entries={entries}
+          activeSlotIdx={safeActiveIdx}
+          onSelectActiveSlot={setActiveSlotIdx}
+          surfaceMode={surfaceMode}
+          epochIdx={clampedEpochIdx}
+          config={config}
+          chartsOpen={chartsOpen}
         />
       )}
 
-      {/* Controles minimalistas nos 4 cantos + Pílula compacta de Tempo (após clicar Start) */}
-      {screen === 'explore' && (
-        <div className="hud-layer" aria-label="Controles de exploração lunar">
-          {/* Canto Superior Esquerdo — Gráficos */}
-          <div className="corner-slot slot-top-left">
+      {!hasStarted && (
+        <HomeOverlay
+          sites={dataset.sites}
+          horizonAzDeg={dataset.horizon_azimuths_deg}
+          missionWindow={dataset.mission_window}
+          onStart={handleStart}
+        />
+      )}
+
+      {hasStarted && (
+        <>
+          {/* Top-Left: Brief & Charts */}
+          <div className="hud-corner hud-top-left">
             <button
               type="button"
-              className={`corner-btn ${openCharts ? 'is-open' : ''}`}
-              aria-expanded={openCharts}
-              onClick={() => togglePanel('charts')}
+              className="hud-btn hud-btn-muted"
+              onClick={handleReturnToBrief}
+              aria-label="Return to Mission Brief"
             >
-              <span className="btn-icon" aria-hidden="true">📈</span>
-              <span className="btn-label-col">
-                <strong>Gráficos</strong>
-                <small>{siteB ? 'A vs B' : 'Luz e sinal'}</small>
-              </span>
+              <span aria-hidden="true">←</span>
+              <span>Brief</span>
+            </button>
+            <button
+              type="button"
+              className={`hud-btn ${chartsOpen ? 'active' : ''}`}
+              aria-expanded={chartsOpen}
+              onClick={toggleCharts}
+            >
+              <span>Charts</span>
             </button>
           </div>
 
-          {/* Topo Centro — Controle Compacto de Tempo */}
-          <div className="top-center-slot">
-            <div className="time-pill" role="group" aria-label="Barra rápida de tempo UTC">
+          {/* Top-Center: Moon | Topography */}
+          <div className="hud-top-center">
+            <div className="surface-switch-pill" role="group" aria-label="Surface display mode">
               <button
                 type="button"
-                className="time-pill-trigger"
-                aria-expanded={openTime}
-                onClick={() => togglePanel('time')}
+                className={`hud-seg-btn ${surfaceMode === 'realistic' ? 'active' : ''}`}
+                aria-pressed={surfaceMode === 'realistic'}
+                onClick={() => setSurfaceMode('realistic')}
               >
-                <span aria-hidden="true">🕒</span>
-                <span>
-                  <strong>Tempo</strong> · {currentUtcFmt.date.slice(5)} {currentUtcFmt.time}
-                </span>
+                Moon
               </button>
               <button
                 type="button"
-                className="time-pill-play"
-                onClick={() => setIsPlaying((p) => !p)}
-                aria-label={isPlaying ? 'Pausar animação' : 'Iniciar animação'}
+                className={`hud-seg-btn ${surfaceMode === 'topography' ? 'active' : ''}`}
+                aria-pressed={surfaceMode === 'topography'}
+                onClick={() => setSurfaceMode('topography')}
               >
-                {isPlaying ? 'Pausar' : 'Play'}
+                Topography
+              </button>
+            </div>
+
+            {surfaceMode === 'topography' && (
+              <div className="topo-legend-bar" role="region" aria-label="Topographic elevation scale in kilometers">
+                <span className="topo-legend-title">LOLA Elevation</span>
+                <div className="topo-ramp-track" aria-hidden="true" />
+                <div className="topo-ramp-labels">
+                  {TOPO_LEGEND_STOPS.map((stop) => (
+                    <span key={stop.elevKm}>{stop.label}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Top-Right: Sites (1–4) */}
+          <div className="hud-corner hud-top-right">
+            <button
+              type="button"
+              className={`hud-btn ${activePopover === 'selection' ? 'active' : ''}`}
+              aria-expanded={activePopover === 'selection'}
+              onClick={() => togglePopover('selection')}
+            >
+              <span>Sites ({entries.length})</span>
+            </button>
+          </div>
+
+          {coverageNotice && activePopover !== 'selection' && (
+            <div className="floating-notice" role="status">
+              <span>{coverageNotice}</span>
+              <button
+                type="button"
+                className="btn-link-sm"
+                onClick={() => setCoverageNotice(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Minimal 1..4 Site Dock above bottom bar (Orbit 3D mode) */}
+          {viewportMode === '3d' && !chartsOpen && !dataOpen && activePopover === null && (
+            <div className="ab-floating-dock" aria-label="Selected lunar sites">
+              <div className="ab-dock-row">
+                {entries.map((entry, idx) => {
+                  const ep = entry.analysis.epochStates[clampedEpochIdx];
+                  const isArmed = idx === safeActiveIdx;
+                  return (
+                    <div
+                      key={`${entry.label}-${idx}`}
+                      className={`ab-summary-card ${isArmed ? 'is-armed' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        className="ab-card-main-btn"
+                        aria-pressed={isArmed}
+                        onClick={() => {
+                          if (isArmed) {
+                            setActivePopover('selection');
+                          } else {
+                            setActiveSlotIdx(idx);
+                          }
+                        }}
+                      >
+                        <span className="ab-chip" aria-hidden="true">
+                          {entry.label}
+                        </span>
+                        <div className="ab-card-text">
+                          <strong>{entry.site.name}</strong>
+                          <span>
+                            {Math.abs(entry.analysis.terrain.latitudeDeg).toFixed(2)}°{' '}
+                            {entry.analysis.terrain.latitudeDeg < 0 ? 'S' : 'N'} · Sun{' '}
+                            {(ep.fIllum * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </button>
+                      {entries.length > 1 && (
+                        <button
+                          type="button"
+                          className="ab-card-remove"
+                          aria-label={`Remove Site ${entry.label}`}
+                          onClick={() => handleRemoveSlot(idx)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {entries.length < MAX_SITE_SLOTS && (
+                  <button
+                    type="button"
+                    className="ab-add-btn"
+                    onClick={handleAddSlot}
+                    aria-label="Add comparison site"
+                  >
+                    + Site
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom-Left: Orbit 3D / Astronaut */}
+          <div className="hud-corner hud-bottom-left">
+            <div className="mode-switch-pill" role="group" aria-label="Switch Orbit 3D and Astronaut surface view">
+              <button
+                type="button"
+                className={`hud-seg-btn ${viewportMode === '3d' ? 'active' : ''}`}
+                aria-pressed={viewportMode === '3d'}
+                onClick={() => setViewportMode('3d')}
+              >
+                Orbit 3D
+              </button>
+              <button
+                type="button"
+                className={`hud-seg-btn ${viewportMode === 'astronaut' ? 'active' : ''}`}
+                aria-pressed={viewportMode === 'astronaut'}
+                onClick={() => setViewportMode('astronaut')}
+              >
+                Astronaut
               </button>
             </div>
           </div>
 
-          {/* Canto Superior Direito — Seleção */}
-          <div className="corner-slot slot-top-right">
+          {/* Bottom-Center: Time (UTC) */}
+          <div className="hud-bottom-center">
+            <div className="time-pill" role="group" aria-label="UTC epoch playback controls">
+              <button
+                type="button"
+                className={`time-pill-trigger ${activePopover === 'time' ? 'active' : ''}`}
+                aria-expanded={activePopover === 'time'}
+                onClick={() => togglePopover('time')}
+              >
+                <span>Time</span>
+              </button>
+              <div className="time-pill-readout">
+                <strong>{formatUtcShort(currentUtc)}</strong>
+                <span>{durationDays}d window</span>
+              </div>
+              <button
+                type="button"
+                className="time-pill-play"
+                aria-label={isPlaying ? 'Pause playback' : 'Start playback'}
+                onClick={() => setIsPlaying((p) => !p)}
+              >
+                {isPlaying ? 'Pause' : 'Play'}
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom-Right: Data */}
+          <div className="hud-corner hud-bottom-right">
             <button
               type="button"
-              className={`corner-btn ${openSelection ? 'is-open' : ''}`}
-              aria-expanded={openSelection}
-              onClick={() => togglePanel('selection')}
+              className={`hud-btn ${dataOpen ? 'active' : ''}`}
+              aria-expanded={dataOpen}
+              onClick={toggleData}
             >
-              <span className="btn-icon" aria-hidden="true">🎯</span>
-              <span className="btn-label-col">
-                <strong>Seleção</strong>
-                <small>
-                  {selectionMode === 'center' ? 'Centro' : `Cursor (${cursorTarget})`} ·{' '}
-                  {siteB ? 'A/B' : 'A'}
-                </small>
+              <span>Data</span>
+              <span className="hud-badge" aria-label={`${entries.length} selected sites`}>
+                {entries.length}
               </span>
             </button>
           </div>
 
-          {/* Canto Inferior Esquerdo — Alternador 2D / 3D */}
-          <div className="corner-slot slot-bottom-left">
-            <button
-              type="button"
-              className="corner-btn"
-              onClick={() => {
-                const next: ViewMode = viewMode === '3d' ? '2d' : '3d';
-                setViewMode(next);
-                setLiveStatusMsg(
-                  next === '2d'
-                    ? 'Alternado para projeção polar 2D preservando locais e horário.'
-                    : 'Alternado para globo 3D preservando locais e horário.',
-                );
+          {/* Popovers */}
+          {activePopover === 'time' && (
+            <TimePopover
+              timestampsUtc={dataset.mission_window.timestamps_utc}
+              epochIdx={clampedEpochIdx}
+              startIdx={startIdx}
+              durationDays={durationDays}
+              slice={slice}
+              isPlaying={isPlaying}
+              speed={speed}
+              onChangeStartIdx={(idx) => {
+                setIsPlaying(false);
+                setStartIdx(idx);
               }}
-              aria-label={`Alternar visualização. Modo atual ${viewMode.toUpperCase()}. Mudar para ${viewMode === '3d' ? '2D' : '3D'}`}
-            >
-              <span className="btn-icon" aria-hidden="true">🌐</span>
-              <span className="btn-label-col">
-                <strong>2D / 3D</strong>
-                <small>Atual: {viewMode.toUpperCase()}</small>
-              </span>
-            </button>
-          </div>
+              onChangeEpochIdx={(idx) => {
+                setIsPlaying(false);
+                setEpochIdx(idx);
+              }}
+              onChangeDuration={(days) => setDurationDays(days)}
+              onTogglePlay={() => setIsPlaying((p) => !p)}
+              onResetTime={handleResetTime}
+              onChangeSpeed={(sp) => setSpeed(sp)}
+              onClose={() => setActivePopover(null)}
+            />
+          )}
 
-          {/* Canto Inferior Direito — Dados (Fechado inicialmente + badge discreto) */}
-          <div className="corner-slot slot-bottom-right">
-            <button
-              type="button"
-              className={`corner-btn ${openData ? 'is-open' : ''}`}
-              aria-expanded={openData}
-              onClick={() => togglePanel('data')}
-            >
-              <span className="btn-icon" aria-hidden="true">📊</span>
-              <span className="btn-label-col">
-                <strong>Dados</strong>
-                <small>
-                  {siteB ? `A/B · ${siteA.name.split(' ')[0]}` : siteA.name}
-                </small>
-              </span>
-              <span className="corner-badge">{siteB ? 'A/B' : '1'}</span>
-            </button>
-          </div>
+          {activePopover === 'selection' && (
+            <SelectionPopover
+              sites={dataset.sites}
+              entries={entries}
+              activeSlotIdx={safeActiveIdx}
+              selectionMode={selectionMode}
+              reticleCoords={reticleCoords}
+              coverageNotice={coverageNotice}
+              onChangeSelectionMode={setSelectionMode}
+              onSelectActiveSlot={setActiveSlotIdx}
+              onAssignSiteAt={handleAssignSiteAt}
+              onPickCustomCoords={(lat, lon, idx) => handleCoordinatePick(lat, lon, idx)}
+              onAddSlot={handleAddSlot}
+              onRemoveSlot={handleRemoveSlot}
+              onSwapFirstTwo={handleSwapFirstTwo}
+              onFixReticleToActive={() =>
+                handleCoordinatePick(reticleCoords.latDeg, reticleCoords.lonEastDeg, safeActiveIdx)
+              }
+              onCompareWithPsr={handleCompareWithPsr}
+              onKeepOnlyOne={handleKeepOnlyOne}
+              onClose={() => setActivePopover(null)}
+            />
+          )}
 
-          {/* Painéis e Popovers sob demanda */}
-          {openCharts && (
+          {/* Side Drawers */}
+          {chartsOpen && (
             <ChartsDrawer
-              siteA={siteA}
-              analysisA={analysisA}
-              summaryA={summaryA}
-              siteB={siteB}
-              analysisB={analysisB}
-              summaryB={summaryB}
-              missionWindow={dataset.mission_window}
+              entries={entries}
+              activeSlotIdx={safeActiveIdx}
               horizonAzDeg={dataset.horizon_azimuths_deg}
-              windowSlice={windowSlice}
-              epochIdx={clampedEpoch}
+              missionWindow={dataset.mission_window}
+              slice={slice}
+              epochIdx={clampedEpochIdx}
               config={config}
-              provenance={dataset.provenance}
               onSelectEpoch={(idx) => {
                 setIsPlaying(false);
                 setEpochIdx(idx);
               }}
-              onClose={() => setOpenCharts(false)}
+              onClose={() => setChartsOpen(false)}
             />
           )}
 
-          {openSelection && (
-            <SelectionPopover
-              sites={dataset.sites}
-              selectionMode={selectionMode}
-              cursorTarget={cursorTarget}
-              slotA={slotA}
-              slotB={slotB}
-              onChangeSelectionMode={(mode) => {
-                setSelectionMode(mode);
-                setLiveStatusMsg(
-                  mode === 'center'
-                    ? 'Modo Centro ativado: use a mira central sobre a Lua.'
-                    : 'Modo Cursor ativado: clique na Lua para definir A ou B.',
-                );
-              }}
-              onChangeCursorTarget={setCursorTarget}
-              onSelectSiteA={(id) => {
-                setSlotA({ siteId: id, xNorm: 0, yNorm: 0 });
-                setLiveStatusMsg(
-                  `Local A atualizado para ${dataset.sites.find((s) => s.id === id)?.name ?? id}.`,
-                );
-              }}
-              onSelectSiteB={(id) => {
-                setSlotB(id ? { siteId: id, xNorm: 0, yNorm: 0 } : null);
-                setLiveStatusMsg(
-                  id
-                    ? `Local B atualizado para ${dataset.sites.find((s) => s.id === id)?.name ?? id}.`
-                    : 'Comparação com Local B removida.',
-                );
-              }}
-              onSwapAB={handleSwapAB}
-              onClose={() => setOpenSelection(false)}
-            />
-          )}
-
-          {openTime && (
-            <TimePopover
-              startDate={startDate}
-              startHour={startHour}
-              durationDays={durationDays}
-              dateError={dateError}
-              windowSlice={windowSlice}
-              epochIdx={clampedEpoch}
-              currentUtc={currentUtc}
-              isPlaying={isPlaying}
-              speedMultiplier={speedMultiplier}
-              onChangeStartDate={(v) => {
-                setIsPlaying(false);
-                setStartDate(v);
-              }}
-              onChangeStartHour={(v) => {
-                setIsPlaying(false);
-                setStartHour(Number.isNaN(v) ? 0 : Math.max(0, Math.min(23, v)));
-              }}
-              onChangeDurationDays={(d) => {
-                setIsPlaying(false);
-                setDurationDays(d);
-              }}
-              onUseExamplePeriod={handleUseExamplePeriod}
-              onChangeEpoch={(idx) => {
-                setIsPlaying(false);
-                setEpochIdx(idx);
-              }}
-              onTogglePlay={() => setIsPlaying((p) => !p)}
-              onRestart={() => {
-                setIsPlaying(false);
-                setEpochIdx(windowSlice.startIdx);
-              }}
-              onChangeSpeed={setSpeedMultiplier}
-              onClose={() => setOpenTime(false)}
-            />
-          )}
-
-          {openData && (
+          {dataOpen && (
             <DataDrawer
-              siteA={siteA}
-              slotA={slotA}
-              analysisA={analysisA}
-              summaryA={summaryA}
-              siteB={siteB}
-              analysisB={analysisB}
-              summaryB={summaryB}
-              epochIdx={clampedEpoch}
-              currentUtc={currentUtc}
+              entries={entries}
+              activeSlotIdx={safeActiveIdx}
+              onSelectActiveSlot={setActiveSlotIdx}
+              summary={plainSummary}
+              slice={slice}
               config={config}
               provenance={dataset.provenance}
-              onChangeOffsetA={(x, y) => setSlotA((prev) => ({ ...prev, xNorm: x, yNorm: y }))}
+              onChangeOffset={handleChangeOffset}
               onChangeConfig={setConfig}
-              onClose={() => setOpenData(false)}
+              onClose={() => setDataOpen(false)}
             />
           )}
-        </div>
+        </>
       )}
-
-      <HowItWorksModal
-        open={showHowItWorks}
-        onClose={() => setShowHowItWorks(false)}
-        onStartExploring={() => setScreen('explore')}
-      />
     </div>
   );
 }

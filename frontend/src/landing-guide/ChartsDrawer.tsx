@@ -1,396 +1,497 @@
 import React, { useMemo, useState } from 'react';
 import { LiveSiteAnalysis } from '../navigator/math';
-import { PolarHorizonSkyPlot } from '../navigator/PolarHorizonSkyPlot';
-import {
-  EngineeringConfig,
-  LandingSiteEntry,
-  MissionWindow,
-  NavigatorProvenance,
-} from '../navigator/types';
-import { formatUtcReadable, WindowSlice, WindowSummary } from './state';
+import { EngineeringConfig, MissionWindow } from '../navigator/types';
+import { EvaluatedSlotEntry, formatUtcShort, WindowSlice } from './state';
 
 interface ChartsDrawerProps {
-  siteA: LandingSiteEntry;
-  analysisA: LiveSiteAnalysis;
-  summaryA: WindowSummary;
-  siteB: LandingSiteEntry | null;
-  analysisB: LiveSiteAnalysis | null;
-  summaryB: WindowSummary | null;
-  missionWindow: MissionWindow;
+  entries: EvaluatedSlotEntry[];
+  activeSlotIdx: number;
   horizonAzDeg: number[];
-  windowSlice: WindowSlice;
+  missionWindow: MissionWindow;
+  slice: WindowSlice;
   epochIdx: number;
   config: EngineeringConfig;
-  provenance: NavigatorProvenance;
   onSelectEpoch: (idx: number) => void;
   onClose: () => void;
 }
 
-interface BlackoutInterval {
-  startUtc: string;
-  endUtc: string;
-  hours: number;
+function toPlotY(elDeg: number, yMin: number, yMax: number, top: number, h: number): number {
+  const clamped = Math.max(yMin, Math.min(yMax, elDeg));
+  const frac = (clamped - yMin) / (yMax - yMin);
+  return top + h * (1 - frac);
 }
 
-function extractBlackouts(
+interface LinkSegment {
+  start: number;
+  end: number;
+  kind: 'dte' | 'elfo' | 'blackout';
+}
+
+function buildCommsSegments(
   analysis: LiveSiteAnalysis,
-  missionWindow: MissionWindow,
   startIdx: number,
   endIdx: number,
   relayEnabled: boolean,
-): BlackoutInterval[] {
-  const stepHours = missionWindow.step_seconds / 3600;
-  const spans: BlackoutInterval[] = [];
-  let runStart: number | null = null;
-
-  for (let i = startIdx; i <= endIdx; i++) {
-    const st = analysis.epochStates[i];
-    const hasLink = relayEnabled ? st.combinedLinkVisible : st.dteVisible;
-    if (!hasLink) {
-      if (runStart === null) runStart = i;
-    } else if (runStart !== null) {
-      spans.push({
-        startUtc: missionWindow.timestamps_utc[runStart],
-        endUtc: missionWindow.timestamps_utc[i - 1],
-        hours: (i - runStart) * stepHours,
-      });
-      runStart = null;
+): LinkSegment[] {
+  const segments: LinkSegment[] = [];
+  const kindAt = (i: number): 'dte' | 'elfo' | 'blackout' => {
+    const ep = analysis.epochStates[i];
+    if (ep.dteVisible) return 'dte';
+    if (relayEnabled && ep.elfoConstellationVisible) return 'elfo';
+    return 'blackout';
+  };
+  let curKind = kindAt(startIdx);
+  let segStart = startIdx;
+  for (let i = startIdx + 1; i <= endIdx; i++) {
+    const k = kindAt(i);
+    if (k !== curKind) {
+      segments.push({ start: segStart, end: i - 1, kind: curKind });
+      curKind = k;
+      segStart = i;
     }
   }
-  if (runStart !== null) {
-    spans.push({
-      startUtc: missionWindow.timestamps_utc[runStart],
-      endUtc: missionWindow.timestamps_utc[endIdx],
-      hours: (endIdx - runStart + 1) * stepHours,
-    });
-  }
-  return spans;
+  segments.push({ start: segStart, end: endIdx, kind: curKind });
+  return segments;
 }
 
 export const ChartsDrawer: React.FC<ChartsDrawerProps> = ({
-  siteA,
-  analysisA,
-  summaryA,
-  siteB,
-  analysisB,
-  summaryB,
-  missionWindow,
+  entries,
+  activeSlotIdx,
   horizonAzDeg,
-  windowSlice,
+  missionWindow,
+  slice,
   epochIdx,
   config,
-  provenance,
   onSelectEpoch,
   onClose,
 }) => {
-  const [viewTab, setViewTab] = useState<'charts' | 'table'>('charts');
-  const [skyTarget, setSkyTarget] = useState<'A' | 'B'>('A');
+  const [tableMode, setTableMode] = useState(false);
 
-  const { startIdx, endIdx } = windowSlice;
-  const spanCount = Math.max(2, endIdx - startIdx + 1);
+  const primaryEntry = entries[activeSlotIdx] ?? entries[0];
+  const w = 380;
+  const left = 36;
+  const right = 12;
+  const plotW = w - left - right;
+  const span = Math.max(1, slice.endIdx - slice.startIdx);
+  const idxToX = (i: number) => left + ((i - slice.startIdx) / span) * plotW;
 
-  // Construção dos pontos SVG para curvas de luz solar (A sólido âmbar, B tracejado ciano)
-  const W = 340;
-  const H = 112;
-  const PL = 34;
-  const PR = 10;
-  const PT = 12;
-  const PB = 22;
-  const plotW = W - PL - PR;
-  const plotH = H - PT - PB;
+  const hSolar = 130;
+  const solarTop = 14;
+  const solarH = 88;
 
-  const toX = (idx: number) => PL + ((idx - startIdx) / Math.max(1, endIdx - startIdx)) * plotW;
-  const toY = (pct: number) => PT + (1 - Math.max(0, Math.min(100, pct)) / 100) * plotH;
+  const solarSeriesPoints = useMemo(() => {
+    return entries.map((entry) => {
+      const pts: string[] = [];
+      for (let i = slice.startIdx; i <= slice.endIdx; i++) {
+        const f = entry.analysis.epochStates[i].fIllum;
+        pts.push(`${idxToX(i).toFixed(1)},${(solarTop + solarH * (1 - f)).toFixed(1)}`);
+      }
+      return { entry, points: pts.join(' ') };
+    });
+  }, [entries, slice.startIdx, slice.endIdx]);
 
-  const sunPathA = useMemo(() => {
-    const pts: string[] = [];
-    for (let i = startIdx; i <= endIdx; i++) {
-      const x = toX(i);
-      const y = toY(analysisA.epochStates[i].fIllum * 100);
-      pts.push(`${i === startIdx ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
-    }
-    return pts.join(' ');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisA, startIdx, endIdx]);
+  const commsTimelineRows = useMemo(() => {
+    return entries.map((entry) => ({
+      entry,
+      segments: buildCommsSegments(entry.analysis, slice.startIdx, slice.endIdx, config.relayEnabled),
+    }));
+  }, [entries, slice.startIdx, slice.endIdx, config.relayEnabled]);
 
-  const sunPathB = useMemo(() => {
-    if (!analysisB) return '';
-    const pts: string[] = [];
-    for (let i = startIdx; i <= endIdx; i++) {
-      const x = toX(i);
-      const y = toY(analysisB.epochStates[i].fIllum * 100);
-      pts.push(`${i === startIdx ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
-    }
-    return pts.join(' ');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisB, startIdx, endIdx]);
+  const commsSvgHeight = 20 + entries.length * 28;
 
-  const blackoutsA = useMemo(
-    () => extractBlackouts(analysisA, missionWindow, startIdx, endIdx, config.relayEnabled),
-    [analysisA, missionWindow, startIdx, endIdx, config.relayEnabled],
+  const hSky = 148;
+  const skyTop = 14;
+  const skyH = 104;
+  const allHorizonVals = entries.flatMap((e) => e.analysis.terrain.horizonElevDeg);
+  const hMin = Math.min(
+    ...allHorizonVals,
+    primaryEntry.site.sky_series.sun_el_deg[epochIdx],
+    primaryEntry.site.sky_series.earth_el_deg[epochIdx],
   );
-  const blackoutsB = useMemo(
-    () =>
-      analysisB
-        ? extractBlackouts(analysisB, missionWindow, startIdx, endIdx, config.relayEnabled)
-        : [],
-    [analysisB, missionWindow, startIdx, endIdx, config.relayEnabled],
+  const hMax = Math.max(
+    ...allHorizonVals,
+    primaryEntry.site.sky_series.sun_el_deg[epochIdx],
+    primaryEntry.site.sky_series.earth_el_deg[epochIdx],
+    14,
   );
+  const yMin = Math.floor(Math.min(-6, hMin - 2));
+  const yMax = Math.ceil(Math.max(20, Math.min(85, hMax + 4)));
+  const azToX = (az: number) => left + ((((az % 360) + 360) % 360) / 360) * plotW;
 
-  // Linhas da tabela acessível (amostragem inteligente max ~24 linhas + época atual garantida)
+  const terrainLines = entries.map((entry) => {
+    const hArr = entry.analysis.terrain.horizonElevDeg;
+    const line = horizonAzDeg
+      .map(
+        (az, i) =>
+          `${azToX(az).toFixed(1)},${toPlotY(hArr[i], yMin, yMax, skyTop, skyH).toFixed(1)}`,
+      )
+      .join(' ');
+    return { entry, line };
+  });
+
+  const primaryHorizonLine = terrainLines[activeSlotIdx]?.line ?? terrainLines[0]?.line ?? '';
+  const primaryTerrainPoly = `${left},${skyTop + skyH} ${primaryHorizonLine} ${left + plotW},${skyTop + skyH}`;
+  const primaryHorizon = primaryEntry.analysis.terrain.horizonElevDeg;
+  const maskLinePrimary = horizonAzDeg
+    .map(
+      (az, i) =>
+        `${azToX(az).toFixed(1)},${toPlotY(primaryHorizon[i] + config.antennaMaskDeg, yMin, yMax, skyTop, skyH).toFixed(1)}`,
+    )
+    .join(' ');
+
+  const sunSegments: string[] = [];
+  let curSeg: string[] = [];
+  for (let i = slice.startIdx; i <= slice.endIdx; i++) {
+    const az = primaryEntry.site.sky_series.sun_az_deg[i];
+    const el = primaryEntry.site.sky_series.sun_el_deg[i];
+    if (i > slice.startIdx && Math.abs(az - primaryEntry.site.sky_series.sun_az_deg[i - 1]) > 180) {
+      if (curSeg.length > 1) sunSegments.push(`M ${curSeg.join(' L ')}`);
+      curSeg = [];
+    }
+    curSeg.push(`${azToX(az).toFixed(1)},${toPlotY(el, yMin, yMax, skyTop, skyH).toFixed(1)}`);
+  }
+  if (curSeg.length > 1) sunSegments.push(`M ${curSeg.join(' L ')}`);
+
+  const playheadX = idxToX(Math.max(slice.startIdx, Math.min(slice.endIdx, epochIdx)));
+
+  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const xSvg = ((e.clientX - rect.left) / rect.width) * w;
+    const frac = Math.max(0, Math.min(1, (xSvg - left) / plotW));
+    onSelectEpoch(Math.round(slice.startIdx + frac * span));
+  };
+
   const tableRows = useMemo(() => {
-    const step = Math.max(1, Math.ceil(spanCount / 18));
-    const indices: number[] = [];
-    for (let i = startIdx; i <= endIdx; i += step) {
-      indices.push(i);
+    const step = slice.totalHours <= 72 ? 1 : slice.totalHours <= 168 ? 3 : 6;
+    const indices = new Set<number>();
+    for (let i = slice.startIdx; i <= slice.endIdx; i += step) {
+      indices.add(i);
     }
-    if (epochIdx >= startIdx && epochIdx <= endIdx && !indices.includes(epochIdx)) {
-      indices.push(epochIdx);
-      indices.sort((a, b) => a - b);
+    indices.add(slice.endIdx);
+    if (epochIdx >= slice.startIdx && epochIdx <= slice.endIdx) {
+      indices.add(epochIdx);
     }
-    return indices;
-  }, [startIdx, endIdx, spanCount, epochIdx]);
+    return Array.from(indices).sort((a, b) => a - b);
+  }, [slice.startIdx, slice.endIdx, slice.totalHours, epochIdx]);
 
-  const activeSkySite = skyTarget === 'B' && siteB ? siteB : siteA;
-  const activeSkyAnalysis = skyTarget === 'B' && analysisB ? analysisB : analysisA;
-  const clampedEpoch = Math.max(startIdx, Math.min(endIdx, epochIdx));
-  const cursorX = toX(clampedEpoch);
+  const linkLabel = (ep: LiveSiteAnalysis['epochStates'][number]) => {
+    if (ep.dteVisible) return 'DTE (Earth)';
+    if (config.relayEnabled && ep.elfoConstellationVisible) return 'ELFO Relay';
+    return 'Blackout';
+  };
+
+  const curSunX = azToX(primaryEntry.site.sky_series.sun_az_deg[epochIdx]);
+  const curSunY = toPlotY(primaryEntry.site.sky_series.sun_el_deg[epochIdx], yMin, yMax, skyTop, skyH);
+  const curEarthX = azToX(primaryEntry.site.sky_series.earth_az_deg[epochIdx]);
+  const curEarthY = toPlotY(primaryEntry.site.sky_series.earth_el_deg[epochIdx], yMin, yMax, skyTop, skyH);
+  const curElfoX = azToX(primaryEntry.site.sky_series.elfo_primary_az_deg[epochIdx]);
+  const curElfoY = toPlotY(primaryEntry.site.sky_series.elfo_primary_el_deg[epochIdx], yMin, yMax, skyTop, skyH);
 
   return (
-    <aside
-      className="floating-panel panel-top-left"
-      role="region"
-      aria-label="Painel de Gráficos e Comparação Temporal"
-    >
-      <div className="panel-header">
+    <aside className="side-drawer drawer-left" aria-label="Comparison charts drawer">
+      <div className="drawer-header">
         <div>
-          <h2>Gráficos</h2>
-          <p className="panel-sub">
-            {formatUtcReadable(missionWindow.timestamps_utc[startIdx]).date} ·{' '}
-            {summaryA.durationHours.toFixed(0)}h ({siteB ? 'A vs B' : siteA.name})
-          </p>
+          <span className="drawer-eyebrow">Window ({slice.totalHours}h)</span>
+          <h2>Charts</h2>
         </div>
-        <button type="button" className="btn-icon-close" onClick={onClose} aria-label="Fechar Gráficos">
-          Fechar
-        </button>
+        <div className="drawer-head-actions">
+          <button
+            type="button"
+            className="btn-secondary-sm"
+            aria-pressed={tableMode}
+            onClick={() => setTableMode((v) => !v)}
+          >
+            {tableMode ? 'View charts' : 'View table'}
+          </button>
+          <button
+            type="button"
+            className="btn-close-panel"
+            onClick={onClose}
+            aria-label="Close charts panel"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
-      {/* Alternância acessível Gráfico <-> Tabela */}
-      <div className="segmented-row" role="group" aria-label="Formato de leitura dos dados">
-        <button
-          type="button"
-          className={`seg-btn ${viewTab === 'charts' ? 'is-active' : ''}`}
-          aria-pressed={viewTab === 'charts'}
-          onClick={() => setViewTab('charts')}
-        >
-          Gráficos visuais
-        </button>
-        <button
-          type="button"
-          className={`seg-btn ${viewTab === 'table' ? 'is-active' : ''}`}
-          aria-pressed={viewTab === 'table'}
-          onClick={() => setViewTab('table')}
-        >
-          Ver em tabela
-        </button>
-      </div>
+      <div className="drawer-scroll">
+        <div className="legend-strip" aria-label="Site line styles">
+          {entries.map((entry) => (
+            <span key={entry.label} className="legend-tag">
+              {entry.meta.glyph} <strong>{entry.label}</strong> {entry.site.name} ({entry.meta.dashDesc})
+            </span>
+          ))}
+        </div>
 
-      {viewTab === 'charts' ? (
-        <div className="charts-stack">
-          {/* 1. Iluminação Solar A vs B */}
-          <div className="data-card">
-            <h3>Iluminação solar (% do disco visível)</h3>
-            <p className="chart-caption">
-              A ({siteA.name}): média {summaryA.meanIllumPct.toFixed(0)}%
-              {siteB && summaryB ? ` · B (${siteB.name}): média ${summaryB.meanIllumPct.toFixed(0)}%` : ''}
-            </p>
-            <svg
-              viewBox={`0 0 ${W} ${H}`}
-              className="mini-chart-svg"
-              role="img"
-              aria-label={`Gráfico de iluminação solar ao longo de ${summaryA.durationHours.toFixed(0)} horas`}
-            >
-              <line x1={PL} y1={PT} x2={PL} y2={H - PB} stroke="#475569" strokeWidth="1" />
-              <line x1={PL} y1={H - PB} x2={W - PR} y2={H - PB} stroke="#475569" strokeWidth="1" />
-              <line x1={PL} y1={toY(50)} x2={W - PR} y2={toY(50)} stroke="#334155" strokeDasharray="3 3" />
-              <text x="4" y={PT + 6} fill="#cbd5e1" fontSize="9">100%</text>
-              <text x="10" y={toY(50) + 3} fill="#94a3b8" fontSize="9">50%</text>
-              <text x="16" y={H - PB} fill="#94a3b8" fontSize="9">0%</text>
-
-              <path d={sunPathA} fill="none" stroke="#f5b749" strokeWidth="2.2" />
-              {sunPathB && (
-                <path d={sunPathB} fill="none" stroke="#57d6ff" strokeWidth="2" strokeDasharray="5 3" />
-              )}
-
-              {/* Marcador da época atual */}
-              <line x1={cursorX} y1={PT - 3} x2={cursorX} y2={H - PB} stroke="#ffffff" strokeWidth="1.4" />
-            </svg>
-            <div className="legend-row">
-              <span className="legend-item">
-                <span className="swatch-solid-amber" aria-hidden="true" /> A: {siteA.name} (linha cheia)
-              </span>
-              {siteB && (
-                <span className="legend-item">
-                  <span className="swatch-dashed-cyan" aria-hidden="true" /> B: {siteB.name} (tracejada)
+        {!tableMode ? (
+          <div className="charts-stack">
+            <section className="chart-card" aria-label="Solar illumination curve">
+              <div className="chart-head">
+                <h3>1. Solar Illumination (%)</h3>
+                <span className="chart-stat">
+                  {entries
+                    .map((e) => `${e.label}: ${(e.metrics.meanIllumFraction * 100).toFixed(1)}%`)
+                    .join(' | ')}
                 </span>
-              )}
-            </div>
-          </div>
+              </div>
+              <svg
+                viewBox={`0 0 ${w} ${hSolar}`}
+                className="chart-svg"
+                onClick={handleSvgClick}
+                role="img"
+                aria-label={`Solar illumination curve for ${entries.map((e) => e.site.name).join(', ')}`}
+              >
+                <rect x={left} y={solarTop} width={plotW} height={solarH} fill="#09090b" stroke="#27272a" />
+                {[0, 0.5, 1].map((frac) => {
+                  const y = solarTop + solarH * (1 - frac);
+                  return (
+                    <g key={frac}>
+                      <line x1={left} y1={y} x2={left + plotW} y2={y} stroke="#27272a" strokeDasharray="3 3" />
+                      <text x={left - 5} y={y + 3} textAnchor="end" className="svg-axis-label">
+                        {Math.round(frac * 100)}%
+                      </text>
+                    </g>
+                  );
+                })}
+                {solarSeriesPoints.map(({ entry, points }) => (
+                  <polyline
+                    key={entry.label}
+                    points={points}
+                    fill="none"
+                    stroke={entry.meta.color}
+                    strokeWidth={entry.label === primaryEntry.label ? 2.2 : 1.7}
+                    strokeDasharray={entry.meta.dashArray}
+                  />
+                ))}
+                <line x1={playheadX} y1={solarTop} x2={playheadX} y2={solarTop + solarH} stroke="#ffffff" strokeWidth={1.3} />
+                <text x={left} y={solarTop + solarH + 15} className="svg-axis-label">
+                  {formatUtcShort(missionWindow.timestamps_utc[slice.startIdx]).slice(5, 16)}
+                </text>
+                <text x={left + plotW} y={solarTop + solarH + 15} textAnchor="end" className="svg-axis-label">
+                  +{slice.totalHours}h
+                </text>
+              </svg>
+            </section>
 
-          {/* 2. Visibilidade da Terra (DTE), Comunicação e Intervalos de Blackout */}
-          <div className="data-card">
-            <h3>Comunicação e intervalos de blackout</h3>
-            <p className="chart-caption">
-              Faixas azuis = Terra direta (DTE); ciano = Relay satélite; vermelho escuro = Blackout sem sinal.
-            </p>
-            <svg
-              viewBox={`0 0 ${W} 76`}
-              className="mini-chart-svg"
-              role="img"
-              aria-label="Linha do tempo de disponibilidade de comunicação direta, satélite relay e blackouts"
-            >
-              {[
-                { label: 'A', y: 12, analysis: analysisA },
-                ...(analysisB ? [{ label: 'B', y: 42, analysis: analysisB }] : []),
-              ].map((row) => (
-                <g key={row.label}>
-                  <text x="6" y={row.y + 13} fill="#f1f5f9" fontSize="11" fontWeight="700">
-                    {row.label}
-                  </text>
-                  {Array.from({ length: spanCount }).map((_, offset) => {
-                    const idx = startIdx + offset;
-                    const st = row.analysis.epochStates[idx];
-                    const bw = Math.max(1.2, plotW / spanCount);
-                    const bx = PL + (offset / spanCount) * plotW;
-                    let fill = '#b91c1c'; // Blackout
-                    if (st.dteVisible) {
-                      fill = '#3b82f6'; // Terra DTE direta
-                    } else if (config.relayEnabled && st.combinedLinkVisible) {
-                      fill = '#22d3ee'; // Coberto por Relay ELFO
-                    }
-                    return <rect key={offset} x={bx} y={row.y} width={bw + 0.4} height={18} fill={fill} />;
-                  })}
-                </g>
-              ))}
-              <line x1={cursorX} y1="6" x2={cursorX} y2="68" stroke="#ffffff" strokeWidth="1.5" />
-            </svg>
-            <p className="helper-note">
-              A: DTE {summaryA.dteDutyPct.toFixed(0)}% · Total {summaryA.combinedDutyPct.toFixed(0)}% ·{' '}
-              {blackoutsA.length} blackout(s) (máx. {Math.max(...blackoutsA.map((b) => b.hours), 0).toFixed(0)}h).
-              {summaryB &&
-                ` B: DTE ${summaryB.dteDutyPct.toFixed(0)}% · Total ${summaryB.combinedDutyPct.toFixed(0)}% · ${blackoutsB.length} blackout(s).`}
-            </p>
-          </div>
+            <section className="chart-card" aria-label="Communications and blackouts timeline">
+              <div className="chart-head">
+                <h3>2. Comms &amp; Blackouts</h3>
+                <span className="chart-stat">
+                  {entries
+                    .map(
+                      (e) =>
+                        `${e.label}: ${e.metrics.blackoutCountCombined} blk (max ${e.metrics.maxBlackoutCombinedHours.toFixed(0)}h)`,
+                    )
+                    .join(' | ')}
+                </span>
+              </div>
+              <svg
+                viewBox={`0 0 ${w} ${commsSvgHeight}`}
+                className="chart-svg"
+                onClick={handleSvgClick}
+                role="img"
+                aria-label="Timeline of Direct-to-Earth, ELFO Relay, and communications blackouts"
+              >
+                {commsTimelineRows.map(({ entry, segments }, rowIdx) => {
+                  const yTop = 10 + rowIdx * 28;
+                  return (
+                    <g key={entry.label}>
+                      <text x={4} y={yTop + 13} fill="#e4e4e7" fontSize={10} fontWeight={700}>
+                        {entry.label}
+                      </text>
+                      <rect x={left} y={yTop} width={plotW} height={18} rx={2} fill="#18181b" />
+                      {segments.map((seg, idx) => {
+                        const x1 = idxToX(seg.start);
+                        const x2 = idxToX(seg.end + 0.9);
+                        const fill =
+                          seg.kind === 'dte' ? '#ffffff' : seg.kind === 'elfo' ? '#71717a' : '#27272a';
+                        return (
+                          <rect
+                            key={idx}
+                            x={x1}
+                            y={yTop}
+                            width={Math.max(1.5, x2 - x1)}
+                            height={18}
+                            fill={fill}
+                          />
+                        );
+                      })}
+                    </g>
+                  );
+                })}
 
-          {/* 3. Horizonte 360° + Posição de Sol e Terra no céu */}
-          <div className="data-card">
-            <div className="card-header-inline">
-              <h3>Céu e horizonte 360°</h3>
-              {siteB && (
-                <div className="mini-toggle">
-                  <button
-                    type="button"
-                    className={`seg-btn-sm ${skyTarget === 'A' ? 'is-active-amber' : ''}`}
-                    onClick={() => setSkyTarget('A')}
-                  >
-                    Ver A
-                  </button>
-                  <button
-                    type="button"
-                    className={`seg-btn-sm ${skyTarget === 'B' ? 'is-active-cyan' : ''}`}
-                    onClick={() => setSkyTarget('B')}
-                  >
-                    Ver B
-                  </button>
-                </div>
-              )}
-            </div>
-            <PolarHorizonSkyPlot
-              siteName={activeSkySite.name}
-              horizonAzDeg={horizonAzDeg}
-              horizonElevDeg={activeSkyAnalysis.terrain.horizonElevDeg}
-              sunAzSeries={activeSkySite.sky_series.sun_az_deg}
-              sunElSeries={activeSkySite.sky_series.sun_el_deg}
-              earthAzSeries={activeSkySite.sky_series.earth_az_deg}
-              earthElSeries={activeSkySite.sky_series.earth_el_deg}
-              elfoAzSeries={activeSkySite.sky_series.elfo_primary_az_deg}
-              elfoElSeries={activeSkySite.sky_series.elfo_primary_el_deg}
-              epochIdx={clampedEpoch}
-              epochState={activeSkyAnalysis.epochStates[clampedEpoch]}
-              sunRadiusDeg={missionWindow.solar_angular_radius_deg[clampedEpoch]}
-              earthRadiusDeg={missionWindow.earth_angular_radius_deg[clampedEpoch]}
-              antennaMaskDeg={config.antennaMaskDeg}
-              dteMarginMode={config.dteMarginMode}
-              relayEnabled={config.relayEnabled}
-            />
+                <line
+                  x1={playheadX}
+                  y1={6}
+                  x2={playheadX}
+                  y2={commsSvgHeight - 4}
+                  stroke="#a1a1aa"
+                  strokeWidth={1.5}
+                />
+              </svg>
+              <div className="comms-legend">
+                <span><i className="swatch swatch-dte" /> Direct Earth (DTE)</span>
+                <span><i className="swatch swatch-elfo" /> Relay (ELFO)</span>
+                <span><i className="swatch swatch-blk" /> Blackout</span>
+              </div>
+            </section>
+
+            <section className="chart-card" aria-label="360 degree sky and terrain horizon chart">
+              <div className="chart-head">
+                <h3>3. Sky &amp; 360° Horizon ({primaryEntry.label})</h3>
+                <span className="chart-stat">
+                  Mask +{config.antennaMaskDeg.toFixed(0)}°
+                </span>
+              </div>
+              <svg
+                viewBox={`0 0 ${w} ${hSky}`}
+                className="chart-svg"
+                role="img"
+                aria-label="360-degree terrain ridge horizon with Sun, Earth, and ELFO-1 track"
+              >
+                <rect x={left} y={skyTop} width={plotW} height={skyH} fill="#09090b" stroke="#27272a" />
+                {[0, 10, 20].map((yv) => {
+                  if (yv < yMin || yv > yMax) return null;
+                  const y = toPlotY(yv, yMin, yMax, skyTop, skyH);
+                  return (
+                    <g key={yv}>
+                      <line x1={left} y1={y} x2={left + plotW} y2={y} stroke="#27272a" strokeDasharray="3 3" />
+                      <text x={left - 5} y={y + 3} textAnchor="end" className="svg-axis-label">
+                        {yv}°
+                      </text>
+                    </g>
+                  );
+                })}
+                {[0, 90, 180, 270, 360].map((az) => {
+                  const x = left + (az / 360) * plotW;
+                  return (
+                    <text key={az} x={x} y={skyTop + skyH + 14} textAnchor="middle" className="svg-axis-label">
+                      {az}°
+                    </text>
+                  );
+                })}
+
+                {sunSegments.map((d, i) => (
+                  <path key={i} d={d} fill="none" stroke="rgba(255, 255, 255, 0.45)" strokeWidth={1.2} />
+                ))}
+
+                {primaryEntry.site.sky_series.earth_az_deg.map((az, i) =>
+                  i >= slice.startIdx && i <= slice.endIdx && i % 4 === 0 ? (
+                    <circle
+                      key={i}
+                      cx={azToX(az)}
+                      cy={toPlotY(primaryEntry.site.sky_series.earth_el_deg[i], yMin, yMax, skyTop, skyH)}
+                      r={1.0}
+                      fill="rgba(212, 212, 216, 0.35)"
+                    />
+                  ) : null,
+                )}
+
+                <polygon points={primaryTerrainPoly} fill="rgba(63, 63, 70, 0.55)" />
+                {terrainLines.map(({ entry, line }) => (
+                  <polyline
+                    key={entry.label}
+                    points={line}
+                    fill="none"
+                    stroke={entry.meta.color}
+                    strokeWidth={entry.label === primaryEntry.label ? 1.8 : 1.3}
+                    strokeDasharray={entry.meta.dashArray}
+                  />
+                ))}
+
+                {config.relayEnabled && (
+                  <polyline
+                    points={maskLinePrimary}
+                    fill="none"
+                    stroke="#71717a"
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                  />
+                )}
+
+                <circle cx={curEarthX} cy={curEarthY} r={4.4} fill="#a1a1aa" stroke="#ffffff" strokeWidth={1} />
+                <text
+                  x={curEarthX}
+                  y={Math.max(skyTop + 11, curEarthY - 9)}
+                  textAnchor="middle"
+                  className="svg-sky-earth"
+                >
+                  Earth
+                </text>
+
+                <circle cx={curSunX} cy={curSunY} r={4.6} fill="#ffffff" stroke="#000000" strokeWidth={1} />
+                <text
+                  x={curSunX}
+                  y={Math.max(skyTop + 11, curSunY - 9)}
+                  textAnchor="middle"
+                  className="svg-sky-sun"
+                >
+                  Sun
+                </text>
+
+                {config.relayEnabled && primaryEntry.site.sky_series.elfo_primary_el_deg[epochIdx] >= yMin - 5 && (
+                  <polygon
+                    points={`${curElfoX},${curElfoY - 4.5} ${curElfoX + 4.5},${curElfoY} ${curElfoX},${curElfoY + 4.5} ${curElfoX - 4.5},${curElfoY}`}
+                    fill="#d4d4d8"
+                    stroke="#000000"
+                    strokeWidth={1}
+                  />
+                )}
+              </svg>
+            </section>
           </div>
-        </div>
-      ) : (
-        /* Alternativa acessível em Tabela HTML */
-        <div className="data-card">
-          <h3>Valores numéricos do período (Tabela acessível)</h3>
-          <p className="helper-note">
-            Clique em uma linha para mover o instante atual para aquela data UTC.
-          </p>
-          <div className="metric-table-wrap">
-            <table className="mini-compare-table">
+        ) : (
+          <div className="accessible-table-wrap">
+            <table className="data-table">
+              <caption>
+                Hourly solar illumination and communications across the selected window ({slice.totalHours}h)
+              </caption>
               <thead>
                 <tr>
-                  <th scope="col">Data / Hora (UTC)</th>
-                  <th scope="col">Sol A</th>
-                  <th scope="col">Sinal A</th>
-                  {siteB && <th scope="col">Sol B</th>}
-                  {siteB && <th scope="col">Sinal B</th>}
+                  <th scope="col">UTC Time</th>
+                  {entries.map((e) => (
+                    <React.Fragment key={e.label}>
+                      <th scope="col">{e.label}: Sun</th>
+                      <th scope="col">{e.label}: Link</th>
+                    </React.Fragment>
+                  ))}
+                  <th scope="col">Jump</th>
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((idx) => {
-                  const stA = analysisA.epochStates[idx];
-                  const stB = analysisB?.epochStates[idx];
-                  const utc = formatUtcReadable(missionWindow.timestamps_utc[idx]);
-                  const linkA = stA.dteVisible
-                    ? 'Terra DTE'
-                    : config.relayEnabled && stA.combinedLinkVisible
-                      ? 'Relay ELFO'
-                      : 'Blackout';
-                  const linkB = stB
-                    ? stB.dteVisible
-                      ? 'Terra DTE'
-                      : config.relayEnabled && stB.combinedLinkVisible
-                        ? 'Relay ELFO'
-                        : 'Blackout'
-                    : '';
+                  const isCurrent = idx === epochIdx;
                   return (
-                    <tr
-                      key={idx}
-                      className={idx === clampedEpoch ? 'is-current-row' : undefined}
-                    >
+                    <tr key={idx} className={isCurrent ? 'row-active' : ''}>
+                      <td>{formatUtcShort(missionWindow.timestamps_utc[idx]).replace(' UTC', '')}</td>
+                      {entries.map((e) => {
+                        const ep = e.analysis.epochStates[idx];
+                        return (
+                          <React.Fragment key={e.label}>
+                            <td>{(ep.fIllum * 100).toFixed(0)}%</td>
+                            <td>{linkLabel(ep)}</td>
+                          </React.Fragment>
+                        );
+                      })}
                       <td>
                         <button
                           type="button"
                           className="btn-table-jump"
                           onClick={() => onSelectEpoch(idx)}
+                          aria-label={`Jump to epoch ${formatUtcShort(missionWindow.timestamps_utc[idx])}`}
                         >
-                          {utc.date.slice(5)} {utc.time.replace(' UTC', '')}
+                          {isCurrent ? 'Now' : 'Go'}
                         </button>
                       </td>
-                      <td>{(stA.fIllum * 100).toFixed(0)}%</td>
-                      <td>{linkA}</td>
-                      {siteB && stB && <td>{(stB.fIllum * 100).toFixed(0)}%</td>}
-                      {siteB && stB && <td>{linkB}</td>}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      <p className="panel-source-note">
-        Fonte: NASA LOLA DEM ({provenance.dem_product.resolution_m} m/px) + SPICE ({provenance.ephemeris.frame}).
-        Modelo estritamente geométrico; não considera iluminação indireta ou multipercurso RF.
-      </p>
+        )}
+      </div>
     </aside>
   );
 };

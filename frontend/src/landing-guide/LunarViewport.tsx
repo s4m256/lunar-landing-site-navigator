@@ -1,854 +1,1481 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { LiveEpochState, LiveSiteAnalysis } from '../navigator/math';
+import React, { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LandingSiteEntry } from '../navigator/types';
 import {
-  CursorTarget,
-  findNearestPrecomputedSite,
-  formatCoordLatLon,
-  latLonToUnitVec,
-  ScreenMode,
+  buildLunarAtlasData,
+  clamp,
+  latLonToSphereUnit,
+  loadRealNasaLunarAtlas,
+  LunarAtlasData,
+  MAX_ELEV_KM,
+  MIN_ELEV_KM,
+  normalizeLon,
+  POLAR_CAP_OUTER_SPAN,
+  sampleAtlasElevationKmBilinear,
+  sphereUnitToLatLon,
+  SurfaceMode,
+} from './lunarTerrainEngine';
+import {
+  EvaluatedSlotEntry,
   SelectionMode,
-  SiteSlot,
-  ViewMode,
+  SLOT_LABELS,
+  SLOT_META,
+  SlotLabel,
+  ViewportMode,
 } from './state';
 
 interface LunarViewportProps {
-  screen: ScreenMode;
-  viewMode: ViewMode;
-  selectionMode: SelectionMode;
-  cursorTarget: CursorTarget;
+  mode: ViewportMode;
+  surfaceMode: SurfaceMode;
   sites: LandingSiteEntry[];
-  slotA: SiteSlot;
-  slotB: SiteSlot | null;
-  analysisA: LiveSiteAnalysis;
-  sunAzDeg: number;
-  sunElDeg: number;
-  earthAzDeg: number;
-  earthElDeg: number;
-  epochA: LiveEpochState;
-  onAssignSlot: (
-    target: CursorTarget,
-    siteId: string,
-    xNorm: number,
-    yNorm: number,
-    outsideCoverageWarning: string | null,
+  entries: EvaluatedSlotEntry[];
+  activeSlotIdx: number;
+  onSelectActiveSlot: (index: number) => void;
+  epochIdx: number;
+  hasStarted: boolean;
+  selectionMode: SelectionMode;
+  onSelectSiteDirect: (siteId: string, slotIdx: number) => void;
+  onOutsidePolarCoverage: (
+    latDeg: number,
+    lonEastDeg: number,
+    slotIdx: number,
+    atlas?: LunarAtlasData,
   ) => void;
+  onReticleChange?: (latDeg: number, lonEastDeg: number) => void;
+  reticleCoords: { latDeg: number; lonEastDeg: number };
 }
 
-interface ProjectedLandmark {
-  name: string;
-  lat: number;
-  lon: number;
-  radiusDeg: number;
-  kind: 'mare' | 'crater';
+const DEG = Math.PI / 180;
+const DISP_SCALE = 0.048;
+const DISP_BIAS = -0.024;
+
+const _scratchV1 = new THREE.Vector3();
+const _scratchV2 = new THREE.Vector3();
+const _scratchNorm = new THREE.Vector3();
+const _scratchToCam = new THREE.Vector3();
+const _scratchHitLocal = new THREE.Vector3();
+const _targetCamPos = new THREE.Vector3();
+const _targetControlsLook = new THREE.Vector3();
+
+const CALLOUT_OFFSETS: Record<SlotLabel, { dx: number; dy: number }> = {
+  A: { dx: 34, dy: -26 },
+  B: { dx: -34, dy: -26 },
+  C: { dx: 34, dy: 26 },
+  D: { dx: -34, dy: 26 },
+};
+
+function detectSoftwareWebGL(): { supported: boolean; isSoftwareGl: boolean } {
+  if (typeof document === 'undefined') return { supported: false, isSoftwareGl: true };
+  try {
+    const probe = document.createElement('canvas');
+    const gl = probe.getContext('webgl2') || probe.getContext('webgl');
+    if (!gl) return { supported: false, isSoftwareGl: true };
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
+    const gpu = String(gl.getParameter(param) ?? '');
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return {
+      supported: true,
+      isSoftwareGl: /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu),
+    };
+  } catch {
+    return { supported: false, isSoftwareGl: true };
+  }
 }
 
-const LUNAR_LANDMARKS: ProjectedLandmark[] = [
-  { name: 'Mare Imbrium', lat: 33, lon: 344, radiusDeg: 18, kind: 'mare' },
-  { name: 'Oceanus Procellarum', lat: 18, lon: 303, radiusDeg: 24, kind: 'mare' },
-  { name: 'Mare Serenitatis', lat: 28, lon: 18, radiusDeg: 14, kind: 'mare' },
-  { name: 'Mare Tranquillitatis', lat: 8, lon: 31, radiusDeg: 13, kind: 'mare' },
-  { name: 'Mare Crisium', lat: 17, lon: 59, radiusDeg: 9, kind: 'mare' },
-  { name: 'Mare Orientale', lat: -19, lon: 267, radiusDeg: 12, kind: 'mare' },
-  { name: 'Bacia Polo Sul-Aitken', lat: -56, lon: 180, radiusDeg: 28, kind: 'mare' },
-  { name: 'Cratera Tycho', lat: -43.3, lon: 348.8, radiusDeg: 5, kind: 'crater' },
-  { name: 'Cratera Clavius', lat: -58.4, lon: 345.6, radiusDeg: 6.5, kind: 'crater' },
-  { name: 'Cratera Bailly', lat: -66.8, lon: 291, radiusDeg: 6, kind: 'crater' },
-  { name: 'Cratera Schrödinger', lat: -75, lon: 132.4, radiusDeg: 7, kind: 'crater' },
-  { name: 'Cratera Shackleton', lat: -89.67, lon: 129.78, radiusDeg: 1.8, kind: 'crater' },
-];
+function displacedRadiusAt(atlas: LunarAtlasData, latDeg: number, lonEastDeg: number): number {
+  const elevKm = sampleAtlasElevationKmBilinear(atlas, latDeg, lonEastDeg);
+  const norm = clamp((elevKm - MIN_ELEV_KM) / (MAX_ELEV_KM - MIN_ELEV_KM), 0, 1);
+  return 1.0 + norm * DISP_SCALE + DISP_BIAS;
+}
 
-const SVG_W = 900;
-const SVG_H = 700;
-const CX = 450;
-const CY = 350;
-const GLOBE_R = 250;
-
-function project3D(
-  latDeg: number,
-  lonEastDeg: number,
-  camLatDeg: number,
-  camLonDeg: number,
-  radiusPx = GLOBE_R,
-): { x: number; y: number; z: number; visible: boolean } {
-  const [vx, vy, vz] = latLonToUnitVec(latDeg, lonEastDeg);
-  const cLon = (camLonDeg * Math.PI) / 180;
-  const cLat = (camLatDeg * Math.PI) / 180;
-
-  const x1 = vx * Math.cos(cLon) + vy * Math.sin(cLon);
-  const y1 = -vx * Math.sin(cLon) + vy * Math.cos(cLon);
-  const z1 = vz;
-
-  const xCam = y1;
-  const yCam = -x1 * Math.sin(cLat) + z1 * Math.cos(cLat);
-  const zCam = x1 * Math.cos(cLat) + z1 * Math.sin(cLat);
-
-  return {
-    x: CX + xCam * radiusPx,
-    y: CY - yCam * radiusPx,
-    z: zCam,
-    visible: zCam >= -0.02,
+function createStarfieldPoints(): THREE.Points {
+  const count = 640;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  let s = 918273;
+  const rand = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
   };
+  for (let i = 0; i < count; i++) {
+    const u = rand();
+    const v = rand();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const r = 38 + rand() * 14;
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.cos(phi);
+    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+
+    const b = 0.25 + Math.pow(rand(), 2.6) * 0.6;
+    colors[i * 3] = b;
+    colors[i * 3 + 1] = b;
+    colors[i * 3 + 2] = b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mat = new THREE.PointsMaterial({
+    size: 0.08,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.72,
+    sizeAttenuation: true,
+    depthWrite: false,
+  });
+  return new THREE.Points(geo, mat);
 }
 
-function inverse3D(
-  svgX: number,
-  svgY: number,
-  camLatDeg: number,
-  camLonDeg: number,
-  radiusPx = GLOBE_R,
-): { latDeg: number; lonEastDeg: number } | null {
-  const xCam = (svgX - CX) / radiusPx;
-  const yCam = -(svgY - CY) / radiusPx;
-  const r2 = xCam * xCam + yCam * yCam;
-  if (r2 > 1.0) return null;
-  const zCam = Math.sqrt(Math.max(0, 1 - r2));
+function renderSlotShapeSvg(label: SlotLabel, color: string, isArmed: boolean): React.ReactNode {
+  const halo = isArmed ? (
+    <circle cx={0} cy={0} r={11.5} fill="none" stroke={color} strokeWidth={1.4} strokeDasharray="3 2" opacity={0.95} />
+  ) : null;
 
-  const cLat = (camLatDeg * Math.PI) / 180;
-  const cLon = (camLonDeg * Math.PI) / 180;
-
-  const y1 = xCam;
-  const x1 = zCam * Math.cos(cLat) - yCam * Math.sin(cLat);
-  const z1 = zCam * Math.sin(cLat) + yCam * Math.cos(cLat);
-
-  const vx = x1 * Math.cos(cLon) - y1 * Math.sin(cLon);
-  const vy = x1 * Math.sin(cLon) + y1 * Math.cos(cLon);
-  const vz = z1;
-
-  const latDeg = (Math.asin(Math.max(-1, Math.min(1, vz))) * 180) / Math.PI;
-  const lonEastDeg = ((Math.atan2(vy, vx) * 180) / Math.PI + 360) % 360;
-  return { latDeg, lonEastDeg };
-}
-
-function project2DPolar(
-  latDeg: number,
-  lonEastDeg: number,
-  panX: number,
-  panY: number,
-  scalePxPerDeg: number,
-): { x: number; y: number } {
-  const colat = Math.max(0, 90 + latDeg);
-  const r = colat * scalePxPerDeg;
-  const rad = (lonEastDeg * Math.PI) / 180;
-  return {
-    x: CX + panX + r * Math.sin(rad),
-    y: CY + panY - r * Math.cos(rad),
-  };
-}
-
-function inverse2DPolar(
-  svgX: number,
-  svgY: number,
-  panX: number,
-  panY: number,
-  scalePxPerDeg: number,
-): { latDeg: number; lonEastDeg: number } {
-  const dx = svgX - (CX + panX);
-  const dy = -(svgY - (CY + panY));
-  const r = Math.hypot(dx, dy);
-  const colatDeg = Math.min(89.9, r / scalePxPerDeg);
-  const latDeg = -90 + colatDeg;
-  const lonEastDeg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-  return { latDeg, lonEastDeg };
+  if (label === 'A') {
+    return (
+      <>
+        {halo}
+        <circle cx={0} cy={0} r={5.8} fill={color} stroke="#000000" strokeWidth={1.6} />
+      </>
+    );
+  }
+  if (label === 'B') {
+    return (
+      <>
+        {halo}
+        <polygon points="0,-7 7,0 0,7 -7,0" fill={color} stroke="#000000" strokeWidth={1.6} />
+      </>
+    );
+  }
+  if (label === 'C') {
+    return (
+      <>
+        {halo}
+        <polygon points="0,-7.2 6.8,5.2 -6.8,5.2" fill={color} stroke="#000000" strokeWidth={1.6} />
+      </>
+    );
+  }
+  return (
+    <>
+      {halo}
+      <rect x={-5.4} y={-5.4} width={10.8} height={10.8} rx={1} fill={color} stroke="#000000" strokeWidth={1.6} />
+    </>
+  );
 }
 
 export const LunarViewport: React.FC<LunarViewportProps> = ({
-  screen,
-  viewMode,
-  selectionMode,
-  cursorTarget,
+  mode,
+  surfaceMode,
   sites,
-  slotA,
-  slotB,
-  sunAzDeg,
-  sunElDeg,
-  earthAzDeg,
-  onAssignSlot,
+  entries,
+  activeSlotIdx,
+  onSelectActiveSlot,
+  epochIdx,
+  hasStarted,
+  selectionMode,
+  onSelectSiteDirect,
+  onOutsidePolarCoverage,
+  onReticleChange,
+  reticleCoords,
 }) => {
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const webglMountRef = useRef<HTMLDivElement | null>(null);
 
-  // Estado da câmera compartilhado (independente dos pinos A/B que vivem no componente pai)
-  const [camLat, setCamLat] = useState<number>(-72);
-  const [camLon, setCamLon] = useState<number>(350);
-  const [zoom3d, setZoom3d] = useState<number>(1.0);
-  const [pan2d, setPan2d] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [zoom2d, setZoom2d] = useState<number>(1.0);
-  const [coverageNotice, setCoverageNotice] = useState<string | null>(null);
+  const sitePinRefs = useRef<Record<string, SVGGElement | null>>({});
+  const slotMarkerRefs = useRef<Record<SlotLabel, SVGGElement | null>>({
+    A: null,
+    B: null,
+    C: null,
+    D: null,
+  });
+  const sunMarkerRef = useRef<SVGGElement | null>(null);
+  const earthMarkerRef = useRef<SVGGElement | null>(null);
 
-  const dragRef = useRef<{
-    active: boolean;
-    moved: boolean;
-    startX: number;
-    startY: number;
-    origLat: number;
-    origLon: number;
-    origPanX: number;
-    origPanY: number;
+  const [viewportSize, setViewportSize] = useState<{ w: number; h: number }>({
+    w: 1280,
+    h: 720,
+  });
+  const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+
+  const primarySite = (entries[activeSlotIdx] ?? entries[0]).site;
+  const activeEntry = entries[activeSlotIdx] ?? entries[0];
+
+  const subSolarLonDeg = normalizeLon(
+    primarySite.center.longitude_east_deg + (primarySite.sky_series.sun_az_deg[epochIdx] ?? 0),
+  );
+  const subEarthLonDeg = normalizeLon(
+    primarySite.center.longitude_east_deg + (primarySite.sky_series.earth_az_deg[epochIdx] ?? 0),
+  );
+  const subSolarLatDeg = clamp((primarySite.sky_series.sun_el_deg[epochIdx] ?? 0) * 0.45, -2.5, 2.5);
+
+  const propsRef = useRef({
+    mode,
+    surfaceMode,
+    sites,
+    entries,
+    activeSlotIdx,
+    hasStarted,
+    selectionMode,
+    subSolarLonDeg,
+    subSolarLatDeg,
+    subEarthLonDeg,
+    onSelectSiteDirect,
+    onOutsidePolarCoverage,
+    onReticleChange,
+  });
+  propsRef.current = {
+    mode,
+    surfaceMode,
+    sites,
+    entries,
+    activeSlotIdx,
+    hasStarted,
+    selectionMode,
+    subSolarLonDeg,
+    subSolarLatDeg,
+    subEarthLonDeg,
+    onSelectSiteDirect,
+    onOutsidePolarCoverage,
+    onReticleChange,
+  };
+
+  const threeCtrlRef = useRef<{
+    requestRender: () => void;
+    flyToSouthPole: () => void;
+    flyToFullMoon: () => void;
+    zoomStep: (delta: number) => void;
+    nudgeOrbit: (dAzRad: number, dPolRad: number) => void;
+    beginCameraTransition: (started: boolean) => void;
   } | null>(null);
 
-  const radiusPx = GLOBE_R * zoom3d;
-  const scale2d = 21 * zoom2d;
-
-  const pickPointAtSvg = (svgX: number, svgY: number): { latDeg: number; lonEastDeg: number } | null => {
-    if (viewMode === '3d') {
-      return inverse3D(svgX, svgY, camLat, camLon, radiusPx);
-    }
-    return inverse2DPolar(svgX, svgY, pan2d.x, pan2d.y, scale2d);
-  };
-
-  // Coordenada selenográfica atualmente sob a mira central
-  const centerAimCoords = useMemo(() => {
-    return pickPointAtSvg(CX, CY);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, camLat, camLon, zoom3d, pan2d.x, pan2d.y, zoom2d]);
-
-  const centerNearestSite = useMemo(() => {
-    if (!centerAimCoords) return null;
-    return findNearestPrecomputedSite(centerAimCoords.latDeg, centerAimCoords.lonEastDeg, sites);
-  }, [centerAimCoords, sites]);
-
-  // Posição de luz solar em coordenadas de câmera 3D para sombreamento indicativo
-  const sunLightOffset = useMemo(() => {
-    // Subsolar está próximo do equador lunar na longitude aproximada do azimute solar visto do polo sul
-    const subSolarLat = Math.max(-5, Math.min(5, sunElDeg));
-    const subSolarLon = ((-sunAzDeg % 360) + 360) % 360;
-    const p = project3D(subSolarLat, subSolarLon, camLat, camLon, 1);
-    return {
-      cxPct: `${50 + p.x * 0.08 - 50 * 0.08}`,
-      gradX: 50 + (p.x - CX) * 0.14,
-      gradY: 50 + (p.y - CY) * 0.14,
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return undefined;
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setViewportSize({ w: rect.width, h: rect.height });
+      }
     };
-  }, [sunAzDeg, sunElDeg, camLat, camLon]);
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
-  const toSvgCoords = (clientX: number, clientY: number) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: CX, y: CY };
-    const rect = svg.getBoundingClientRect();
-    const x = ((clientX - rect.left) / Math.max(1, rect.width)) * SVG_W;
-    const y = ((clientY - rect.top) / Math.max(1, rect.height)) * SVG_H;
-    return { x, y };
-  };
+  // Mount Three.js 3D Moon WebGL scene ONCE, start with instant baseline, then swap in real NASA 2K + LOLA polar DEM
+  useEffect(() => {
+    const mountEl = webglMountRef.current;
+    if (!mountEl) return undefined;
 
-  const commitPick = (coords: { latDeg: number; lonEastDeg: number }, target: CursorTarget) => {
-    const nearest = findNearestPrecomputedSite(coords.latDeg, coords.lonEastDeg, sites);
-    const msg = nearest.isSouthPoleCovered
-      ? null
-      : `Fora da faixa LOLA de alta resolução (80°S–90°S). Associado à região polar mais próxima (${nearest.site.name}).`;
-    setCoverageNotice(msg);
-    onAssignSlot(target, nearest.site.id, nearest.xNorm, nearest.yNorm, msg);
-  };
+    const { supported, isSoftwareGl } = detectSoftwareWebGL();
+    if (!supported) return undefined;
 
-  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    // Evita iniciar drag quando usuário clicou diretamente em um pino de sítio
-    if ((e.target as HTMLElement).closest?.('[data-site-pin="true"]')) return;
-    dragRef.current = {
-      active: true,
-      moved: false,
-      startX: e.clientX,
-      startY: e.clientY,
-      origLat: camLat,
-      origLon: camLon,
-      origPanX: pan2d.x,
-      origPanY: pan2d.y,
-    };
-  };
+    const initW = mountEl.clientWidth || window.innerWidth || 1280;
+    const initH = mountEl.clientHeight || window.innerHeight || 720;
 
-  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const drag = dragRef.current;
-    if (!drag || !drag.active) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    if (Math.hypot(dx, dy) > 4) drag.moved = true;
-    if (!drag.moved) return;
-
-    if (viewMode === '3d') {
-      const nextLon = (((drag.origLon - dx * 0.35) % 360) + 360) % 360;
-      const nextLat = Math.max(-89.9, Math.min(89.9, drag.origLat - dy * 0.35));
-      setCamLon(nextLon);
-      setCamLat(nextLat);
-    } else {
-      setPan2d({
-        x: Math.max(-240, Math.min(240, drag.origPanX + dx * 0.9)),
-        y: Math.max(-200, Math.min(200, drag.origPanY + dy * 0.9)),
-      });
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-    if (!drag.moved && screen === 'explore' && selectionMode === 'cursor') {
-      const { x, y } = toSvgCoords(e.clientX, e.clientY);
-      const picked = pickPointAtSvg(x, y);
-      if (picked) {
-        commitPick(picked, cursorTarget);
-      }
-    }
-  };
-
-  const handleKeyDownStage = (e: React.KeyboardEvent<SVGSVGElement>) => {
-    const stepDeg = 6;
-    const stepPan = 18;
-    if (viewMode === '3d') {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        setCamLon((v) => (v - stepDeg + 360) % 360);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        setCamLon((v) => (v + stepDeg) % 360);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setCamLat((v) => Math.min(89.9, v + stepDeg));
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setCamLat((v) => Math.max(-89.9, v - stepDeg));
-      }
-    } else {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        setPan2d((p) => ({ ...p, x: Math.min(240, p.x + stepPan) }));
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        setPan2d((p) => ({ ...p, x: Math.max(-240, p.x - stepPan) }));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setPan2d((p) => ({ ...p, y: Math.min(200, p.y + stepPan) }));
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setPan2d((p) => ({ ...p, y: Math.max(-200, p.y - stepPan) }));
-      }
-    }
-  };
-
-  const recenterSouthPole = () => {
-    if (viewMode === '3d') {
-      setCamLat(-85);
-      setCamLon(0);
-      setZoom3d(1.1);
-    } else {
-      setPan2d({ x: 0, y: 0 });
-      setZoom2d(1.0);
-    }
-    setCoverageNotice(null);
-  };
-
-  // Projetar anel 80°S e paralelos/meridianos no globo 3D
-  const southPoleRingPoints = useMemo(() => {
-    if (viewMode !== '3d') return [];
-    const pts: string[] = [];
-    for (let lon = 0; lon <= 360; lon += 10) {
-      const p = project3D(-80, lon, camLat, camLon, radiusPx);
-      if (p.visible) {
-        pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-      }
-    }
-    return pts;
-  }, [viewMode, camLat, camLon, radiusPx]);
-
-  // Projetar todos os 10 sítios conforme 2D ou 3D
-  const projectedSites = useMemo(() => {
-    return sites.map((site) => {
-      const isA = slotA.siteId === site.id;
-      const isB = slotB?.siteId === site.id;
-      const pos =
-        viewMode === '3d'
-          ? project3D(site.center.latitude_deg, site.center.longitude_east_deg, camLat, camLon, radiusPx)
-          : {
-              ...project2DPolar(
-                site.center.latitude_deg,
-                site.center.longitude_east_deg,
-                pan2d.x,
-                pan2d.y,
-                scale2d,
-              ),
-              z: 1,
-              visible: true,
-            };
-      return { site, pos, isA, isB };
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isSoftwareGl,
+      powerPreference: 'high-performance',
+      alpha: false,
     });
-  }, [sites, slotA.siteId, slotB?.siteId, viewMode, camLat, camLon, radiusPx, pan2d.x, pan2d.y, scale2d]);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(initW, initH);
+    renderer.shadowMap.enabled = !isSoftwareGl;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setClearColor(0x000000, 1);
 
-  const sunRad2d = (sunAzDeg * Math.PI) / 180;
-  const earthRad2d = (earthAzDeg * Math.PI) / 180;
+    mountEl.innerHTML = '';
+    mountEl.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const envTarget = pmremGenerator.fromScene(new RoomEnvironment(), 0.04);
+    scene.environment = envTarget.texture;
+    scene.environmentIntensity = 0.06;
+    pmremGenerator.dispose();
+
+    const camera = new THREE.PerspectiveCamera(34, initW / Math.max(1, initH), 0.1, 100);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = !isSoftwareGl;
+    controls.dampingFactor = 0.07;
+    controls.enablePan = false;
+    controls.enableZoom = propsRef.current.hasStarted;
+    controls.minDistance = 1.38;
+    controls.maxDistance = 12.0;
+    controls.minPolarAngle = 0.05;
+    controls.maxPolarAngle = Math.PI - 0.05;
+    controls.rotateSpeed = 0.65;
+    controls.zoomSpeed = 0.85;
+
+    const moonGroup = new THREE.Group();
+    moonGroup.rotation.x = Math.PI;
+    scene.add(moonGroup);
+
+    const maxAniso = Math.min(8, Math.max(1, renderer.capabilities.getMaxAnisotropy()));
+
+    const makeSphericalTex = (
+      buf: Uint8Array,
+      w: number,
+      h: number,
+      srgb: boolean,
+    ): THREE.DataTexture => {
+      const tex = new THREE.DataTexture(buf, w, h, THREE.RGBAFormat);
+      tex.flipY = false;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = true;
+      tex.anisotropy = maxAniso;
+      tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    };
+
+    const makePolarCapTex = (
+      buf: Uint8Array,
+      size: number,
+      srgb: boolean,
+    ): THREE.DataTexture => {
+      const tex = new THREE.DataTexture(buf, size, size, THREE.RGBAFormat);
+      tex.flipY = false;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = true;
+      tex.anisotropy = maxAniso;
+      tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    };
+
+    let activeAtlas: LunarAtlasData = buildLunarAtlasData(propsRef.current.sites, 256, 128);
+    let albedoTex = makeSphericalTex(activeAtlas.albedoRgba, activeAtlas.width, activeAtlas.height, true);
+    let topoTex = makeSphericalTex(activeAtlas.topoRgba, activeAtlas.width, activeAtlas.height, true);
+    let normalTex = makeSphericalTex(activeAtlas.normalRgba, activeAtlas.width, activeAtlas.height, false);
+    let southAlbedoTex = makePolarCapTex(activeAtlas.southCapAlbedoRgba, activeAtlas.southCapWidth, true);
+    let southTopoTex = makePolarCapTex(activeAtlas.southCapTopoRgba, activeAtlas.southCapWidth, true);
+    let southNormalTex = makePolarCapTex(activeAtlas.southCapNormalRgba, activeAtlas.southCapWidth, false);
+    let northAlbedoTex = makePolarCapTex(activeAtlas.northCapAlbedoRgba, activeAtlas.northCapWidth, true);
+    let northTopoTex = makePolarCapTex(activeAtlas.northCapTopoRgba, activeAtlas.northCapWidth, true);
+    let northNormalTex = makePolarCapTex(activeAtlas.northCapNormalRgba, activeAtlas.northCapWidth, false);
+
+    const rawIco = new THREE.IcosahedronGeometry(1, 48);
+    rawIco.deleteAttribute('uv');
+    rawIco.deleteAttribute('normal');
+    const sphereGeo = mergeVertices(rawIco, 1e-5);
+    rawIco.dispose();
+
+    const posAttr = sphereGeo.attributes.position as THREE.BufferAttribute;
+    const baseUnitDirs = new Float32Array(posAttr.count * 3);
+    for (let i = 0; i < posAttr.count; i++) {
+      const vx = posAttr.getX(i);
+      const vy = posAttr.getY(i);
+      const vz = posAttr.getZ(i);
+      const len = Math.hypot(vx, vy, vz) || 1;
+      baseUnitDirs[i * 3] = vx / len;
+      baseUnitDirs[i * 3 + 1] = vy / len;
+      baseUnitDirs[i * 3 + 2] = vz / len;
+    }
+
+    const applyVertexDisplacement = (atlasData: LunarAtlasData) => {
+      for (let i = 0; i < posAttr.count; i++) {
+        const ux = baseUnitDirs[i * 3];
+        const uy = baseUnitDirs[i * 3 + 1];
+        const uz = baseUnitDirs[i * 3 + 2];
+        const { latDeg, lonEastDeg } = sphereUnitToLatLon(ux, uy, uz);
+        const elevKm = sampleAtlasElevationKmBilinear(atlasData, latDeg, lonEastDeg);
+        const norm = clamp((elevKm - MIN_ELEV_KM) / (MAX_ELEV_KM - MIN_ELEV_KM), 0, 1);
+        const r = 1.0 + norm * DISP_SCALE + DISP_BIAS;
+        posAttr.setXYZ(i, ux * r, uy * r, uz * r);
+      }
+      posAttr.needsUpdate = true;
+      sphereGeo.computeVertexNormals();
+    };
+
+    applyVertexDisplacement(activeAtlas);
+
+    const moonUniforms = {
+      uAlbedoTex: { value: albedoTex },
+      uTopoTex: { value: topoTex },
+      uNormalTex: { value: normalTex },
+      uSouthAlbedoTex: { value: southAlbedoTex },
+      uSouthTopoTex: { value: southTopoTex },
+      uSouthNormalTex: { value: southNormalTex },
+      uNorthAlbedoTex: { value: northAlbedoTex },
+      uNorthTopoTex: { value: northTopoTex },
+      uNorthNormalTex: { value: northNormalTex },
+      uPolarInvSpan: { value: 1.0 / POLAR_CAP_OUTER_SPAN },
+      uTopoMix: { value: propsRef.current.surfaceMode === 'topography' ? 1.0 : 0.0 },
+      uReliefStrength: { value: 1.15 },
+    };
+
+    const moonMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.97,
+      metalness: 0.0,
+      envMapIntensity: 0.05,
+    });
+
+    moonMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uAlbedoTex = moonUniforms.uAlbedoTex;
+      shader.uniforms.uTopoTex = moonUniforms.uTopoTex;
+      shader.uniforms.uNormalTex = moonUniforms.uNormalTex;
+      shader.uniforms.uSouthAlbedoTex = moonUniforms.uSouthAlbedoTex;
+      shader.uniforms.uSouthTopoTex = moonUniforms.uSouthTopoTex;
+      shader.uniforms.uSouthNormalTex = moonUniforms.uSouthNormalTex;
+      shader.uniforms.uNorthAlbedoTex = moonUniforms.uNorthAlbedoTex;
+      shader.uniforms.uNorthTopoTex = moonUniforms.uNorthTopoTex;
+      shader.uniforms.uNorthNormalTex = moonUniforms.uNorthNormalTex;
+      shader.uniforms.uPolarInvSpan = moonUniforms.uPolarInvSpan;
+      shader.uniforms.uTopoMix = moonUniforms.uTopoMix;
+      shader.uniforms.uReliefStrength = moonUniforms.uReliefStrength;
+
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying vec3 vObjDir;
+          varying vec3 vViewRight;
+          varying vec3 vViewUp;
+          varying vec3 vViewFwd;`,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          vObjDir = normalize(position);
+          vViewRight = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));
+          vViewUp = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
+          vViewFwd = normalize(normalMatrix * vec3(0.0, 0.0, 1.0));`,
+        );
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          uniform sampler2D uAlbedoTex;
+          uniform sampler2D uTopoTex;
+          uniform sampler2D uNormalTex;
+          uniform sampler2D uSouthAlbedoTex;
+          uniform sampler2D uSouthTopoTex;
+          uniform sampler2D uSouthNormalTex;
+          uniform sampler2D uNorthAlbedoTex;
+          uniform sampler2D uNorthTopoTex;
+          uniform sampler2D uNorthNormalTex;
+          uniform float uPolarInvSpan;
+          uniform float uTopoMix;
+          uniform float uReliefStrength;
+          varying vec3 vObjDir;
+          varying vec3 vViewRight;
+          varying vec3 vViewUp;
+          varying vec3 vViewFwd;
+
+          vec2 lunarSphereToUv(vec3 p) {
+            float lon = atan(p.z, -p.x);
+            float u = fract(lon / 6.28318530718 + 0.5);
+            float v = clamp(asin(clamp(p.y, -1.0, 1.0)) / 3.14159265359 + 0.5, 0.0005, 0.9995);
+            return vec2(u, v);
+          }
+
+          vec4 sampleEquirectGrad(sampler2D tex, vec2 uv, vec2 ddx, vec2 ddy) {
+            return textureGrad(tex, uv, ddx, ddy);
+          }
+
+          vec2 southStereoUv(vec3 p, out float xs, out float ys) {
+            float denom = max(0.05, 1.0 - p.y);
+            xs = p.z / denom;
+            ys = -p.x / denom;
+            return vec2(0.5 + xs * uPolarInvSpan, 0.5 - ys * uPolarInvSpan);
+          }
+
+          vec2 northStereoUv(vec3 p, out float xs, out float ys) {
+            float denom = max(0.05, 1.0 + p.y);
+            xs = p.z / denom;
+            ys = -p.x / denom;
+            return vec2(0.5 + xs * uPolarInvSpan, 0.5 - ys * uPolarInvSpan);
+          }`,
+        )
+        .replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          vec3 pColorDir = normalize(vObjDir);
+          vec2 sphUv = lunarSphereToUv(pColorDir);
+          vec2 sphDdx = dFdx(sphUv);
+          vec2 sphDdy = dFdy(sphUv);
+          if (abs(sphDdx.x) > 0.5) sphDdx.x -= sign(sphDdx.x);
+          if (abs(sphDdy.x) > 0.5) sphDdy.x -= sign(sphDdy.x);
+
+          vec3 albCol = sampleEquirectGrad(uAlbedoTex, sphUv, sphDdx, sphDdy).rgb;
+          vec3 topCol = sampleEquirectGrad(uTopoTex, sphUv, sphDdx, sphDdy).rgb;
+
+          float sXs;
+          float sYs;
+          vec2 sUv = clamp(southStereoUv(pColorDir, sXs, sYs), 0.002, 0.998);
+          vec2 sDdx = dFdx(sUv);
+          vec2 sDdy = dFdy(sUv);
+          float wSouth = smoothstep(-0.9026, -0.9272, pColorDir.y);
+          if (wSouth > 0.001) {
+            albCol = mix(albCol, textureGrad(uSouthAlbedoTex, sUv, sDdx, sDdy).rgb, wSouth);
+            topCol = mix(topCol, textureGrad(uSouthTopoTex, sUv, sDdx, sDdy).rgb, wSouth);
+          }
+
+          float nXs;
+          float nYs;
+          vec2 nUv = clamp(northStereoUv(pColorDir, nXs, nYs), 0.002, 0.998);
+          vec2 nCapDdx = dFdx(nUv);
+          vec2 nCapDdy = dFdy(nUv);
+          float wNorth = smoothstep(0.9026, 0.9272, pColorDir.y);
+          if (wNorth > 0.001) {
+            albCol = mix(albCol, textureGrad(uNorthAlbedoTex, nUv, nCapDdx, nCapDdy).rgb, wNorth);
+            topCol = mix(topCol, textureGrad(uNorthTopoTex, nUv, nCapDdx, nCapDdy).rgb, wNorth);
+          }
+
+          diffuseColor.rgb *= mix(albCol, topCol, uTopoMix);`,
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>
+          vec3 pDir = normalize(vObjDir);
+          vec2 uvN = lunarSphereToUv(pDir);
+          vec2 nDdx = dFdx(uvN);
+          vec2 nDdy = dFdy(uvN);
+          if (abs(nDdx.x) > 0.5) nDdx.x -= sign(nDdx.x);
+          if (abs(nDdy.x) > 0.5) nDdy.x -= sign(nDdy.x);
+
+          vec3 nTan = sampleEquirectGrad(uNormalTex, uvN, nDdx, nDdy).xyz * 2.0 - 1.0;
+          vec2 xz = vec2(pDir.z, -pDir.x);
+          float xzLen = length(xz);
+          vec3 eastObj = xzLen > 0.002 ? vec3(xz.x / xzLen, 0.0, xz.y / xzLen) : vec3(0.0, 0.0, 1.0);
+          vec3 northObj = normalize(cross(pDir, eastObj));
+          vec3 eqObjN = normalize(eastObj * (nTan.x * uReliefStrength) + northObj * (nTan.y * uReliefStrength) + pDir * max(0.45, nTan.z));
+
+          vec3 detailObjN = eqObjN;
+
+          float xsS;
+          float ysS;
+          vec2 sUvN = clamp(southStereoUv(pDir, xsS, ysS), 0.002, 0.998);
+          vec2 sDdxN = dFdx(sUvN);
+          vec2 sDdyN = dFdy(sUvN);
+          float wSouthN = smoothstep(-0.9026, -0.9272, pDir.y);
+          if (wSouthN > 0.001) {
+            vec3 nCap = textureGrad(uSouthNormalTex, sUvN, sDdxN, sDdyN).xyz * 2.0 - 1.0;
+            vec3 tU = normalize(vec3(2.0 * xsS * ysS, 2.0 * xsS, 1.0 - xsS * xsS + ysS * ysS));
+            vec3 tV = normalize(vec3(1.0 + xsS * xsS - ysS * ysS, -2.0 * ysS, 2.0 * xsS * ysS));
+            vec3 southObjN = normalize(tU * (nCap.x * uReliefStrength) + tV * (nCap.y * uReliefStrength) + pDir * max(0.42, nCap.z));
+            detailObjN = normalize(mix(detailObjN, southObjN, wSouthN));
+          }
+
+          float xsN;
+          float ysN;
+          vec2 nUvN = clamp(northStereoUv(pDir, xsN, ysN), 0.002, 0.998);
+          vec2 nDdxN = dFdx(nUvN);
+          vec2 nDdyN = dFdy(nUvN);
+          float wNorthN = smoothstep(0.9026, 0.9272, pDir.y);
+          if (wNorthN > 0.001) {
+            vec3 nCap = textureGrad(uNorthNormalTex, nUvN, nDdxN, nDdyN).xyz * 2.0 - 1.0;
+            vec3 tU = normalize(vec3(2.0 * xsN * ysN, -2.0 * xsN, 1.0 - xsN * xsN + ysN * ysN));
+            vec3 tV = normalize(vec3(1.0 + xsN * xsN - ysN * ysN, 2.0 * ysN, 2.0 * xsN * ysN));
+            vec3 northObjN = normalize(tU * (nCap.x * uReliefStrength) + tV * (nCap.y * uReliefStrength) + pDir * max(0.42, nCap.z));
+            detailObjN = normalize(mix(detailObjN, northObjN, wNorthN));
+          }
+
+          mat3 objToViewMat = mat3(normalize(vViewRight), normalize(vViewUp), normalize(vViewFwd));
+          vec3 detailViewN = normalize(objToViewMat * detailObjN);
+          vec3 baseSphViewN = normalize(objToViewMat * pDir);
+          normal = normalize(normal + (detailViewN - baseSphViewN) * 0.85);`,
+        );
+    };
+    moonMaterial.customProgramCacheKey = () => 'lunar-nasa-real-v6';
+
+    const moonMesh = new THREE.Mesh(sphereGeo, moonMaterial);
+    moonMesh.castShadow = !isSoftwareGl;
+    moonMesh.receiveShadow = !isSoftwareGl;
+    moonGroup.add(moonMesh);
+
+    const starfield = createStarfieldPoints();
+    scene.add(starfield);
+
+    const hemiLight = new THREE.HemisphereLight(0xd4d4d8, 0x09090b, 0.22);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.65);
+    sunLight.castShadow = !isSoftwareGl;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 1.0;
+    sunLight.shadow.camera.far = 18.0;
+    sunLight.shadow.camera.left = -1.4;
+    sunLight.shadow.camera.right = 1.4;
+    sunLight.shadow.camera.top = 1.4;
+    sunLight.shadow.camera.bottom = -1.4;
+    sunLight.shadow.bias = -0.0004;
+    sunLight.shadow.normalBias = 0.015;
+    scene.add(sunLight);
+
+    const rimLight = new THREE.DirectionalLight(0xa1a1aa, 0.22);
+    rimLight.position.set(4, -2, -5);
+    scene.add(rimLight);
+
+    const setTargetLayout = (started: boolean, snapImmediate: boolean) => {
+      const w = mountEl.clientWidth || initW;
+      const h = mountEl.clientHeight || initH;
+      const aspect = w / Math.max(1, h);
+      const narrowScale = aspect < 0.9 ? Math.max(1.0, 0.88 / aspect) : 1.0;
+
+      if (!started) {
+        if (aspect >= 1.0) {
+          _targetControlsLook.set(-0.78, 0.0, 0.0);
+          _targetCamPos.set(-1.82, 2.28, 3.72);
+        } else {
+          _targetControlsLook.set(0.0, -0.34, 0.0);
+          _targetCamPos.set(-1.1, 2.8, 7.6);
+        }
+      } else {
+        _targetControlsLook.set(0.0, 0.0, 0.0);
+        _targetCamPos.set(-0.72 * narrowScale, 3.15 * narrowScale, 1.08 * narrowScale);
+      }
+
+      if (snapImmediate) {
+        camera.position.copy(_targetCamPos);
+        controls.target.copy(_targetControlsLook);
+        controls.update();
+      }
+    };
+
+    setTargetLayout(propsRef.current.hasStarted, true);
+
+    let transitionActive = false;
+    let lastFrameTime = performance.now();
+    let frameId = 0;
+    let renderBusy = false;
+    let renderDirty = false;
+    let disposed = false;
+    const raycaster = new THREE.Raycaster();
+
+    const applySurfaceAndLighting = () => {
+      const { surfaceMode: sm, hasStarted: started, subSolarLonDeg: sLon, subSolarLatDeg: sLat } =
+        propsRef.current;
+
+      moonUniforms.uTopoMix.value = sm === 'topography' ? 1.0 : 0.0;
+      moonUniforms.uReliefStrength.value = sm === 'topography' ? 1.04 : 1.15;
+      controls.enableZoom = started;
+
+      if (sm === 'topography') {
+        hemiLight.intensity = 0.96;
+        sunLight.intensity = 1.72;
+        scene.environmentIntensity = 0.16;
+      } else {
+        hemiLight.intensity = started ? 0.24 : 0.2;
+        sunLight.intensity = started ? 2.65 : 2.75;
+        scene.environmentIntensity = 0.05;
+      }
+
+      moonGroup.updateMatrixWorld(true);
+      if (!started) {
+        _scratchV1.set(-4.8, 2.3, 3.5);
+      } else {
+        const sunLocal = latLonToSphereUnit(sLat, sLon);
+        _scratchV1.set(sunLocal.x * 8, sunLocal.y * 8, sunLocal.z * 8);
+        _scratchV1.applyQuaternion(moonGroup.quaternion);
+      }
+      sunLight.position.copy(_scratchV1);
+    };
+
+    const projectWorldToOverlay = (
+      localVec: THREE.Vector3,
+      w: number,
+      h: number,
+    ): { x: number; y: number; visible: boolean } => {
+      _scratchV2.copy(localVec).applyMatrix4(moonGroup.matrixWorld);
+      _scratchNorm.copy(_scratchV2).normalize();
+      _scratchToCam.copy(camera.position).sub(_scratchV2).normalize();
+      const frontFacing = _scratchNorm.dot(_scratchToCam) > 0.04;
+      _scratchV2.project(camera);
+      return {
+        x: (_scratchV2.x * 0.5 + 0.5) * w,
+        y: (-_scratchV2.y * 0.5 + 0.5) * h,
+        visible: frontFacing && _scratchV2.z > -1 && _scratchV2.z < 1,
+      };
+    };
+
+    const syncMarkers = () => {
+      const p = propsRef.current;
+      if (p.mode !== '3d' || !p.hasStarted) return;
+
+      const w = mountEl.clientWidth || initW;
+      const h = mountEl.clientHeight || initH;
+      moonGroup.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+
+      const selectedIds = new Set(p.entries.map((e) => e.site.id));
+
+      for (const s of p.sites) {
+        const gEl = sitePinRefs.current[s.id];
+        if (!gEl) continue;
+        if (selectedIds.has(s.id)) {
+          gEl.setAttribute('visibility', 'hidden');
+          continue;
+        }
+        const u = latLonToSphereUnit(s.center.latitude_deg, s.center.longitude_east_deg);
+        const r = displacedRadiusAt(activeAtlas, s.center.latitude_deg, s.center.longitude_east_deg);
+        _scratchV1.set(u.x * r, u.y * r, u.z * r);
+        const proj = projectWorldToOverlay(_scratchV1, w, h);
+        if (!proj.visible) {
+          gEl.setAttribute('visibility', 'hidden');
+        } else {
+          gEl.setAttribute('visibility', 'visible');
+          gEl.setAttribute('transform', `translate(${proj.x.toFixed(1)}, ${proj.y.toFixed(1)})`);
+        }
+      }
+
+      const visibleSlots: Array<{
+        lbl: SlotLabel;
+        el: SVGGElement;
+        px: number;
+        py: number;
+        dx: number;
+        dy: number;
+      }> = [];
+
+      for (const lbl of SLOT_LABELS) {
+        const mEl = slotMarkerRefs.current[lbl];
+        if (!mEl) continue;
+        const entry = p.entries.find((e) => e.label === lbl);
+        if (!entry) {
+          mEl.setAttribute('visibility', 'hidden');
+          continue;
+        }
+        const u = latLonToSphereUnit(
+          entry.site.center.latitude_deg,
+          entry.site.center.longitude_east_deg,
+        );
+        const r = displacedRadiusAt(
+          activeAtlas,
+          entry.site.center.latitude_deg,
+          entry.site.center.longitude_east_deg,
+        );
+        _scratchV1.set(u.x * r, u.y * r, u.z * r);
+        const proj = projectWorldToOverlay(_scratchV1, w, h);
+        if (!proj.visible) {
+          mEl.setAttribute('visibility', 'hidden');
+        } else {
+          mEl.setAttribute('visibility', 'visible');
+          mEl.setAttribute('transform', `translate(${proj.x.toFixed(1)}, ${proj.y.toFixed(1)})`);
+          const baseOff = CALLOUT_OFFSETS[lbl];
+          visibleSlots.push({
+            lbl,
+            el: mEl,
+            px: proj.x,
+            py: proj.y,
+            dx: baseOff.dx,
+            dy: baseOff.dy,
+          });
+        }
+      }
+
+      if (visibleSlots.length > 1) {
+        const cx = visibleSlots.reduce((acc, s) => acc + s.px, 0) / visibleSlots.length;
+        const cy = visibleSlots.reduce((acc, s) => acc + s.py, 0) / visibleSlots.length;
+        for (let i = 0; i < visibleSlots.length; i += 1) {
+          const item = visibleSlots[i];
+          const vx = item.px - cx;
+          const vy = item.py - cy;
+          const dist = Math.hypot(vx, vy);
+          if (dist > 6) {
+            item.dx = (vx / dist) * 44;
+            item.dy = (vy / dist) * 42;
+          }
+        }
+        for (let iter = 0; iter < 4; iter += 1) {
+          for (let i = 0; i < visibleSlots.length; i += 1) {
+            for (let j = i + 1; j < visibleSlots.length; j += 1) {
+              const a = visibleSlots[i];
+              const b = visibleSlots[j];
+              const ax = a.px + a.dx;
+              const ay = a.py + a.dy;
+              const bx = b.px + b.dx;
+              const by = b.py + b.dy;
+              const overlapX = 44 - Math.abs(bx - ax);
+              const overlapY = 40 - Math.abs(by - ay);
+              if (overlapX > 0 && overlapY > 0) {
+                const ux = bx - ax;
+                const uy = by - ay;
+                const d = Math.hypot(ux, uy) || 1;
+                const push = 14;
+                a.dx -= (ux / d) * push;
+                a.dy -= (uy / d) * push;
+                b.dx += (ux / d) * push;
+                b.dy += (uy / d) * push;
+              }
+            }
+          }
+        }
+      }
+
+      for (const item of visibleSlots) {
+        const lineEl = item.el.querySelector('line.vp-callout-line');
+        const rectEl = item.el.querySelector('rect.vp-callout-box');
+        const textEl = item.el.querySelector('text.vp-callout-label');
+        if (lineEl) {
+          lineEl.setAttribute('x2', item.dx.toFixed(1));
+          lineEl.setAttribute('y2', item.dy.toFixed(1));
+        }
+        if (rectEl) {
+          rectEl.setAttribute('x', (item.dx - 16).toFixed(1));
+          rectEl.setAttribute('y', (item.dy - 15).toFixed(1));
+        }
+        if (textEl) {
+          textEl.setAttribute('x', item.dx.toFixed(1));
+          textEl.setAttribute('y', (item.dy + 4.5).toFixed(1));
+        }
+      }
+
+      const poleUnit = latLonToSphereUnit(-90, 0);
+      const poleProj = projectWorldToOverlay(
+        _scratchV1.set(poleUnit.x * 1.04, poleUnit.y * 1.04, poleUnit.z * 1.04),
+        w,
+        h,
+      );
+
+      if (sunMarkerRef.current) {
+        const sU = latLonToSphereUnit(-73.5, p.subSolarLonDeg);
+        const sunProj = projectWorldToOverlay(
+          _scratchV1.set(sU.x * 1.04, sU.y * 1.04, sU.z * 1.04),
+          w,
+          h,
+        );
+        if (poleProj.visible && sunProj.visible) {
+          sunMarkerRef.current.setAttribute('visibility', 'visible');
+          const lineEl = sunMarkerRef.current.querySelector('line');
+          const dotEl = sunMarkerRef.current.querySelector('circle');
+          const textEl = sunMarkerRef.current.querySelector('text');
+          if (lineEl) {
+            lineEl.setAttribute('x1', poleProj.x.toFixed(1));
+            lineEl.setAttribute('y1', poleProj.y.toFixed(1));
+            lineEl.setAttribute('x2', sunProj.x.toFixed(1));
+            lineEl.setAttribute('y2', sunProj.y.toFixed(1));
+          }
+          if (dotEl) {
+            dotEl.setAttribute('cx', sunProj.x.toFixed(1));
+            dotEl.setAttribute('cy', sunProj.y.toFixed(1));
+          }
+          if (textEl) {
+            textEl.setAttribute('x', (sunProj.x + 8).toFixed(1));
+            textEl.setAttribute('y', (sunProj.y + 4).toFixed(1));
+          }
+        } else {
+          sunMarkerRef.current.setAttribute('visibility', 'hidden');
+        }
+      }
+
+      if (earthMarkerRef.current) {
+        const eU = latLonToSphereUnit(-73.5, p.subEarthLonDeg);
+        const earthProj = projectWorldToOverlay(
+          _scratchV1.set(eU.x * 1.04, eU.y * 1.04, eU.z * 1.04),
+          w,
+          h,
+        );
+        if (poleProj.visible && earthProj.visible) {
+          earthMarkerRef.current.setAttribute('visibility', 'visible');
+          const lineEl = earthMarkerRef.current.querySelector('line');
+          const dotEl = earthMarkerRef.current.querySelector('circle');
+          const textEl = earthMarkerRef.current.querySelector('text');
+          if (lineEl) {
+            lineEl.setAttribute('x1', poleProj.x.toFixed(1));
+            lineEl.setAttribute('y1', poleProj.y.toFixed(1));
+            lineEl.setAttribute('x2', earthProj.x.toFixed(1));
+            lineEl.setAttribute('y2', earthProj.y.toFixed(1));
+          }
+          if (dotEl) {
+            dotEl.setAttribute('cx', earthProj.x.toFixed(1));
+            dotEl.setAttribute('cy', earthProj.y.toFixed(1));
+          }
+          if (textEl) {
+            textEl.setAttribute('x', (earthProj.x + 8).toFixed(1));
+            textEl.setAttribute('y', (earthProj.y + 4).toFixed(1));
+          }
+        } else {
+          earthMarkerRef.current.setAttribute('visibility', 'hidden');
+        }
+      }
+    };
+
+    const updateReticleCoords = () => {
+      const p = propsRef.current;
+      if (!p.onReticleChange || !p.hasStarted || p.mode !== '3d') return;
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const hits = raycaster.intersectObject(moonMesh, false);
+      if (hits.length > 0) {
+        _scratchHitLocal.copy(hits[0].point);
+        moonGroup.worldToLocal(_scratchHitLocal);
+        const geo = sphereUnitToLatLon(_scratchHitLocal.x, _scratchHitLocal.y, _scratchHitLocal.z);
+        p.onReticleChange(geo.latDeg, geo.lonEastDeg);
+      }
+    };
+
+    const afterDraw = (cb: () => void) => {
+      const gl = renderer.getContext() as WebGL2RenderingContext;
+      if (!gl || typeof gl.fenceSync !== 'function') {
+        frameId = window.setTimeout(cb, 40);
+        return;
+      }
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      const poll = () => {
+        if (disposed) return;
+        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
+        if (state === gl.UNSIGNALED) {
+          frameId = window.setTimeout(poll, 5);
+        } else {
+          if (sync) gl.deleteSync(sync);
+          frameId = window.setTimeout(cb, 65);
+        }
+      };
+      frameId = window.setTimeout(poll, 5);
+    };
+
+    const requestRender = () => {
+      if (disposed) return;
+      if (propsRef.current.mode !== '3d') return;
+      if (renderBusy) {
+        renderDirty = true;
+        return;
+      }
+      renderBusy = true;
+      frameId = requestAnimationFrame(() => {
+        if (disposed) return;
+        renderDirty = false;
+        const now = performance.now();
+        const dt = Math.min(0.08, Math.max(0.001, (now - lastFrameTime) / 1000));
+        lastFrameTime = now;
+
+        if (transitionActive) {
+          camera.position.x = THREE.MathUtils.damp(camera.position.x, _targetCamPos.x, 6.5, dt);
+          camera.position.y = THREE.MathUtils.damp(camera.position.y, _targetCamPos.y, 6.5, dt);
+          camera.position.z = THREE.MathUtils.damp(camera.position.z, _targetCamPos.z, 6.5, dt);
+          controls.target.x = THREE.MathUtils.damp(controls.target.x, _targetControlsLook.x, 7.5, dt);
+          controls.target.y = THREE.MathUtils.damp(controls.target.y, _targetControlsLook.y, 7.5, dt);
+          controls.target.z = THREE.MathUtils.damp(controls.target.z, _targetControlsLook.z, 7.5, dt);
+
+          const distLeft =
+            camera.position.distanceTo(_targetCamPos) + controls.target.distanceTo(_targetControlsLook);
+          if (distLeft < 0.008) {
+            camera.position.copy(_targetCamPos);
+            controls.target.copy(_targetControlsLook);
+            transitionActive = false;
+          } else {
+            renderDirty = true;
+          }
+        }
+
+        const didMove = controls.update();
+        if (didMove && !isSoftwareGl) {
+          renderDirty = true;
+        }
+        applySurfaceAndLighting();
+        renderer.render(scene, camera);
+        syncMarkers();
+
+        const done = () => {
+          renderBusy = false;
+          if (renderDirty && !disposed) requestRender();
+        };
+        if (isSoftwareGl) {
+          afterDraw(done);
+        } else {
+          done();
+        }
+      });
+    };
+
+    // Load genuine NASA LRO LROC + LOLA 2K & South Pole LDEM_80S_80M and upgrade textures + 3D relief
+    loadRealNasaLunarAtlas()
+      .then((realAtlas) => {
+        if (disposed) return;
+        activeAtlas = realAtlas;
+        applyVertexDisplacement(realAtlas);
+
+        const nextAlbedo = makeSphericalTex(realAtlas.albedoRgba, realAtlas.width, realAtlas.height, true);
+        const nextTopo = makeSphericalTex(realAtlas.topoRgba, realAtlas.width, realAtlas.height, true);
+        const nextNormal = makeSphericalTex(realAtlas.normalRgba, realAtlas.width, realAtlas.height, false);
+        const nextSouthAlbedo = makePolarCapTex(realAtlas.southCapAlbedoRgba, realAtlas.southCapWidth, true);
+        const nextSouthTopo = makePolarCapTex(realAtlas.southCapTopoRgba, realAtlas.southCapWidth, true);
+        const nextSouthNormal = makePolarCapTex(realAtlas.southCapNormalRgba, realAtlas.southCapWidth, false);
+        const nextNorthAlbedo = makePolarCapTex(realAtlas.northCapAlbedoRgba, realAtlas.northCapWidth, true);
+        const nextNorthTopo = makePolarCapTex(realAtlas.northCapTopoRgba, realAtlas.northCapWidth, true);
+        const nextNorthNormal = makePolarCapTex(realAtlas.northCapNormalRgba, realAtlas.northCapWidth, false);
+
+        const prevTextures = [
+          albedoTex,
+          topoTex,
+          normalTex,
+          southAlbedoTex,
+          southTopoTex,
+          southNormalTex,
+          northAlbedoTex,
+          northTopoTex,
+          northNormalTex,
+        ];
+
+        albedoTex = nextAlbedo;
+        topoTex = nextTopo;
+        normalTex = nextNormal;
+        southAlbedoTex = nextSouthAlbedo;
+        southTopoTex = nextSouthTopo;
+        southNormalTex = nextSouthNormal;
+        northAlbedoTex = nextNorthAlbedo;
+        northTopoTex = nextNorthTopo;
+        northNormalTex = nextNorthNormal;
+
+        moonUniforms.uAlbedoTex.value = nextAlbedo;
+        moonUniforms.uTopoTex.value = nextTopo;
+        moonUniforms.uNormalTex.value = nextNormal;
+        moonUniforms.uSouthAlbedoTex.value = nextSouthAlbedo;
+        moonUniforms.uSouthTopoTex.value = nextSouthTopo;
+        moonUniforms.uSouthNormalTex.value = nextSouthNormal;
+        moonUniforms.uNorthAlbedoTex.value = nextNorthAlbedo;
+        moonUniforms.uNorthTopoTex.value = nextNorthTopo;
+        moonUniforms.uNorthNormalTex.value = nextNorthNormal;
+
+        prevTextures.forEach((t) => t.dispose());
+
+        requestRender();
+      })
+      .catch(() => {
+        // Fallback atlas remains cleanly active if offline / JSDOM test environment
+      });
+
+    const onControlsStart = () => {
+      transitionActive = false;
+    };
+    const onControlsChange = () => {
+      updateReticleCoords();
+      requestRender();
+    };
+    controls.addEventListener('start', onControlsStart);
+    controls.addEventListener('change', onControlsChange);
+
+    let pointerDownPos: { x: number; y: number } | null = null;
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!pointerDownPos) return;
+      const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      pointerDownPos = null;
+      const p = propsRef.current;
+      if (dist > 6 || !p.hasStarted || p.mode !== '3d' || p.selectionMode !== 'cursor') return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(ndc, camera);
+      const hits = raycaster.intersectObject(moonMesh, false);
+      if (hits.length > 0) {
+        _scratchHitLocal.copy(hits[0].point);
+        moonGroup.worldToLocal(_scratchHitLocal);
+        const geo = sphereUnitToLatLon(_scratchHitLocal.x, _scratchHitLocal.y, _scratchHitLocal.z);
+        p.onOutsidePolarCoverage(geo.latDeg, geo.lonEastDeg, p.activeSlotIdx, activeAtlas);
+      }
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+    const onResize = () => {
+      const w = mountEl.clientWidth || window.innerWidth || 1280;
+      const h = mountEl.clientHeight || window.innerHeight || 720;
+      camera.aspect = w / Math.max(1, h);
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      setTargetLayout(propsRef.current.hasStarted, true);
+      requestRender();
+    };
+    window.addEventListener('resize', onResize);
+
+    if (!isSoftwareGl) {
+      renderer.compile(scene, camera);
+    }
+
+    threeCtrlRef.current = {
+      requestRender,
+      beginCameraTransition: (started: boolean) => {
+        setTargetLayout(started, isSoftwareGl);
+        transitionActive = !isSoftwareGl;
+        requestRender();
+      },
+      flyToSouthPole: () => {
+        const w = mountEl.clientWidth || initW;
+        const h = mountEl.clientHeight || initH;
+        const aspect = w / Math.max(1, h);
+        const narrowScale = aspect < 0.9 ? Math.max(1.0, 0.88 / aspect) : 1.0;
+        _targetControlsLook.set(0, 0, 0);
+        _targetCamPos.set(-0.18 * narrowScale, 1.76 * narrowScale, 0.18 * narrowScale);
+        if (isSoftwareGl) {
+          camera.position.copy(_targetCamPos);
+          controls.target.copy(_targetControlsLook);
+          controls.update();
+          transitionActive = false;
+        } else {
+          transitionActive = true;
+        }
+        requestRender();
+      },
+      flyToFullMoon: () => {
+        const w = mountEl.clientWidth || initW;
+        const h = mountEl.clientHeight || initH;
+        const aspect = w / Math.max(1, h);
+        const narrowScale = aspect < 0.9 ? Math.max(1.0, 0.88 / aspect) : 1.0;
+        _targetControlsLook.set(0, 0, 0);
+        _targetCamPos.set(-1.15 * narrowScale, 3.85 * narrowScale, 2.2 * narrowScale);
+        if (isSoftwareGl) {
+          camera.position.copy(_targetCamPos);
+          controls.target.copy(_targetControlsLook);
+          controls.update();
+          transitionActive = false;
+        } else {
+          transitionActive = true;
+        }
+        requestRender();
+      },
+      zoomStep: (delta: number) => {
+        transitionActive = false;
+        const offset = camera.position.clone().sub(controls.target);
+        const curLen = offset.length();
+        const nextLen = clamp(curLen * (1 - delta), controls.minDistance, controls.maxDistance);
+        offset.setLength(nextLen);
+        camera.position.copy(controls.target).add(offset);
+        controls.update();
+        requestRender();
+      },
+      nudgeOrbit: (dAzRad: number, dPolRad: number) => {
+        transitionActive = false;
+        const offset = camera.position.clone().sub(controls.target);
+        const sph = new THREE.Spherical().setFromVector3(offset);
+        sph.theta += dAzRad;
+        sph.phi = clamp(sph.phi + dPolRad, controls.minPolarAngle, controls.maxPolarAngle);
+        offset.setFromSpherical(sph);
+        camera.position.copy(controls.target).add(offset);
+        controls.update();
+        updateReticleCoords();
+        requestRender();
+      },
+    };
+
+    requestRender();
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frameId);
+      clearTimeout(frameId);
+      window.removeEventListener('resize', onResize);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      controls.removeEventListener('start', onControlsStart);
+      controls.removeEventListener('change', onControlsChange);
+      controls.dispose();
+      sphereGeo.dispose();
+      moonMaterial.dispose();
+      albedoTex.dispose();
+      topoTex.dispose();
+      normalTex.dispose();
+      southAlbedoTex.dispose();
+      southTopoTex.dispose();
+      southNormalTex.dispose();
+      northAlbedoTex.dispose();
+      northTopoTex.dispose();
+      northNormalTex.dispose();
+      envTarget.dispose();
+      starfield.geometry.dispose();
+      (starfield.material as THREE.Material).dispose();
+      renderer.dispose();
+      threeCtrlRef.current = null;
+    };
+  }, []);
+
+  const prevStartedRef = useRef(hasStarted);
+  const entrySignature = entries.map((e) => `${e.label}:${e.site.id}`).join('|');
+
+  useEffect(() => {
+    const ctrl = threeCtrlRef.current;
+    if (!ctrl) return;
+    if (prevStartedRef.current !== hasStarted) {
+      prevStartedRef.current = hasStarted;
+      ctrl.beginCameraTransition(hasStarted);
+      return;
+    }
+    if (mode === '3d') {
+      ctrl.requestRender();
+    }
+  }, [hasStarted, mode, surfaceMode, entrySignature, activeSlotIdx, epochIdx, viewportSize.w, viewportSize.h]);
+
+  const svgW = viewportSize.w;
+  const svgH = viewportSize.h;
+  const centerX = svgW / 2;
+  const centerY = svgH / 2;
+
+  const handleStageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!hasStarted || mode !== '3d') return;
+    const stepRad = (e.shiftKey ? 10 : 4) * DEG;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      threeCtrlRef.current?.nudgeOrbit(-stepRad, 0);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      threeCtrlRef.current?.nudgeOrbit(stepRad, 0);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      threeCtrlRef.current?.nudgeOrbit(0, -stepRad);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      threeCtrlRef.current?.nudgeOrbit(0, stepRad);
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      threeCtrlRef.current?.zoomStep(0.18);
+    } else if (e.key === '-') {
+      e.preventDefault();
+      threeCtrlRef.current?.zoomStep(-0.18);
+    }
+  };
+
+  const selectedIds = new Set(entries.map((e) => e.site.id));
 
   return (
-    <div className="lunar-stage-wrap">
-      <svg
-        ref={svgRef}
-        className="lunar-stage-svg"
-        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        preserveAspectRatio="xMidYMid slice"
-        tabIndex={screen === 'explore' ? 0 : -1}
-        role="img"
-        aria-label={
-          viewMode === '3d'
-            ? 'Globo lunar 3D interativo com iluminação solar e marcadores A e B no Polo Sul. Use as setas do teclado para girar.'
-            : 'Mapa polar sul lunar 2D em projeção estereográfica com marcadores A e B. Use as setas do teclado para mover.'
-        }
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onKeyDown={handleKeyDownStage}
-      >
-        <defs>
-          <radialGradient id="lgSpaceGlow" cx="50%" cy="50%" r="72%">
-            <stop offset="0%" stopColor="#0f1d36" />
-            <stop offset="55%" stopColor="#070d1b" />
-            <stop offset="100%" stopColor="#03060d" />
-          </radialGradient>
+    <div
+      ref={stageRef}
+      className="lunar-stage"
+      data-viewport-mode={mode}
+      data-surface-mode={surfaceMode}
+      data-site-a={entries[0]?.site.id ?? ''}
+      data-slots-count={entries.length}
+      tabIndex={hasStarted && mode === '3d' ? 0 : -1}
+      onKeyDown={handleStageKeyDown}
+      role="region"
+      aria-label={`NASA LRO 3D Moon globe (${surfaceMode === 'topography' ? 'LOLA Elevation' : 'LROC Surface'}). Drag to orbit or select a pin for Site ${activeEntry.label}.`}
+    >
+      <div
+        ref={webglMountRef}
+        data-testid="lunar-webgl-canvas"
+        className={`lunar-webgl-mount ${mode === '3d' ? 'is-visible' : 'is-hidden'} ${
+          selectionMode === 'cursor' && hasStarted ? 'cursor-pick' : 'cursor-grab'
+        }`}
+        aria-hidden={mode !== '3d'}
+      />
 
-          <radialGradient
-            id="lgMoonBody"
-            cx={`${Math.max(20, Math.min(80, sunLightOffset.gradX))}%`}
-            cy={`${Math.max(20, Math.min(80, sunLightOffset.gradY))}%`}
-            r="68%"
-          >
-            <stop offset="0%" stopColor="#d9dfea" />
-            <stop offset="48%" stopColor="#8b96aa" />
-            <stop offset="82%" stopColor="#353f52" />
-            <stop offset="100%" stopColor="#121824" />
-          </radialGradient>
-
-          <radialGradient id="lgPolarMapBg" cx="50%" cy="50%" r="58%">
-            <stop offset="0%" stopColor="#263144" />
-            <stop offset="65%" stopColor="#172030" />
-            <stop offset="100%" stopColor="#0b111c" />
-          </radialGradient>
-
-          <clipPath id="lgGlobeClip">
-            <circle cx={CX} cy={CY} r={radiusPx} />
-          </clipPath>
-        </defs>
-
-        {/* Fundo espacial com campo discreto de estrelas */}
-        <rect x="0" y="0" width={SVG_W} height={SVG_H} fill="url(#lgSpaceGlow)" />
-        {[
-          [82, 95, 1.3],
-          [148, 210, 0.9],
-          [220, 68, 1.5],
-          [735, 112, 1.4],
-          [812, 240, 1.1],
-          [110, 560, 1.2],
-          [785, 585, 1.5],
-          [670, 640, 1.0],
-          [265, 625, 1.1],
-          [845, 420, 0.9],
-          [48, 390, 1.2],
-        ].map(([sx, sy, sr], i) => (
-          <circle key={i} cx={sx} cy={sy} r={sr} fill="#dce8ff" opacity={0.45} />
-        ))}
-
-        {viewMode === '3d' ? (
-          <g>
-            {/* Halo atmosférico/óptico sutil ao redor do limbo */}
-            <circle
-              cx={CX}
-              cy={CY}
-              r={radiusPx + 14}
-              fill="none"
-              stroke="rgba(125, 211, 252, 0.14)"
-              strokeWidth="12"
-            />
-
-            {/* Esfera Lunar */}
-            <circle cx={CX} cy={CY} r={radiusPx} fill="url(#lgMoonBody)" />
-
-            <g clipPath="url(#lgGlobeClip)">
-              {/* Mares e crateras projetados em 3D */}
-              {LUNAR_LANDMARKS.map((lm) => {
-                const p = project3D(lm.lat, lm.lon, camLat, camLon, radiusPx);
-                if (!p.visible) return null;
-                const rPx = Math.max(4, (lm.radiusDeg * Math.PI) / 180 * radiusPx * Math.max(0.35, p.z));
-                return lm.kind === 'mare' ? (
-                  <ellipse
-                    key={lm.name}
-                    cx={p.x}
-                    cy={p.y}
-                    rx={rPx}
-                    ry={rPx * Math.max(0.3, p.z)}
-                    fill="rgba(22, 30, 44, 0.36)"
-                  />
-                ) : (
-                  <g key={lm.name}>
-                    <circle
-                      cx={p.x}
-                      cy={p.y}
-                      r={rPx}
-                      fill="rgba(18, 25, 38, 0.34)"
-                      stroke="rgba(240, 246, 255, 0.34)"
-                      strokeWidth="1.2"
-                    />
-                  </g>
-                );
-              })}
-
-              {/* Grade sutil de paralelos/meridianos para orientação */}
-              {[-60, -30, 0, 30, 60].map((lat) => {
-                const segs: string[] = [];
-                for (let lon = 0; lon <= 360; lon += 15) {
-                  const p = project3D(lat, lon, camLat, camLon, radiusPx);
-                  if (p.visible) segs.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-                }
-                return segs.length > 2 ? (
-                  <polyline
-                    key={`lat-${lat}`}
-                    points={segs.join(' ')}
-                    fill="none"
-                    stroke="rgba(180, 205, 240, 0.12)"
-                    strokeWidth="0.9"
-                  />
-                ) : null;
-              })}
-
-              {/* Faixa LOLA de alta resolução (80°S - 90°S) */}
-              {southPoleRingPoints.length > 3 && (
-                <polygon
-                  points={southPoleRingPoints.join(' ')}
-                  fill="rgba(56, 189, 248, 0.1)"
-                  stroke="#38bdf8"
-                  strokeWidth="1.4"
-                  strokeDasharray="5 4"
-                />
-              )}
-            </g>
-
-            {/* Borda do limbo */}
-            <circle
-              cx={CX}
-              cy={CY}
-              r={radiusPx}
-              fill="none"
-              stroke="rgba(185, 210, 245, 0.35)"
-              strokeWidth="1.5"
-            />
-
-            {/* Indicador de direção Solar e Terra no espaço ao redor do globo */}
-            {screen === 'explore' && (
-              <g aria-hidden="true">
-                <line
-                  x1={CX + Math.sin(sunRad2d) * (radiusPx + 18)}
-                  y1={CY - Math.cos(sunRad2d) * (radiusPx + 18)}
-                  x2={CX + Math.sin(sunRad2d) * (radiusPx + 42)}
-                  y2={CY - Math.cos(sunRad2d) * (radiusPx + 42)}
-                  stroke="#ffd166"
-                  strokeWidth="2.5"
-                />
-                <circle
-                  cx={CX + Math.sin(sunRad2d) * (radiusPx + 50)}
-                  cy={CY - Math.cos(sunRad2d) * (radiusPx + 50)}
-                  r="8"
-                  fill="#ffd166"
-                />
-                <text
-                  x={CX + Math.sin(sunRad2d) * (radiusPx + 68)}
-                  y={CY - Math.cos(sunRad2d) * (radiusPx + 68) + 4}
-                  textAnchor="middle"
-                  fill="#ffd166"
-                  fontSize="11"
-                  fontWeight="700"
-                >
-                  Sol
-                </text>
-
-                <circle
-                  cx={CX + Math.sin(earthRad2d) * (radiusPx + 46)}
-                  cy={CY - Math.cos(earthRad2d) * (radiusPx + 46)}
-                  r="6"
-                  fill="#74a9ff"
-                />
-                <text
-                  x={CX + Math.sin(earthRad2d) * (radiusPx + 66)}
-                  y={CY - Math.cos(earthRad2d) * (radiusPx + 66) + 4}
-                  textAnchor="middle"
-                  fill="#9cc2ff"
-                  fontSize="11"
-                  fontWeight="700"
-                >
-                  Terra
-                </text>
+      {mode === '3d' && (
+        <svg
+          className="lunar-hud-overlay overlay-passthrough"
+          width={svgW}
+          height={svgH}
+          viewBox={`0 0 ${svgW} ${svgH}`}
+          role="img"
+          aria-label={`3D Moon site markers for ${entries.map((e) => `${e.label}: ${e.site.name}`).join(', ')}`}
+        >
+          {hasStarted && (
+            <g pointerEvents="none" opacity={0.85}>
+              <g ref={sunMarkerRef} visibility="hidden">
+                <line stroke="#ffffff" strokeWidth={1.2} strokeDasharray="4 3" />
+                <circle r={3.8} fill="#ffffff" stroke="#000000" strokeWidth={1.2} />
+                <text className="vp-vec-sun">Sun</text>
               </g>
-            )}
-          </g>
-        ) : (
-          /* Projeção Polar 2D (80°S - 90°S) */
-          <g>
-            {[
-              { lat: -80, label: '80° S (Limite DEM LOLA 80 m/px)' },
-              { lat: -84, label: '84° S' },
-              { lat: -88, label: '88° S' },
-            ].map((ring, idx) => {
-              const r = (90 + ring.lat) * scale2d;
+              <g ref={earthMarkerRef} visibility="hidden">
+                <line stroke="#a1a1aa" strokeWidth={1.2} strokeDasharray="2 3" />
+                <circle r={3.8} fill="#a1a1aa" stroke="#000000" strokeWidth={1.2} />
+                <text className="vp-vec-earth">Earth</text>
+              </g>
+            </g>
+          )}
+
+          {hasStarted &&
+            sites.map((site) => {
+              if (selectedIds.has(site.id)) return null;
+              const isHovered = hoveredPinId === site.id;
+              const labelW = Math.max(96, site.name.length * 6.6 + 18);
               return (
-                <g key={ring.lat}>
+                <g
+                  key={site.id}
+                  ref={(el) => {
+                    sitePinRefs.current[site.id] = el;
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Assign ${site.name} to Site ${activeEntry.label}`}
+                  className="vp-site-pin overlay-pointer-target"
+                  visibility="hidden"
+                  onMouseEnter={() => setHoveredPinId(site.id)}
+                  onMouseLeave={() => setHoveredPinId((prev) => (prev === site.id ? null : prev))}
+                  onFocus={() => setHoveredPinId(site.id)}
+                  onBlur={() => setHoveredPinId((prev) => (prev === site.id ? null : prev))}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectSiteDirect(site.id, activeSlotIdx);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectSiteDirect(site.id, activeSlotIdx);
+                    }
+                  }}
+                >
+                  <circle cx={0} cy={0} r={17} fill="transparent" />
                   <circle
-                    cx={CX + pan2d.x}
-                    cy={CY + pan2d.y}
-                    r={r}
-                    fill={idx === 0 ? 'url(#lgPolarMapBg)' : 'none'}
-                    stroke={idx === 0 ? '#38bdf8' : 'rgba(180, 205, 240, 0.25)'}
-                    strokeWidth={idx === 0 ? '1.8' : '1'}
-                    strokeDasharray={idx === 0 ? undefined : '4 4'}
+                    cx={0}
+                    cy={0}
+                    r={isHovered ? 7.5 : 5}
+                    fill={site.center.is_psr ? '#71717a' : '#ffffff'}
+                    stroke="#000000"
+                    strokeWidth={isHovered ? 2 : 1.5}
+                    opacity={0.95}
                   />
-                  <text
-                    x={CX + pan2d.x + 6}
-                    y={CY + pan2d.y - r + 15}
-                    fill="#9db4d2"
-                    fontSize="11"
-                  >
-                    {ring.label}
-                  </text>
+                  {isHovered && (
+                    <g transform="translate(12, -13)" pointerEvents="none">
+                      <rect
+                        x={0}
+                        y={-12}
+                        width={labelW}
+                        height={24}
+                        rx={3}
+                        fill="rgba(0, 0, 0, 0.94)"
+                      />
+                      <text x={8} y={4} className="vp-pin-hover-label">
+                        {site.name}
+                      </text>
+                    </g>
+                  )}
+                  <title>{`${site.name} — Click to set Site ${activeEntry.label}`}</title>
                 </g>
               );
             })}
 
-            {/* Cruz do Polo Sul geográfico */}
-            <circle cx={CX + pan2d.x} cy={CY + pan2d.y} r="3" fill="#7dd3fc" />
-            <text
-              x={CX + pan2d.x + 10}
-              y={CY + pan2d.y + 4}
-              fill="#7dd3fc"
-              fontSize="11"
-              fontWeight="600"
-            >
-              90° S
-            </text>
+          {hasStarted &&
+            SLOT_LABELS.map((lbl) => {
+              const entryIndex = entries.findIndex((e) => e.label === lbl);
+              const entry = entryIndex >= 0 ? entries[entryIndex] : null;
+              const off = CALLOUT_OFFSETS[lbl];
+              const meta = SLOT_META[lbl];
+              const isArmed = entryIndex === activeSlotIdx;
+              const boxX = off.dx - 16;
+              const boxY = off.dy - 15;
 
-            {/* Direções cardeais do mapa polar */}
-            <text
-              x={CX + pan2d.x}
-              y={CY + pan2d.y - 10 * scale2d - 12}
-              textAnchor="middle"
-              fill="#9cc2ff"
-              fontSize="12"
-              fontWeight="700"
-            >
-              0° L (Direção média da Terra)
-            </text>
-            <text
-              x={CX + pan2d.x + 10 * scale2d + 20}
-              y={CY + pan2d.y + 4}
-              textAnchor="start"
-              fill="#9db4d2"
-              fontSize="11"
-            >
-              90° L
-            </text>
-
-            {/* Vetores Sol e Terra na época atual */}
-            <line
-              x1={CX + pan2d.x}
-              y1={CY + pan2d.y}
-              x2={CX + pan2d.x + Math.sin(sunRad2d) * 9.8 * scale2d}
-              y2={CY + pan2d.y - Math.cos(sunRad2d) * 9.8 * scale2d}
-              stroke="#ffd166"
-              strokeWidth="2"
-              strokeDasharray="6 4"
-            />
-            <circle
-              cx={CX + pan2d.x + Math.sin(sunRad2d) * 10.6 * scale2d}
-              cy={CY + pan2d.y - Math.cos(sunRad2d) * 10.6 * scale2d}
-              r="7"
-              fill="#ffd166"
-            />
-            <text
-              x={CX + pan2d.x + Math.sin(sunRad2d) * 11.4 * scale2d}
-              y={CY + pan2d.y - Math.cos(sunRad2d) * 11.4 * scale2d + 4}
-              textAnchor="middle"
-              fill="#ffd166"
-              fontSize="11"
-              fontWeight="700"
-            >
-              Sol
-            </text>
-
-            <line
-              x1={CX + pan2d.x}
-              y1={CY + pan2d.y}
-              x2={CX + pan2d.x + Math.sin(earthRad2d) * 9.2 * scale2d}
-              y2={CY + pan2d.y - Math.cos(earthRad2d) * 9.2 * scale2d}
-              stroke="#74a9ff"
-              strokeWidth="1.8"
-              strokeDasharray="3 4"
-            />
-          </g>
-        )}
-
-        {/* Pinos das 10 regiões e marcadores destacados A e B (idênticos em 2D e 3D) */}
-        {screen === 'explore' &&
-          projectedSites.map(({ site, pos, isA, isB }) => {
-            if (!pos.visible) return null;
-            return (
-              <g
-                key={site.id}
-                data-site-pin="true"
-                transform={`translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`}
-                style={{ cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const targetToUpdate: CursorTarget =
-                    selectionMode === 'cursor'
-                      ? cursorTarget
-                      : isB
-                        ? 'B'
-                        : isA
-                          ? 'A'
-                          : slotB === null
-                            ? 'B'
-                            : cursorTarget;
-                  onAssignSlot(targetToUpdate, site.id, 0, 0, null);
-                  setCoverageNotice(null);
-                }}
-              >
-                {isA ? (
-                  <>
-                    <circle r="13" fill="rgba(245, 183, 73, 0.24)" stroke="#f5b749" strokeWidth="2.5" />
-                    <circle r="8" fill="#f5b749" />
-                    <text y="4" textAnchor="middle" fill="#060b14" fontSize="10" fontWeight="800">
-                      A
-                    </text>
-                  </>
-                ) : isB ? (
-                  <>
-                    <polygon
-                      points="0,-13 13,0 0,13 -13,0"
-                      fill="rgba(87, 214, 255, 0.25)"
-                      stroke="#57d6ff"
-                      strokeWidth="2.2"
-                    />
-                    <circle r="7" fill="#57d6ff" />
-                    <text y="3.5" textAnchor="middle" fill="#060b14" fontSize="10" fontWeight="800">
-                      B
-                    </text>
-                  </>
-                ) : (
-                  <circle
-                    r="4.5"
-                    fill="#94a3b8"
-                    stroke="#060b14"
-                    strokeWidth="1.4"
-                    opacity={viewMode === '2d' ? 0.9 : 0.72}
+              return (
+                <g
+                  key={lbl}
+                  ref={(el) => {
+                    slotMarkerRefs.current[lbl] = el;
+                  }}
+                  className="vp-marker-slot overlay-pointer-target"
+                  role="button"
+                  tabIndex={entry ? 0 : -1}
+                  aria-label={entry ? `Site ${lbl}: ${entry.site.name}` : undefined}
+                  visibility="hidden"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (entryIndex >= 0) onSelectActiveSlot(entryIndex);
+                  }}
+                  onKeyDown={(e) => {
+                    if (entryIndex >= 0 && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectActiveSlot(entryIndex);
+                    }
+                  }}
+                >
+                  <line
+                    className="vp-callout-line"
+                    x1={0}
+                    y1={0}
+                    x2={off.dx}
+                    y2={off.dy}
+                    stroke={meta.color}
+                    strokeWidth={1.4}
                   />
-                )}
-                {(isA || isB || viewMode === '2d') && (
+                  {renderSlotShapeSvg(lbl, meta.color, isArmed)}
+                  <rect
+                    className="vp-callout-box"
+                    x={boxX}
+                    y={boxY}
+                    width={32}
+                    height={30}
+                    rx={3}
+                    fill={isArmed ? '#ffffff' : 'rgba(10, 10, 12, 0.92)'}
+                  />
                   <text
-                    x="14"
-                    y={isB && isA ? -10 : 4}
-                    fill={isA ? '#fde68a' : isB ? '#bae6fd' : '#cbd5e1'}
-                    fontSize={isA || isB ? '12' : '10.5'}
-                    fontWeight={isA || isB ? '700' : '500'}
+                    className="vp-callout-label"
+                    x={off.dx}
+                    y={off.dy + 4.5}
+                    textAnchor="middle"
+                    fill={isArmed ? '#000000' : '#ffffff'}
+                    fontSize={13}
+                    fontWeight={600}
                   >
-                    {site.name}
+                    {lbl}
                   </text>
-                )}
-              </g>
-            );
-          })}
+                  {entry && <title>{`Site ${lbl}: ${entry.site.name}`}</title>}
+                </g>
+              );
+            })}
 
-        {/* Mira central quando Modo = Centro */}
-        {screen === 'explore' && selectionMode === 'center' && (
-          <g aria-hidden="true">
-            <circle
-              cx={CX}
-              cy={CY}
-              r="22"
-              fill="none"
-              stroke="#7dd3fc"
-              strokeWidth="2"
-              strokeDasharray="6 4"
-            />
-            <line x1={CX - 32} y1={CY} x2={CX - 10} y2={CY} stroke="#7dd3fc" strokeWidth="2.2" />
-            <line x1={CX + 10} y1={CY} x2={CX + 32} y2={CY} stroke="#7dd3fc" strokeWidth="2.2" />
-            <line x1={CX} y1={CY - 32} x2={CX} y2={CY - 10} stroke="#7dd3fc" strokeWidth="2.2" />
-            <line x1={CX} y1={CY + 10} x2={CX} y2={CY + 32} stroke="#7dd3fc" strokeWidth="2.2" />
-            <circle cx={CX} cy={CY} r="3" fill="#ffffff" />
-          </g>
-        )}
-      </svg>
-
-      {/* Ação direta da mira no modo Centro + controles sutis de câmera/zoom acessíveis */}
-      {screen === 'explore' && (
-        <div className="stage-bottom-center-bar">
-          {selectionMode === 'center' && (
-            <div className="reticle-action-pill" role="region" aria-label="Ações da mira central">
-              {centerAimCoords && centerNearestSite ? (
-                <>
-                  <span className="reticle-readout">
-                    Mira: {formatCoordLatLon(centerAimCoords.latDeg, centerAimCoords.lonEastDeg)} →{' '}
-                    <strong>{centerNearestSite.site.name}</strong>
-                    {!centerNearestSite.isSouthPoleCovered && ' (fora de 80°S–90°S)'}
-                  </span>
-                  <div className="reticle-buttons">
-                    <button
-                      type="button"
-                      className="btn-compact-amber"
-                      onClick={() => commitPick(centerAimCoords, 'A')}
-                    >
-                      Fixar Local A
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-compact-cyan"
-                      onClick={() => commitPick(centerAimCoords, 'B')}
-                    >
-                      Fixar Local B
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <span className="reticle-readout">
-                  Aponte a mira central sobre a superfície lunar para marcar A ou B.
-                </span>
-              )}
-            </div>
+          {hasStarted && selectionMode === 'crosshair' && (
+            <g data-testid="center-crosshair" className="vp-crosshair" pointerEvents="none">
+              <circle cx={centerX} cy={centerY} r={20} fill="none" stroke="#ffffff" strokeWidth={1.2} strokeDasharray="4 3" />
+              <line x1={centerX - 30} y1={centerY} x2={centerX - 10} y2={centerY} stroke="#ffffff" strokeWidth={1.4} />
+              <line x1={centerX + 10} y1={centerY} x2={centerX + 30} y2={centerY} stroke="#ffffff" strokeWidth={1.4} />
+              <line x1={centerX} y1={centerY - 30} x2={centerX} y2={centerY - 10} stroke="#ffffff" strokeWidth={1.4} />
+              <line x1={centerX} y1={centerY + 10} x2={centerX} y2={centerY + 30} stroke="#ffffff" strokeWidth={1.4} />
+              <circle cx={centerX} cy={centerY} r={2.8} fill="#ffffff" />
+              <text x={centerX} y={centerY + 40} textAnchor="middle" className="vp-crosshair-readout">
+                {reticleCoords.latDeg.toFixed(1)}°, {reticleCoords.lonEastDeg.toFixed(1)}° E
+              </text>
+            </g>
           )}
-
-          <div className="camera-utility-row" role="group" aria-label="Controle de visão da Lua">
-            <button
-              type="button"
-              className="btn-utility"
-              onClick={() =>
-                viewMode === '3d'
-                  ? setZoom3d((z) => Math.min(1.6, Number((z + 0.15).toFixed(2))))
-                  : setZoom2d((z) => Math.min(2.0, Number((z + 0.2).toFixed(2))))
-              }
-              aria-label="Aproximar visualização da Lua"
-            >
-              + Zoom
-            </button>
-            <button
-              type="button"
-              className="btn-utility"
-              onClick={() =>
-                viewMode === '3d'
-                  ? setZoom3d((z) => Math.max(0.75, Number((z - 0.15).toFixed(2))))
-                  : setZoom2d((z) => Math.max(0.7, Number((z - 0.2).toFixed(2))))
-              }
-              aria-label="Afastar visualização da Lua"
-            >
-              - Zoom
-            </button>
-            <button
-              type="button"
-              className="btn-utility"
-              onClick={recenterSouthPole}
-            >
-              Polo Sul
-            </button>
-          </div>
-        </div>
+        </svg>
       )}
 
-      {coverageNotice && screen === 'explore' && (
-        <div className="coverage-toast" role="status">
-          <span>{coverageNotice}</span>
+      {hasStarted && mode === '3d' && (
+        <div className="viewport-camera-tools" aria-label="Lunar globe camera controls">
           <button
             type="button"
-            className="btn-toast-close"
-            onClick={() => setCoverageNotice(null)}
-            aria-label="Fechar aviso de cobertura"
+            className="cam-btn"
+            onClick={() => threeCtrlRef.current?.zoomStep(0.18)}
+            aria-label="Zoom in"
           >
-            Fechar
+            +
+          </button>
+          <button
+            type="button"
+            className="cam-btn"
+            onClick={() => threeCtrlRef.current?.zoomStep(-0.18)}
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="cam-btn cam-btn-pole"
+            onClick={() => threeCtrlRef.current?.flyToSouthPole()}
+          >
+            South Pole
+          </button>
+          <button
+            type="button"
+            className="cam-btn cam-btn-pole"
+            onClick={() => threeCtrlRef.current?.flyToFullMoon()}
+          >
+            Globe
           </button>
         </div>
       )}

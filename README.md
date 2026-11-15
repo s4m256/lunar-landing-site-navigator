@@ -8,9 +8,12 @@ Solução completa em **duas camadas** para o desafio **NASA Space Apps Challeng
 ## Estrutura e responsabilidades
 
 - `science/src/lunar_science/navigator/`: motor científico (`data_sources.py`, `dem_horizon.py`, `ephemeris.py`, `comms.py`, `solar.py`, `scoring.py`, `pipeline.py`).
-- `frontend/src/landing-guide/`: interface Moon-first do MVP (`LunarViewport.tsx`, `HomeOverlay.tsx`, `SelectionPopover.tsx`, `DataDrawer.tsx`, `ChartsDrawer.tsx`, `TimePopover.tsx`, `state.ts`).
+- `frontend/src/landing-guide/`: interface Moon-first e renderização 3D (`LunarViewport.tsx`, `AstronautViewport.tsx`, `lunarTerrainEngine.ts`, `customSiteBuilder.ts`, `HomeOverlay.tsx`, `SelectionPopover.tsx`, `DataDrawer.tsx`, `ChartsDrawer.tsx`, `TimePopover.tsx`, `state.ts`).
+- `frontend/public/assets/lunar/`: texturas e mapas altimétricos NASA (`ldem_global_2k.png`, `ldem_south_pole_1k.png`, `lola_south_pole_hillshade.jpg`, `lroc_color_2k.jpg`).
 - `frontend/src/navigator/`: componentes científicos reutilizados (`PolarHorizonSkyPlot.tsx`, `math.ts`, `types.ts`, e visualizações originais).
+- `docs/ai-studio/`: registro e capturas da integração do protótipo Google AI Studio (`zaczusantos-ops/aistudiolandingguide`).
 - `docs/ui-ux/`: arquitetura de telas, wireframes, fluxo A/B, revisão crítica de UX e plano MVP ([`landing-guide-architecture.md`](docs/ui-ux/landing-guide-architecture.md)).
+- `docs/prompts/`: prompt mestre completo usado para geração no Google AI Studio ([`google-ai-studio-master-prompt.md`](docs/prompts/google-ai-studio-master-prompt.md)).
 - `outputs/`: artefatos reprodutíveis organizados (`datasets/`, `reports/`, `validation/`).
 - `docs/accessibility/`: guia de acessibilidade WCAG 2.2 AA e simplicidade cognitiva ([`guia-acessibilidade-e-simplicidade.md`](docs/accessibility/guia-acessibilidade-e-simplicidade.md)).
 - `contracts/`: JSON Schemas (`navigator-dataset.v1.schema.json`, `science-status.schema.json`) compartilhados entre Python (`jsonschema`) e TypeScript (`Ajv`).
