@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "generated_utc": "2026-11-14T15:52:49Z",
   "provenance": {
     "dem_product": {
@@ -17,7 +17,7 @@
       "azimuth_step_deg": 1.0
     },
     "ephemeris": {
-      "engine": "NAIF SPICE (spiceypy) cross-checked with Skyfield",
+      "engine": "NAIF SPICE (spiceypy)",
       "frame": "MOON_ME (Mean Earth / Polar Axis DE421)",
       "correction": "LT+S",
       "kernels": [
@@ -54,15 +54,18 @@
       ]
     },
     "horizons_validation": {
-      "status": "verified",
+      "status": "unverified_no_raw_response",
       "endpoint": "https://ssd.jpl.nasa.gov/api/horizons.api",
+      "tolerance_deg": null,
+      "raw_responses": [],
       "max_sun_az_diff_deg": 1e-05,
       "max_sun_el_diff_deg": 2e-05,
       "max_earth_az_diff_deg": 1e-05,
       "max_earth_el_diff_deg": 4e-05,
       "notes": [
-        "Cross-validated SPICE MOON_ME vs JPL Horizons on 16 epochs (2-day cadence) at Shackleton\u2013de Gerlache Connecting Ridge.",
-        "Max spherical separation: Sun 1.3e-05 deg, Earth 3.6e-05 deg."
+        "Not reproduced: the 1.0.0 producer labeled this comparison 'verified' without a declared tolerance and without retaining the raw Horizons responses, request parameters or retrieval time (SPA-9 audit, section 3). Status set to 'unverified_no_raw_response' by the 1.0.0 -> 1.1.0 structural migration.",
+        "Declared by the 1.0.0 producer, not reproduced: Cross-validated SPICE MOON_ME vs JPL Horizons on 16 epochs (2-day cadence) at Shackleton\u2013de Gerlache Connecting Ridge.",
+        "Declared by the 1.0.0 producer, not reproduced: Max spherical separation: Sun 1.3e-05 deg, Earth 3.6e-05 deg."
       ]
     },
     "conventions": {
@@ -74,13 +77,179 @@
       "solar_radius_km": 695700.0,
       "earth_radius_km": 6378.137,
       "lunar_radius_m": 1737400.0,
-      "clps_slope_limit_deg": 12.0
+      "clps_slope_limit_deg": 12.0,
+      "slope_baseline_m": 160.0,
+      "psr_search_radius_m": 5200.0,
+      "psr_lattice_step_m": 500.0,
+      "score_is_illustrative": true
     },
     "limitations": [
       "Geodesic ray marching covers up to 120 km radius using LOLA 80 m/px gridded DEM; micro-scale boulders (<80 m) require LROC NAC imagery before final touchdown.",
       "Relay trajectories propagate two-body Keplerian motion anchored to Lunar Mean Equator epoch; long-term three-body Earth perturbation drift is excluded over 30-day windows.",
-      "No atmospheric refraction exists on the Moon; solar panel degradation from dust/temperature is excluded at baseline efficiency eta=0.28."
-    ]
+      "No atmospheric refraction exists on the Moon; solar panel degradation from dust/temperature is excluded at baseline efficiency eta=0.28.",
+      "Illumination, energy, battery and the power score cover only 2026-11-15T00:00:00Z -> 2026-12-15T00:00:00Z (30.0 days, step 3600 s), shorter than one seasonal cycle (~346.62 d, eclipse year): season-specific values, not annual statistics. The SPA-9 audit places this window at the southern-summer extreme of the sub-solar latitude, the best illumination season for the south pole. The 1.0.0 producer did not record the sub-solar latitude range (seasonal_coverage keeps null).",
+      "Score fields are an ILLUSTRATIVE landing index: weights, blends and thresholds have no cited source and no sensitivity analysis; they are not a validated scientific ranking. The stored score values follow the 1.0.0 rule (no slope elimination; the 5200 m fallback was scored as a distance); recompute them with contracts/landing-score-model.v1.json.",
+      "slope_deg is the gradient over a 160 m map baseline (central differences of +/-1 pixel); it does not resolve lander-scale slopes. clps_slope_limit_deg = 12 deg is an unsourced placeholder.",
+      "The 1.0.0 producer used two different PSR criteria (SPA-9 audit, section 6.2): is_psr required the horizon to exceed a fixed -1.543 deg sub-solar envelope plus 0.27 deg (1 deg / 80 m sampling, 2 m observer), while psr_distance_m searched points whose horizon reached the envelope without solar radius (5 deg / 320 m sampling, 0.5 m observer) on an asymmetric 500 m lattice (-5200 to +4800 m) within 5200 m of the site center. psr_distance_m is null where that search found no PSR point (the file used to store its 5200 m fallback as if it were a distance).",
+      "Relay presets are hypothetical geometry scenarios. 'lro' reuses LRO's 2009-2011 50 km circular polar mapping-orbit geometry (Slojkowski, 24th ISSFD 2014) with an arbitrary initial phase; LRO is not a relay service and its 2026 orbit differs. The ELFO elements (a=5740 km, e=0.58, i=57.8 deg, omega=90 deg), phases, 3-satellite phasing, 5 deg mask and ranges are unsourced; only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are published (SpaceOps 2023, paper 339). LunaNet is a framework, not this constellation.",
+      "Communications are line-of-sight only (terrain horizon, 0 deg DTE mask vs 5 deg relay mask, range limit, lunar occultation); no link budget, ground-station visibility or interference. Visibility is sampled hourly: outages shorter than one hour are not resolved, and the hourly lro_visible series aliases the ~1.9 h LRO-like period (lro_duty_cycle_pct at site centers uses a 5-minute grid).",
+      "With the hypothetical ELFO constellation enabled, combined_dte_elfo_duty_cycle_pct can saturate at 100 % for every site, which floors the illustrative comms score at 65/100 regardless of the site; compare with DTE-only values.",
+      "'Validated' for this dataset means conformance with navigator-dataset.v1.schema.json. The only external comparison is provenance.horizons_validation (Sun/Earth directions at one site), and it was not reproduced.",
+      "This file is a structural migration of a 1.0.0 dataset (provenance.migration): labels and metadata changed, no number was recomputed."
+    ],
+    "migration": {
+      "from_schema_version": "1.0.0",
+      "tool": "science/tools/migrate_dataset_1_0_to_1_1.py",
+      "tool_version": "1.0.0",
+      "source_sha256": "27c73ed24ff3b8e100556ac2eebbd4d0ef8fbbd48f28b6da34457dfb18710954",
+      "source_frontend_sha256": "100452d2bb54dc278ec8f6de44efb3cb2b6d4851ac06bfa90f0d66620fdacfb2",
+      "stored_scores_rule": "1.0.0",
+      "psr_sentinel_nulled": {
+        "value_m": 5200.0,
+        "count": 26
+      },
+      "added": [
+        "/provenance/horizons_validation/tolerance_deg",
+        "/provenance/horizons_validation/raw_responses",
+        "/relay_presets/lro/hypothetical",
+        "/relay_presets/lro/source",
+        "/relay_presets/elfo_pathfinder/hypothetical",
+        "/relay_presets/elfo_pathfinder/source",
+        "/relay_presets/elfo_constellation/hypothetical",
+        "/relay_presets/elfo_constellation/source",
+        "/sites/0/coordinates_source",
+        "/sites/1/coordinates_source",
+        "/sites/2/coordinates_source",
+        "/sites/3/coordinates_source",
+        "/sites/4/coordinates_source",
+        "/sites/5/coordinates_source",
+        "/sites/6/coordinates_source",
+        "/sites/7/coordinates_source",
+        "/sites/8/coordinates_source",
+        "/sites/9/coordinates_source",
+        "/sites/0/engineering_summary/score/eliminated",
+        "/sites/0/engineering_summary/score/elimination_reasons",
+        "/sites/1/engineering_summary/score/eliminated",
+        "/sites/1/engineering_summary/score/elimination_reasons",
+        "/sites/2/engineering_summary/score/eliminated",
+        "/sites/2/engineering_summary/score/elimination_reasons",
+        "/sites/3/engineering_summary/score/eliminated",
+        "/sites/3/engineering_summary/score/elimination_reasons",
+        "/sites/4/engineering_summary/score/eliminated",
+        "/sites/4/engineering_summary/score/elimination_reasons",
+        "/sites/5/engineering_summary/score/eliminated",
+        "/sites/5/engineering_summary/score/elimination_reasons",
+        "/sites/6/engineering_summary/score/eliminated",
+        "/sites/6/engineering_summary/score/elimination_reasons",
+        "/sites/7/engineering_summary/score/eliminated",
+        "/sites/7/engineering_summary/score/elimination_reasons",
+        "/sites/8/engineering_summary/score/eliminated",
+        "/sites/8/engineering_summary/score/elimination_reasons",
+        "/sites/9/engineering_summary/score/eliminated",
+        "/sites/9/engineering_summary/score/elimination_reasons",
+        "/provenance/conventions/slope_baseline_m",
+        "/provenance/conventions/psr_search_radius_m",
+        "/provenance/conventions/psr_lattice_step_m",
+        "/provenance/conventions/score_is_illustrative",
+        "/mission_window/seasonal_coverage"
+      ],
+      "replaced": [
+        {
+          "path": "/schema_version",
+          "from": "1.0.0",
+          "to": "1.1.0"
+        },
+        {
+          "path": "/provenance/horizons_validation/status",
+          "from": "verified",
+          "to": "unverified_no_raw_response"
+        },
+        {
+          "path": "/provenance/horizons_validation/notes",
+          "from": [
+            "Cross-validated SPICE MOON_ME vs JPL Horizons on 16 epochs (2-day cadence) at Shackleton\u2013de Gerlache Connecting Ridge.",
+            "Max spherical separation: Sun 1.3e-05 deg, Earth 3.6e-05 deg."
+          ],
+          "to": [
+            "Not reproduced: the 1.0.0 producer labeled this comparison 'verified' without a declared tolerance and without retaining the raw Horizons responses, request parameters or retrieval time (SPA-9 audit, section 3). Status set to 'unverified_no_raw_response' by the 1.0.0 -> 1.1.0 structural migration.",
+            "Declared by the 1.0.0 producer, not reproduced: Cross-validated SPICE MOON_ME vs JPL Horizons on 16 epochs (2-day cadence) at Shackleton\u2013de Gerlache Connecting Ridge.",
+            "Declared by the 1.0.0 producer, not reproduced: Max spherical separation: Sun 1.3e-05 deg, Earth 3.6e-05 deg."
+          ]
+        },
+        {
+          "path": "/provenance/ephemeris/engine",
+          "from": "NAIF SPICE (spiceypy) cross-checked with Skyfield",
+          "to": "NAIF SPICE (spiceypy)"
+        },
+        {
+          "path": "/relay_presets/lro/name",
+          "from": "LRO-like Polar Orbiter (50 km)",
+          "to": "Hypothetical LRO-like polar orbiter (50 km circular, not a relay service)"
+        },
+        {
+          "path": "/relay_presets/elfo_pathfinder/name",
+          "from": "ELFO Single Relay (Lunar Pathfinder)",
+          "to": "Hypothetical ELFO single relay (Lunar Pathfinder-like; elements unsourced)"
+        },
+        {
+          "path": "/relay_presets/elfo_constellation/name",
+          "from": "ELFO 3-Sat Phased Constellation (LunaNet South Pole)",
+          "to": "Hypothetical ELFO 3-satellite phased constellation (not an announced system)"
+        },
+        {
+          "path": "/sites/4/description",
+          "from": "Setor leste plano da borda de Nobile (Artemis III), combinando declividade segura CLPS e visibilidade orbital.",
+          "to": "Ponto representativo (coordenadas sem fonte) no setor leste da borda da cratera Nobile, regi\u00e3o Artemis III 'Nobile Rim 2'."
+        },
+        {
+          "path": "/sites/5/description",
+          "from": "Terra\u00e7o adjacente \u00e0 regi\u00e3o de Cabeus B (Artemis III), setor hist\u00f3rico de detec\u00e7\u00e3o de gelo pelo experimento LCROSS.",
+          "to": "Ponto representativo (coordenadas sem fonte) perto da regi\u00e3o Artemis III 'Peak near Cabeus B'; no DEM o ponto n\u00e3o fica em um pico (ver elevation_m), ent\u00e3o as coordenadas precisam de revis\u00e3o."
+        },
+        {
+          "path": "/sites/7/description",
+          "from": "Borda elevada e plana da cratera de Gerlache (Artemis III), combinando alta latitude polar e acesso ao interior sombreado.",
+          "to": "Ponto representativo (coordenadas sem fonte) na borda da cratera de Gerlache, regi\u00e3o Artemis III 'de Gerlache Rim 2'."
+        },
+        {
+          "path": "/sites/8/description",
+          "from": "Plan\u00edcie elevada adjacente \u00e0 cratera Slater (Artemis III), no hemisf\u00e9rio oculto pr\u00f3ximo ao polo sul.",
+          "to": "Ponto representativo (coordenadas sem fonte) perto da cratera Slater, regi\u00e3o Artemis III 'Slater Plain', no lado oculto pr\u00f3ximo ao polo sul; n\u00e3o \u00e9 um ponto elevado no DEM (ver elevation_m)."
+        },
+        {
+          "path": "/sites/9/description",
+          "from": "Fundo da cratera Shackleton (Regi\u00e3o Permanentemente Sombreada); demonstra bloqueio DTE e valor cr\u00edtico de sat\u00e9lites relay.",
+          "to": "Fundo da cratera Shackleton (ponto de contraste em PSR, coordenadas sem fonte); ilustra o bloqueio da linha de visada direta \u00e0 Terra e o ganho que um relay hipot\u00e9tico traria."
+        },
+        {
+          "path": "/provenance/limitations",
+          "from": [
+            "Geodesic ray marching covers up to 120 km radius using LOLA 80 m/px gridded DEM; micro-scale boulders (<80 m) require LROC NAC imagery before final touchdown.",
+            "Relay trajectories propagate two-body Keplerian motion anchored to Lunar Mean Equator epoch; long-term three-body Earth perturbation drift is excluded over 30-day windows.",
+            "No atmospheric refraction exists on the Moon; solar panel degradation from dust/temperature is excluded at baseline efficiency eta=0.28."
+          ],
+          "to": [
+            "Geodesic ray marching covers up to 120 km radius using LOLA 80 m/px gridded DEM; micro-scale boulders (<80 m) require LROC NAC imagery before final touchdown.",
+            "Relay trajectories propagate two-body Keplerian motion anchored to Lunar Mean Equator epoch; long-term three-body Earth perturbation drift is excluded over 30-day windows.",
+            "No atmospheric refraction exists on the Moon; solar panel degradation from dust/temperature is excluded at baseline efficiency eta=0.28.",
+            "Illumination, energy, battery and the power score cover only 2026-11-15T00:00:00Z -> 2026-12-15T00:00:00Z (30.0 days, step 3600 s), shorter than one seasonal cycle (~346.62 d, eclipse year): season-specific values, not annual statistics. The SPA-9 audit places this window at the southern-summer extreme of the sub-solar latitude, the best illumination season for the south pole. The 1.0.0 producer did not record the sub-solar latitude range (seasonal_coverage keeps null).",
+            "Score fields are an ILLUSTRATIVE landing index: weights, blends and thresholds have no cited source and no sensitivity analysis; they are not a validated scientific ranking. The stored score values follow the 1.0.0 rule (no slope elimination; the 5200 m fallback was scored as a distance); recompute them with contracts/landing-score-model.v1.json.",
+            "slope_deg is the gradient over a 160 m map baseline (central differences of +/-1 pixel); it does not resolve lander-scale slopes. clps_slope_limit_deg = 12 deg is an unsourced placeholder.",
+            "The 1.0.0 producer used two different PSR criteria (SPA-9 audit, section 6.2): is_psr required the horizon to exceed a fixed -1.543 deg sub-solar envelope plus 0.27 deg (1 deg / 80 m sampling, 2 m observer), while psr_distance_m searched points whose horizon reached the envelope without solar radius (5 deg / 320 m sampling, 0.5 m observer) on an asymmetric 500 m lattice (-5200 to +4800 m) within 5200 m of the site center. psr_distance_m is null where that search found no PSR point (the file used to store its 5200 m fallback as if it were a distance).",
+            "Relay presets are hypothetical geometry scenarios. 'lro' reuses LRO's 2009-2011 50 km circular polar mapping-orbit geometry (Slojkowski, 24th ISSFD 2014) with an arbitrary initial phase; LRO is not a relay service and its 2026 orbit differs. The ELFO elements (a=5740 km, e=0.58, i=57.8 deg, omega=90 deg), phases, 3-satellite phasing, 5 deg mask and ranges are unsourced; only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are published (SpaceOps 2023, paper 339). LunaNet is a framework, not this constellation.",
+            "Communications are line-of-sight only (terrain horizon, 0 deg DTE mask vs 5 deg relay mask, range limit, lunar occultation); no link budget, ground-station visibility or interference. Visibility is sampled hourly: outages shorter than one hour are not resolved, and the hourly lro_visible series aliases the ~1.9 h LRO-like period (lro_duty_cycle_pct at site centers uses a 5-minute grid).",
+            "With the hypothetical ELFO constellation enabled, combined_dte_elfo_duty_cycle_pct can saturate at 100 % for every site, which floors the illustrative comms score at 65/100 regardless of the site; compare with DTE-only values.",
+            "'Validated' for this dataset means conformance with navigator-dataset.v1.schema.json. The only external comparison is provenance.horizons_validation (Sun/Earth directions at one site), and it was not reproduced.",
+            "This file is a structural migration of a 1.0.0 dataset (provenance.migration): labels and metadata changed, no number was recomputed."
+          ]
+        }
+      ],
+      "notes": [
+        "Structural migration: no number was recomputed. revert() in the tool rebuilds the 1.0.0 file; its SHA-256 equals source_sha256 (outputs copy) and source_frontend_sha256 (minified frontend copy).",
+        "Stored score values (engineering_summary.score, local_grid.nodes[].landing_score_0_100) follow the 1.0.0 rule; score.total_without_relay_0_100 is absent because rounded inputs cannot reproduce it.",
+        "psr_distance_m null = no PSR point found by the 1.0.0 search (it stored the 5200 m fallback)."
+      ]
+    }
   },
   "mission_window": {
     "start_utc": "2026-11-15T00:00:00Z",
@@ -2978,11 +3147,17 @@
       0.27101,
       0.27101,
       0.271
-    ]
+    ],
+    "seasonal_coverage": {
+      "duration_days": 30.0,
+      "subsolar_lat_min_deg": null,
+      "subsolar_lat_max_deg": null,
+      "covers_seasonal_cycle": false
+    }
   },
   "relay_presets": {
     "lro": {
-      "name": "LRO-like Polar Orbiter (50 km)",
+      "name": "Hypothetical LRO-like polar orbiter (50 km circular, not a relay service)",
       "satellites_count": 1,
       "a_km": 1787.4,
       "e": 0.0,
@@ -2993,10 +3168,12 @@
       "perilune_alt_km": 50.0,
       "max_range_km": 1200.0,
       "antenna_mask_deg": 5.0,
-      "freq_ghz": 2.271
+      "freq_ghz": 2.271,
+      "hypothetical": true,
+      "source": "Geometry of LRO's 2009-2011 50 km circular polar mapping orbit (Slojkowski, 24th ISSFD, 2014). Initial phase arbitrary; the 2026 LRO orbit differs and LRO is not a relay service."
     },
     "elfo_pathfinder": {
-      "name": "ELFO Single Relay (Lunar Pathfinder)",
+      "name": "Hypothetical ELFO single relay (Lunar Pathfinder-like; elements unsourced)",
       "satellites_count": 1,
       "a_km": 5740.0,
       "e": 0.58,
@@ -3007,10 +3184,12 @@
       "perilune_alt_km": 673.4,
       "max_range_km": 12000.0,
       "antenna_mask_deg": 5.0,
-      "freq_ghz": 2.25
+      "freq_ghz": 2.25,
+      "hypothetical": true,
+      "source": "Only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are published (SpaceOps 2023, paper 339). Elements, phases, phasing, antenna mask and ranges are unsourced."
     },
     "elfo_constellation": {
-      "name": "ELFO 3-Sat Phased Constellation (LunaNet South Pole)",
+      "name": "Hypothetical ELFO 3-satellite phased constellation (not an announced system)",
       "satellites_count": 3,
       "a_km": 5740.0,
       "e": 0.58,
@@ -3021,7 +3200,9 @@
       "perilune_alt_km": 673.4,
       "max_range_km": 12000.0,
       "antenna_mask_deg": 5.0,
-      "freq_ghz": 2.25
+      "freq_ghz": 2.25,
+      "hypothetical": true,
+      "source": "Only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are published (SpaceOps 2023, paper 339). Elements, phases, phasing, antenna mask and ranges are unsourced."
     }
   },
   "horizon_azimuths_deg": [
@@ -3392,6 +3573,7 @@
       "name": "Shackleton\u2013de Gerlache Connecting Ridge",
       "category": "reference_ridge",
       "description": "Crista elevada entre as crateras Shackleton e de Gerlache; cl\u00e1ssico o\u00e1sis de ilumina\u00e7\u00e3o solar pr\u00f3ximo ao polo.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -89.45,
         "longitude_east_deg": 222.5,
@@ -13197,7 +13379,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 100.0,
           "comms_0_100": 77.28,
-          "science_psr_0_100": 59.46
+          "science_psr_0_100": 59.46,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -22737,6 +22921,7 @@
       "name": "Malapert Massif",
       "category": "artemis_candidate",
       "description": "Maci\u00e7o elevado (~5 km) voltado para a Terra na regi\u00e3o candidata Artemis III; excelente visibilidade direta (DTE).",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -86.0,
         "longitude_east_deg": 2.7,
@@ -32542,7 +32727,9 @@
           "safety_slope_0_100": 91.31,
           "power_0_100": 68.59,
           "comms_0_100": 88.88,
-          "science_psr_0_100": 86.9
+          "science_psr_0_100": 86.9,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -42082,6 +42269,7 @@
       "name": "Mons Mouton Plateau",
       "category": "artemis_candidate",
       "description": "Planalto elevado (~5,6 km) e plano no cume de Mons Mouton (Artemis III), equilibrando baix\u00edssima declividade e alta ilumina\u00e7\u00e3o.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -84.361,
         "longitude_east_deg": 31.889,
@@ -51887,7 +52075,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 47.47,
           "comms_0_100": 92.28,
-          "science_psr_0_100": 43.02
+          "science_psr_0_100": 43.02,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -61427,6 +61617,7 @@
       "name": "Nobile Rim 1",
       "category": "artemis_candidate",
       "description": "Planalto elevado (~6,7 km) na borda da cratera Nobile (Artemis III), pr\u00f3ximo a regi\u00f5es permanentemente sombreadas com potencial de vol\u00e1teis.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -85.122,
         "longitude_east_deg": 36.929,
@@ -71232,7 +71423,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 32.38,
           "comms_0_100": 77.96,
-          "science_psr_0_100": 35.74
+          "science_psr_0_100": 35.74,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -80771,7 +80964,8 @@
       "id": "nobile_rim_2",
       "name": "Nobile Rim 2",
       "category": "artemis_candidate",
-      "description": "Setor leste plano da borda de Nobile (Artemis III), combinando declividade segura CLPS e visibilidade orbital.",
+      "description": "Ponto representativo (coordenadas sem fonte) no setor leste da borda da cratera Nobile, regi\u00e3o Artemis III 'Nobile Rim 2'.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -83.678,
         "longitude_east_deg": 55.553,
@@ -90577,7 +90771,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 42.47,
           "comms_0_100": 86.21,
-          "science_psr_0_100": 86.9
+          "science_psr_0_100": 86.9,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -100116,7 +100312,8 @@
       "id": "peak_near_cabeus_b",
       "name": "Peak near Cabeus B",
       "category": "artemis_candidate",
-      "description": "Terra\u00e7o adjacente \u00e0 regi\u00e3o de Cabeus B (Artemis III), setor hist\u00f3rico de detec\u00e7\u00e3o de gelo pelo experimento LCROSS.",
+      "description": "Ponto representativo (coordenadas sem fonte) perto da regi\u00e3o Artemis III 'Peak near Cabeus B'; no DEM o ponto n\u00e3o fica em um pico (ver elevation_m), ent\u00e3o as coordenadas precisam de revis\u00e3o.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -82.8,
         "longitude_east_deg": 318.378,
@@ -109922,7 +110119,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 40.55,
           "comms_0_100": 85.34,
-          "science_psr_0_100": 81.75
+          "science_psr_0_100": 81.75,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -119462,6 +119661,7 @@
       "name": "Haworth",
       "category": "artemis_candidate",
       "description": "Setor elevado voltado para a Terra na regi\u00e3o da cratera Haworth (Artemis III), adjacente a extensas armadilhas frias.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -86.689,
         "longitude_east_deg": 347.5,
@@ -129267,7 +129467,9 @@
           "safety_slope_0_100": 92.88,
           "power_0_100": 40.08,
           "comms_0_100": 77.82,
-          "science_psr_0_100": 64.87
+          "science_psr_0_100": 64.87,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -138806,7 +139008,8 @@
       "id": "de_gerlache_rim_2",
       "name": "de Gerlache Rim 2",
       "category": "artemis_candidate",
-      "description": "Borda elevada e plana da cratera de Gerlache (Artemis III), combinando alta latitude polar e acesso ao interior sombreado.",
+      "description": "Ponto representativo (coordenadas sem fonte) na borda da cratera de Gerlache, regi\u00e3o Artemis III 'de Gerlache Rim 2'.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -88.161,
         "longitude_east_deg": 287.389,
@@ -138817,7 +139020,7 @@
           -53.2203,
           -1736.9411
         ],
-        "psr_distance_m": 5200.0,
+        "psr_distance_m": null,
         "is_psr": false,
         "observer_height_m": 2.0
       },
@@ -148612,7 +148815,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 53.06,
           "comms_0_100": 76.36,
-          "science_psr_0_100": 19.2
+          "science_psr_0_100": 19.2,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -148628,7 +148833,7 @@
             "longitude_east_deg": 288.04755,
             "elevation_m": 417.01,
             "slope_deg": 8.22,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.883,
@@ -149009,7 +149214,7 @@
             "longitude_east_deg": 288.20449,
             "elevation_m": 467.32,
             "slope_deg": 1.94,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.977,
@@ -149390,7 +149595,7 @@
             "longitude_east_deg": 288.3641,
             "elevation_m": 464.41,
             "slope_deg": 2.33,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               1.363,
@@ -149771,7 +149976,7 @@
             "longitude_east_deg": 288.52642,
             "elevation_m": 462.08,
             "slope_deg": 6.25,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               0.376,
@@ -150152,7 +150357,7 @@
             "longitude_east_deg": 288.69154,
             "elevation_m": 486.1,
             "slope_deg": 9.35,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.473,
@@ -150533,7 +150738,7 @@
             "longitude_east_deg": 287.56862,
             "elevation_m": 427.24,
             "slope_deg": 5.5,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.779,
@@ -150914,7 +151119,7 @@
             "longitude_east_deg": 287.72194,
             "elevation_m": 441.55,
             "slope_deg": 5.3,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               1.391,
@@ -151295,7 +151500,7 @@
             "longitude_east_deg": 287.87789,
             "elevation_m": 434.44,
             "slope_deg": 3.71,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               1.674,
@@ -151676,7 +151881,7 @@
             "longitude_east_deg": 288.0365,
             "elevation_m": 475.1,
             "slope_deg": 6.88,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.825,
@@ -152057,7 +152262,7 @@
             "longitude_east_deg": 288.19787,
             "elevation_m": 512.36,
             "slope_deg": 2.91,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.727,
@@ -152438,7 +152643,7 @@
             "longitude_east_deg": 287.08713,
             "elevation_m": 412.85,
             "slope_deg": 5.27,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.805,
@@ -152819,7 +153024,7 @@
             "longitude_east_deg": 287.23678,
             "elevation_m": 423.93,
             "slope_deg": 0.62,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               0.564,
@@ -153200,7 +153405,7 @@
             "longitude_east_deg": 287.389,
             "elevation_m": 436.2,
             "slope_deg": 1.69,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.385,
@@ -153581,7 +153786,7 @@
             "longitude_east_deg": 287.54384,
             "elevation_m": 464.91,
             "slope_deg": 5.0,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.207,
@@ -153962,7 +154167,7 @@
             "longitude_east_deg": 287.70138,
             "elevation_m": 490.29,
             "slope_deg": 0.73,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.177,
@@ -154343,7 +154548,7 @@
             "longitude_east_deg": 286.60315,
             "elevation_m": 436.79,
             "slope_deg": 6.41,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.837,
@@ -154724,7 +154929,7 @@
             "longitude_east_deg": 286.74906,
             "elevation_m": 433.67,
             "slope_deg": 4.19,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.665,
@@ -155105,7 +155310,7 @@
             "longitude_east_deg": 286.89749,
             "elevation_m": 435.02,
             "slope_deg": 2.15,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.694,
@@ -155486,7 +155691,7 @@
             "longitude_east_deg": 287.04849,
             "elevation_m": 445.8,
             "slope_deg": 3.84,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.008,
@@ -155867,7 +156072,7 @@
             "longitude_east_deg": 287.20213,
             "elevation_m": 478.45,
             "slope_deg": 5.36,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -1.697,
@@ -156248,7 +156453,7 @@
             "longitude_east_deg": 286.11671,
             "elevation_m": 475.71,
             "slope_deg": 3.59,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.374,
@@ -156629,7 +156834,7 @@
             "longitude_east_deg": 286.25883,
             "elevation_m": 468.8,
             "slope_deg": 2.82,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               -0.386,
@@ -157010,7 +157215,7 @@
             "longitude_east_deg": 286.4034,
             "elevation_m": 450.3,
             "slope_deg": 3.66,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               2.46,
@@ -157391,7 +157596,7 @@
             "longitude_east_deg": 286.55049,
             "elevation_m": 416.39,
             "slope_deg": 4.35,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               3.608,
@@ -157772,7 +157977,7 @@
             "longitude_east_deg": 286.70018,
             "elevation_m": 418.03,
             "slope_deg": 9.73,
-            "psr_distance_m": 5200.0,
+            "psr_distance_m": null,
             "is_psr": false,
             "horizon_elev_deg": [
               1.267,
@@ -158151,7 +158356,8 @@
       "id": "slater_plain",
       "name": "Slater Plain",
       "category": "artemis_candidate",
-      "description": "Plan\u00edcie elevada adjacente \u00e0 cratera Slater (Artemis III), no hemisf\u00e9rio oculto pr\u00f3ximo ao polo sul.",
+      "description": "Ponto representativo (coordenadas sem fonte) perto da cratera Slater, regi\u00e3o Artemis III 'Slater Plain', no lado oculto pr\u00f3ximo ao polo sul; n\u00e3o \u00e9 um ponto elevado no DEM (ver elevation_m).",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -88.589,
         "longitude_east_deg": 108.347,
@@ -167957,7 +168163,9 @@
           "safety_slope_0_100": 100.0,
           "power_0_100": 55.02,
           "comms_0_100": 77.47,
-          "science_psr_0_100": 22.2
+          "science_psr_0_100": 22.2,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {
@@ -177496,7 +177704,8 @@
       "id": "shackleton_psr_floor",
       "name": "Shackleton Crater Floor (PSR)",
       "category": "psr_contrast",
-      "description": "Fundo da cratera Shackleton (Regi\u00e3o Permanentemente Sombreada); demonstra bloqueio DTE e valor cr\u00edtico de sat\u00e9lites relay.",
+      "description": "Fundo da cratera Shackleton (ponto de contraste em PSR, coordenadas sem fonte); ilustra o bloqueio da linha de visada direta \u00e0 Terra e o ganho que um relay hipot\u00e9tico traria.",
+      "coordinates_source": "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III candidate regions (2024-10-28 update), not point coordinates.",
       "center": {
         "latitude_deg": -89.625,
         "longitude_east_deg": 118.82,
@@ -187302,7 +187511,9 @@
           "safety_slope_0_100": 84.43,
           "power_0_100": 0.0,
           "comms_0_100": 65.0,
-          "science_psr_0_100": 15.0
+          "science_psr_0_100": 15.0,
+          "eliminated": false,
+          "elimination_reasons": []
         }
       },
       "local_grid": {

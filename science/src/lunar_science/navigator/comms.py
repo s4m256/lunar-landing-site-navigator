@@ -50,6 +50,10 @@ class RelayOrbitPreset:
     max_range_km: float
     antenna_mask_deg: float
     freq_ghz: float
+    #: Published as ``relaySpec.source`` (contract 1.1.0): what is and is not sourced.
+    source: str = "No cited source."
+    #: Published as ``relaySpec.hypothetical``; every preset in this module is a scenario.
+    hypothetical: bool = True
 
     @property
     def satellites_count(self) -> int:
@@ -85,10 +89,22 @@ class RelayOrbitPreset:
             "max_range_km": round(self.max_range_km, 1),
             "antenna_mask_deg": round(self.antenna_mask_deg, 2),
             "freq_ghz": round(self.freq_ghz, 4),
+            "hypothetical": bool(self.hypothetical),
+            "source": self.source,
         }
 
 
-# Hypothetical scenarios: see the module docstring for what is and is not sourced.
+# Hypothetical scenarios: see the module docstring for what is and is not sourced. The ``source``
+# strings restate that docstring (SPA-10); they were not re-checked against the cited papers.
+LRO_PRESET_SOURCE = (
+    "Geometry of LRO's 2009-2011 50 km circular polar mapping orbit (Slojkowski, 24th ISSFD, 2014). "
+    "Initial phase arbitrary; the 2026 LRO orbit differs and LRO is not a relay service."
+)
+ELFO_PRESET_SOURCE = (
+    "Only the orbit class (ELFO) and the 2200-2290 MHz S-band return link of ESA/SSTL Lunar Pathfinder are "
+    "published (SpaceOps 2023, paper 339). Elements, phases, phasing, antenna mask and ranges are unsourced."
+)
+
 LRO_PRESET = RelayOrbitPreset(
     key="lro",
     name="Hypothetical LRO-like polar orbiter (50 km circular, not a relay service)",
@@ -101,6 +117,7 @@ LRO_PRESET = RelayOrbitPreset(
     max_range_km=1200.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.271,
+    source=LRO_PRESET_SOURCE,
 )
 
 ELFO_PATHFINDER_PRESET = RelayOrbitPreset(
@@ -115,6 +132,7 @@ ELFO_PATHFINDER_PRESET = RelayOrbitPreset(
     max_range_km=12000.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.25,
+    source=ELFO_PRESET_SOURCE,
 )
 
 ELFO_CONSTELLATION_PRESET = RelayOrbitPreset(
@@ -129,6 +147,7 @@ ELFO_CONSTELLATION_PRESET = RelayOrbitPreset(
     max_range_km=12000.0,
     antenna_mask_deg=5.0,
     freq_ghz=2.25,
+    source=ELFO_PRESET_SOURCE,
 )
 
 RELAY_PRESETS: dict[str, RelayOrbitPreset] = {

@@ -17,6 +17,7 @@ mark it ``xfail(strict=True)`` with the reason and report it as a finding.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from datetime import datetime, timedelta, timezone
@@ -50,6 +51,7 @@ from lunar_science.navigator.dem_horizon import (
     max_solar_elevation_curve,
     selenographic_to_cartesian_me,
 )
+from lunar_science.navigator.pipeline import serialize_frontend_dataset, serialize_outputs_dataset
 from lunar_science.navigator.ephemeris import (
     angular_separation_deg,
     build_utc_grid,
@@ -77,6 +79,7 @@ PACKAGED_SCHEMA_PATH = (
 )
 OUTPUT_DATASET_PATH = REPO_ROOT / "outputs" / "datasets" / "south_pole_precomputed.v1.json"
 FRONTEND_DATASET_PATH = REPO_ROOT / "frontend" / "src" / "data" / "south_pole_precomputed.v1.json"
+FRONTEND_CHECKSUM_PATH = FRONTEND_DATASET_PATH.with_name(FRONTEND_DATASET_PATH.name + ".sha256")
 REPORT_CSV_PATH = REPO_ROOT / "outputs" / "reports" / "site_engineering_summary.csv"
 HORIZONS_REPORT_PATH = REPO_ROOT / "outputs" / "validation" / "horizons_cross_validation.json"
 
@@ -130,9 +133,25 @@ def test_packaged_schema_copy_matches_contracts_schema() -> None:
     assert _load(PACKAGED_SCHEMA_PATH) == _load(SCHEMA_PATH)
 
 
+def test_packaged_score_model_copy_matches_contracts_model() -> None:
+    """scoring.py reads the packaged copy; the frontend reads contracts/ (single source, SPA-12)."""
+    contracts_model = REPO_ROOT / "contracts" / "landing-score-model.v1.json"
+    packaged_model = REPO_ROOT / "science" / "src" / "lunar_science" / "schemas" / "landing-score-model.v1.json"
+    assert packaged_model.read_bytes() == contracts_model.read_bytes()
+
+
 def test_frontend_bundled_dataset_equals_outputs_dataset(dataset: dict) -> None:
     """The UI must show exactly the published artifact (only whitespace may differ)."""
     assert _load(FRONTEND_DATASET_PATH) == dataset
+
+
+def test_dataset_copies_are_the_producer_serialization_and_match_the_checksum(dataset: dict) -> None:
+    """Transport (docs/integration.md): byte-stable copies and the SHA-256 the build re-checks (CA-8)."""
+    assert OUTPUT_DATASET_PATH.read_bytes() == serialize_outputs_dataset(dataset)
+    served = FRONTEND_DATASET_PATH.read_bytes()
+    assert served == serialize_frontend_dataset(dataset)
+    digest = hashlib.sha256(served).hexdigest()
+    assert FRONTEND_CHECKSUM_PATH.read_text(encoding="utf-8") == f"{digest}  {FRONTEND_DATASET_PATH.name}\n"
 
 
 def test_site_ids_are_unique_and_grid_is_complete(dataset: dict) -> None:
@@ -215,7 +234,8 @@ def test_illumination_duty_cycles_and_scores_are_bounded(dataset: dict) -> None:
             if key.endswith("_duty_cycle_pct"):
                 assert 0.0 <= value <= 100.0, (site["id"], key)
         for key, value in summary["score"].items():
-            assert 0.0 <= value <= 100.0, (site["id"], key)
+            if key.endswith("_0_100"):
+                assert 0.0 <= value <= 100.0, (site["id"], key)
         for node in site["local_grid"]["nodes"]:
             assert 0.0 <= node["mean_illum_fraction"] <= 1.0
             assert 0.0 <= node["landing_score_0_100"] <= 100.0
@@ -332,6 +352,7 @@ def test_relay_series_respect_orbit_geometry(dataset: dict) -> None:
 
 
 def test_relay_presets_obey_kepler_third_law(dataset: dict) -> None:
+    """Orbital elements and, since contract 1.1.0 (migrated labels), the full published preset."""
     radius_km = LUNAR_REFERENCE_RADIUS_M / 1000.0
     for name, preset in dataset["relay_presets"].items():
         period_h = 2.0 * math.pi * math.sqrt(preset["a_km"] ** 3 / MOON_GM_KM3_S2) / 3600.0
@@ -339,28 +360,40 @@ def test_relay_presets_obey_kepler_third_law(dataset: dict) -> None:
         assert preset["apolune_alt_km"] == pytest.approx(preset["a_km"] * (1 + preset["e"]) - radius_km, abs=0.1)
         assert preset["perilune_alt_km"] == pytest.approx(preset["a_km"] * (1 - preset["e"]) - radius_km, abs=0.1)
         assert preset["perilune_alt_km"] > 0.0
-    # Orbital elements only: the preset *names* were relabeled "Hypothetical ..." by SPA-10 and the
-    # committed dataset predates that; the label debt is tracked once, by
-    # test_navigator.py::test_committed_dataset_carries_current_honesty_labels.
-    def _elements(spec: dict) -> dict:
-        return {k: v for k, v in spec.items() if k != "name"}
-
     for key, obj in (("lro", LRO_PRESET), ("elfo_pathfinder", ELFO_PATHFINDER_PRESET), ("elfo_constellation", ELFO_CONSTELLATION_PRESET)):
-        assert _elements(dataset["relay_presets"][key]) == _elements(obj.to_contract_dict())
+        assert dataset["relay_presets"][key] == obj.to_contract_dict()
+
+
+def _stored_rule_inputs(dataset: dict, point: dict) -> tuple[float | None, float | None]:
+    """(psr_distance_m, slope_limit_deg) under the rule the stored scores were computed with.
+
+    A migrated file declares ``provenance.migration.stored_scores_rule == "1.0.0"``: no slope
+    elimination, and the "no PSR found" fallback (now null) was scored as a distance.
+    """
+    migration = dataset["provenance"].get("migration")
+    if migration is None:  # native 1.1.0 producer output
+        return point["psr_distance_m"], dataset["provenance"]["conventions"]["clps_slope_limit_deg"]
+    assert migration["stored_scores_rule"] == "1.0.0"
+    distance = point["psr_distance_m"]
+    if distance is None:
+        distance = migration["psr_sentinel_nulled"]["value_m"]
+    return distance, None
 
 
 def test_published_scores_are_reproducible_from_published_inputs(dataset: dict) -> None:
     assert sum(DEFAULT_SCORE_WEIGHTS.values()) == pytest.approx(1.0)
     for site in _sites(dataset):
         c, summary = site["center"], site["engineering_summary"]
+        psr_distance_m, slope_limit_deg = _stored_rule_inputs(dataset, c)
         score = compute_composite_landing_score(
             slope_deg=c["slope_deg"],
             mean_illum_fraction=summary["solar"]["mean_illum_fraction"],
             max_continuous_shadow_hours=summary["solar"]["max_continuous_shadow_hours"],
             dte_full_disk_duty_cycle_pct=summary["comms"]["dte_full_disk_duty_cycle_pct"],
             combined_dte_elfo_duty_cycle_pct=summary["comms"]["combined_dte_elfo_duty_cycle_pct"],
-            psr_distance_m=c["psr_distance_m"],
+            psr_distance_m=psr_distance_m,
             is_psr=c["is_psr"],
+            slope_limit_deg=slope_limit_deg,
         )
         # Published slope is rounded to 0.01 deg => up to 0.04 on the slope sub-score.
         for key, value in score.items():
@@ -376,7 +409,8 @@ def test_psr_classification_is_consistent_with_illumination(dataset: dict) -> No
                 assert illum == 0.0, site["id"]
                 assert point["psr_distance_m"] == 0.0, site["id"]
             else:
-                assert point["psr_distance_m"] > 0.0, site["id"]
+                # null (contract 1.1.0) = no PSR point found by the search: unknown, never 0.
+                assert point["psr_distance_m"] is None or point["psr_distance_m"] > 0.0, site["id"]
 
 
 def test_sunlit_hours_do_not_exceed_window(dataset: dict, window_hours: float) -> None:
@@ -415,26 +449,27 @@ def test_continuous_durations_do_not_exceed_window(dataset: dict, window_hours: 
     assert not offenders, offenders[:5]
 
 
-# Value returned by pipeline._distance_to_psr_patch_m when the coarse search patch holds no PSR point.
+# Value returned by the 1.0.0 pipeline._distance_to_psr_patch_m when the search patch held no PSR point.
 PSR_DISTANCE_FALLBACK_M = 5200.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "ACHADO SPA-13 (confirma auditoria SPA-9 §6.2): sem PSR na busca grosseira, "
-        "pipeline._distance_to_psr_patch_m devolve o teto de 5200 m, publicado como distância medida e usado "
-        "no score (de_gerlache_rim_2: centro e os 25 nós). Corrigir exige publicar null/flag (mudança de "
-        "contrato) e regenerar o dataset."
-    ),
-)
 def test_psr_distance_is_never_the_search_fallback(dataset: dict) -> None:
-    offenders = []
+    """ACHADO SPA-13 / auditoria SPA-9 §6.2, resolvido no contrato 1.1.0 (SPA-12).
+
+    O dataset 1.0.0 publicava o teto de 5200 m como distância medida (de_gerlache_rim_2: centro e os
+    25 nós). Agora "nenhum PSR encontrado" é null; a migração estrutural registra quantos valores
+    trocou, e a unicidade do valor é conferida em test_migration_1_0_to_1_1.py.
+    """
+    offenders, nulls = [], 0
     for site in _sites(dataset):
         points = [("center", site["center"])]
         points += [(f"node[{n['row']},{n['col']}]", n) for n in site["local_grid"]["nodes"]]
         offenders += [(site["id"], name) for name, p in points if p["psr_distance_m"] == PSR_DISTANCE_FALLBACK_M]
+        nulls += sum(p["psr_distance_m"] is None for _, p in points)
     assert not offenders, offenders[:5]
+    migration = dataset["provenance"].get("migration")
+    if migration is not None:
+        assert nulls == migration["psr_sentinel_nulled"]["count"]
 
 
 def test_solar_envelope_upper_bounds_published_sun_elevations(dataset: dict) -> None:

@@ -17,25 +17,68 @@ hypothetical 3-satellite scenario; in the committed dataset it brings the combin
 least 65 comms points (16.25 total points). The term then mostly reflects the assumed relay, not
 the site. Compare with ``use_relay=False``.
 
-The same formulas are duplicated in ``frontend/src/navigator/math.ts``; see
-``science/AUDIT_FOLLOWUPS.md`` for the changes the frontend needs to stay consistent.
+Single source of the parameters (SPA-12): ``contracts/landing-score-model.v1.json``, packaged as
+``lunar_science/schemas/landing-score-model.v1.json`` (byte-identical copy, checked in tests). The
+frontend (``frontend/src/navigator/math.ts``) reads the same file, implements the same formulas in
+the same operation order and rounds the same way; ``contracts/examples/landing-score-parity-cases.json``
+pins both implementations to identical outputs.
 """
 
 from __future__ import annotations
 
+import importlib.resources
+import json
 from dataclasses import dataclass
+from typing import Any
+
+_MODEL_KEYS = {
+    "weights": {"safety", "power", "comms", "science_psr"},
+    "slope": {"full_score_max_deg", "zero_score_deg", "default_elimination_limit_deg"},
+    "power": {"illumination_weight", "shadow_weight", "shadow_scale_hours"},
+    "comms": {"relay_combined_weight", "dte_weight"},
+    "science_psr": {
+        "inside_psr_points",
+        "unknown_distance_points",
+        "near_max_m",
+        "near_points",
+        "ramp_end_m",
+        "ramp_end_points",
+        "zero_m",
+    },
+    "rounding": {"decimals", "ties"},
+}
+
+
+def load_score_model() -> dict[str, Any]:
+    """The packaged ``landing-score-model.v1.json``; raises if its structure is not the expected one."""
+    text = (
+        importlib.resources.files("lunar_science")
+        .joinpath("schemas/landing-score-model.v1.json")
+        .read_text(encoding="utf-8")
+    )
+    model = json.loads(text)
+    for block, keys in _MODEL_KEYS.items():
+        if set(model.get(block, {})) != keys:
+            raise ValueError(f"landing-score-model.v1.json: block {block!r} must have exactly {sorted(keys)}")
+    # Python's round() is round-half-even on the exact binary value: the model must say so.
+    if model["rounding"]["ties"] != "half_even" or model.get("illustrative") is not True:
+        raise ValueError("landing-score-model.v1.json: unsupported rounding or missing 'illustrative: true'")
+    return model
+
+
+SCORE_MODEL = load_score_model()
+_SLOPE = SCORE_MODEL["slope"]
+_POWER = SCORE_MODEL["power"]
+_COMMS = SCORE_MODEL["comms"]
+_PSR = SCORE_MODEL["science_psr"]
+_DECIMALS = int(SCORE_MODEL["rounding"]["decimals"])
 
 #: Illustrative, unsourced weights (see module docstring).
-DEFAULT_SCORE_WEIGHTS = {
-    "safety": 0.25,
-    "power": 0.35,
-    "comms": 0.25,
-    "science_psr": 0.15,
-}
+DEFAULT_SCORE_WEIGHTS = dict(SCORE_MODEL["weights"])
 
 #: Slope above which a point is eliminated. Unsourced placeholder; replace with the certified
 #: slope tolerance of the lander being studied.
-DEFAULT_SLOPE_LIMIT_DEG = 12.0
+DEFAULT_SLOPE_LIMIT_DEG = float(_SLOPE["default_elimination_limit_deg"])
 
 
 @dataclass(frozen=True)
@@ -59,7 +102,8 @@ def is_slope_eliminated(slope_deg: float, slope_limit_deg: float | None = DEFAUL
 
 def score_slope_safety(slope_deg: float) -> float:
     """Illustrative slope ramp: 100 at <=2 deg, linear decay to 0 at >=15 deg (unsourced)."""
-    return _clamp(100.0 * (15.0 - slope_deg) / 13.0)
+    full, zero = _SLOPE["full_score_max_deg"], _SLOPE["zero_score_deg"]
+    return _clamp(100.0 * (zero - slope_deg) / (zero - full))
 
 
 def score_solar_power(mean_illum_fraction: float, max_continuous_shadow_hours: float) -> float:
@@ -69,8 +113,8 @@ def score_solar_power(mean_illum_fraction: float, max_continuous_shadow_hours: f
     southern summer, so this term is a best-season value, not an annual one.
     """
     illum_score = _clamp(mean_illum_fraction * 100.0)
-    shadow_resilience = _clamp(100.0 * (1.0 - max_continuous_shadow_hours / 360.0))
-    return _clamp(0.70 * illum_score + 0.30 * shadow_resilience)
+    shadow_resilience = _clamp(100.0 * (1.0 - max_continuous_shadow_hours / _POWER["shadow_scale_hours"]))
+    return _clamp(_POWER["illumination_weight"] * illum_score + _POWER["shadow_weight"] * shadow_resilience)
 
 
 def score_comms_availability(
@@ -85,7 +129,10 @@ def score_comms_availability(
     """
     if not use_relay:
         return _clamp(dte_full_disk_duty_cycle_pct)
-    return _clamp(0.65 * combined_dte_elfo_duty_cycle_pct + 0.35 * dte_full_disk_duty_cycle_pct)
+    return _clamp(
+        _COMMS["relay_combined_weight"] * combined_dte_elfo_duty_cycle_pct
+        + _COMMS["dte_weight"] * dte_full_disk_duty_cycle_pct
+    )
 
 
 def score_psr_proximity(psr_distance_m: float | None, is_psr: bool) -> float:
@@ -96,14 +143,16 @@ def score_psr_proximity(psr_distance_m: float | None, is_psr: bool) -> float:
     used as if it were a measured distance.
     """
     if is_psr:
-        return 15.0
+        return float(_PSR["inside_psr_points"])
     if psr_distance_m is None:
-        return 0.0
-    if psr_distance_m <= 500.0:
-        return 100.0
-    if psr_distance_m <= 5000.0:
-        return _clamp(100.0 - 80.0 * (psr_distance_m - 500.0) / 4500.0)
-    return _clamp(20.0 * (1.0 - (psr_distance_m - 5000.0) / 5000.0))
+        return float(_PSR["unknown_distance_points"])
+    near, near_pts = _PSR["near_max_m"], _PSR["near_points"]
+    end, end_pts, zero = _PSR["ramp_end_m"], _PSR["ramp_end_points"], _PSR["zero_m"]
+    if psr_distance_m <= near:
+        return float(near_pts)
+    if psr_distance_m <= end:
+        return _clamp(near_pts - (near_pts - end_pts) * (psr_distance_m - near) / (end - near))
+    return _clamp(end_pts * (1.0 - (psr_distance_m - end) / (zero - end)))
 
 
 def compute_composite_landing_score(
@@ -140,9 +189,9 @@ def compute_composite_landing_score(
     else:
         total = (w.safety * s_safety + w.power * s_power + w.comms * s_comms + w.science_psr * s_psr) / w_sum
     return {
-        "total_0_100": round(_clamp(total), 2),
-        "safety_slope_0_100": round(s_safety, 2),
-        "power_0_100": round(s_power, 2),
-        "comms_0_100": round(s_comms, 2),
-        "science_psr_0_100": round(s_psr, 2),
+        "total_0_100": round(_clamp(total), _DECIMALS),
+        "safety_slope_0_100": round(s_safety, _DECIMALS),
+        "power_0_100": round(s_power, _DECIMALS),
+        "comms_0_100": round(s_comms, _DECIMALS),
+        "science_psr_0_100": round(s_psr, _DECIMALS),
     }

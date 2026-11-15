@@ -7,21 +7,21 @@ Solução completa em **duas camadas** para o desafio **NASA Space Apps Challeng
 
 ## Estado da verificação científica
 
-O dataset commitado em `outputs/` e `frontend/src/data/` foi gerado pelo código **anterior** à tarefa SPA-10 e não foi regenerado (o DEM e os kernels NAIF não estão acessíveis nos ambientes de agentes). As correções de rótulo da SPA-10 só aparecem no dataset depois de uma nova execução; até lá, o texto abaixo prevalece sobre o que o dataset diz de si mesmo.
+Os números do dataset commitado em `outputs/` e `frontend/src/data/` foram gerados pelo código **anterior** à tarefa SPA-10 e não foram regenerados (o DEM e os kernels NAIF não estão acessíveis nos ambientes de agentes). Na SPA-12 o arquivo foi convertido para o contrato 1.1.0 por uma migração **estrutural e reversível** (`science/tools/migrate_dataset_1_0_to_1_1.py`): rótulos e metadados mudaram (por exemplo `verified` → `unverified_no_raw_response`, sem "cross-checked with Skyfield", sentinela de 5200 m → `null`), nenhum número foi recalculado. Detalhes em [`contracts/README.md`](contracts/README.md#arquivos-migrados-da-100). O texto abaixo prevalece sobre o que o dataset diz de si mesmo.
 
 **Verificado (com o que e onde):**
 
 - Direções aparentes de Sol e Terra em `MOON_ME` (`sky_series` dos 10 sítios e colunas `spice_*` de `outputs/validation/horizons_cross_validation.json`): reproduzidas sem SPICE a partir do DE421 distribuído no PyPI, dentro do arredondamento gravado (0,0005° e 1e-5°). Teste `science/tests/test_ephemeris_regression.py`, que roda na CI. Isso confere implementação e convenções (referencial, escalas de tempo, aberração, projeção ENU); não confere o DE421 contra a realidade nem contra o JPL Horizons.
-- Resumos solar, de comunicação e de score dos 10 sítios e 250 nós: recalculados pela auditoria SPA-9 (`docs/audit/scientific-audit-main.md`, branch local `docs/spa-9-scientific-audit`, commit `0006025`) com diferenças só de arredondamento, dadas as entradas derivadas do DEM.
+- Resumos solar, de comunicação e de score dos 10 sítios e 250 nós: recalculados pela auditoria SPA-9 ([`docs/audit/scientific-audit-main.md`](docs/audit/scientific-audit-main.md), feita sobre a versão 1.0.0 do arquivo em `main` 23cc0c7) com diferenças só de arredondamento, dadas as entradas derivadas do DEM.
 - SHA-256 fixados de `moon_080317.tf`, `moon_assoc_me.tf` e `moon_pa_de421_1900-2050.bpc`: iguais aos das cópias do pacote PyPI `lunarsky==1.0.1.post2`.
 
 **Não verificado:**
 
-- **Comparação com o JPL Horizons.** O `horizons_cross_validation.json` commitado não retém a resposta bruta (URL, parâmetros, cabeçalho, data da consulta), e o rótulo `verified` era atribuído sem nenhuma tolerância. Não foi reproduzido de forma independente (host bloqueado). Trate-o como comparação não reproduzida. O código atual retém a resposta bruta em `outputs/validation/horizons_raw/` e só usa `verified` dentro de uma tolerância declarada (0,001° por padrão; caso contrário `failed`, com os números).
-- **"Validação cruzada contra Skyfield".** Nunca rodou: o único teste que a faz é pulado sem kernels, inclusive na CI. A string `cross-checked with Skyfield` no dataset commitado vem de um texto fixo do código antigo.
+- **Comparação com o JPL Horizons.** O `horizons_cross_validation.json` commitado não retém a resposta bruta (URL, parâmetros, cabeçalho, data da consulta), e o rótulo `verified` da versão 1.0.0 era atribuído sem nenhuma tolerância. Não foi reproduzido de forma independente (host bloqueado). O dataset 1.1.0 o rotula `unverified_no_raw_response`. O código atual retém a resposta bruta em `outputs/validation/horizons_raw/` e só usa `verified` dentro de uma tolerância declarada (0,001° por padrão; caso contrário `failed`, com os números).
+- **Conferência com o Skyfield.** Nunca rodou: o único teste que a faz é pulado sem kernels, inclusive na CI. A string `cross-checked with Skyfield` da versão 1.0.0 vinha de um texto fixo do código antigo e foi retirada na migração.
 - **DEM LOLA**: arquivo e hashes não conferidos aqui; elevação, declividade, horizonte e PSR dependem dele.
 - **Iluminação**: a janela vai de 2026-11-15 a 2026-12-15 (30 dias) e começa no extremo sul da latitude subsolar do ciclo 2026–27 (−1,557°). As métricas solares são do melhor período para o polo sul, não médias anuais (o ciclo sazonal dura cerca de 346,6 dias).
-- **Landing Score**: índice ilustrativo; pesos e limiares não têm fonte nem análise de sensibilidade. O termo de comunicação satura em 100 % em todos os sítios por causa da constelação relay hipotética.
+- **Landing Score**: índice ilustrativo; pesos e limiares (`contracts/landing-score-model.v1.json`) não têm fonte nem análise de sensibilidade. O termo de comunicação satura em 100 % em todos os sítios por causa da constelação relay hipotética. Os scores gravados no arquivo seguem a regra 1.0.0 (sem eliminação por declividade); a interface recalcula com a regra 1.1.0.
 - **Relays e sítios**: as órbitas são cenários hipotéticos; as coordenadas são pontos representativos sem fonte dentro ou perto das regiões Artemis III anunciadas pela NASA (que publica regiões, não pontos).
 
 Pendências e mudanças de contrato propostas: [`science/AUDIT_FOLLOWUPS.md`](science/AUDIT_FOLLOWUPS.md).
@@ -32,7 +32,7 @@ Pendências e mudanças de contrato propostas: [`science/AUDIT_FOLLOWUPS.md`](sc
 - `frontend/src/navigator/`: componentes interativos (`SouthPoleGridMap.tsx`, `PolarHorizonSkyPlot.tsx`, `PowerCommsCharts.tsx`, `SiteComparisonPanel.tsx`, `math.ts`, `types.ts`).
 - `outputs/`: artefatos gerados pelo motor (`datasets/`, `reports/`, `validation/`); regenerá-los exige baixar o DEM e os kernels externos.
 - `docs/accessibility/`: guia de acessibilidade WCAG 2.2 AA e simplicidade cognitiva ([`guia-acessibilidade-e-simplicidade.md`](docs/accessibility/guia-acessibilidade-e-simplicidade.md)).
-- `contracts/`: JSON Schemas (`navigator-dataset.v1.schema.json`, `science-status.schema.json`) compartilhados entre Python (`jsonschema`) e TypeScript (`Ajv`).
+- `contracts/`: JSON Schemas (`navigator-dataset.v1.schema.json` na versão 1.1.0, `science-status.schema.json`) e o modelo do índice ilustrativo (`landing-score-model.v1.json`), compartilhados entre Python (`jsonschema`) e TypeScript (`Ajv`).
 - `.github/workflows/ci.yml`: testes, tipagem, build do frontend (`check:deploy`) e smoke test da wheel Python.
 
 ## Pré-requisitos

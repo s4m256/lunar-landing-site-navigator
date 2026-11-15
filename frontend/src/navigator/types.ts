@@ -1,4 +1,7 @@
-/** TypeScript types matching contracts/navigator-dataset.v1.schema.json. */
+/**
+ * TypeScript types matching contracts/navigator-dataset.v1.schema.json, contract version 1.1.0.
+ * The JSON Schema is normative; Ajv (contract.ts) checks every file before these types are trusted.
+ */
 
 export interface KernelAssetProvenance {
   filename: string;
@@ -18,9 +21,30 @@ export interface DemProductProvenance {
   azimuth_step_deg: number;
 }
 
+/** Contract 1.1.0 enum; see contracts/README.md for what each value means and requires. */
+export type HorizonsValidationStatus =
+  | 'verified'
+  | 'failed'
+  | 'skipped_network_unavailable'
+  | 'not_requested'
+  | 'unverified_no_raw_response';
+
+/** One retained raw Horizons response; response_file is relative to outputs/validation/. */
+export interface HorizonsRawResponse {
+  target_command: string;
+  request_url: string;
+  retrieved_utc: string;
+  response_file: string;
+  response_sha256: string;
+}
+
 export interface HorizonsValidationProvenance {
-  status: string;
+  status: HorizonsValidationStatus;
   endpoint: string;
+  /** Declared acceptance tolerance; null when none was applied. */
+  tolerance_deg?: number | null;
+  sample_count?: number | null;
+  raw_responses?: HorizonsRawResponse[];
   max_sun_az_diff_deg?: number | null;
   max_sun_el_diff_deg?: number | null;
   max_earth_az_diff_deg?: number | null;
@@ -37,7 +61,37 @@ export interface NavigatorConventions {
   solar_radius_km: number;
   earth_radius_km: number;
   lunar_radius_m: number;
+  /** Slope above this value eliminates a point from the illustrative index (1.1.0 rule). Unsourced. */
   clps_slope_limit_deg: number;
+  slope_baseline_m?: number;
+  /** psr_distance_m is null when no PSR point was found within this radius. */
+  psr_search_radius_m?: number;
+  psr_lattice_step_m?: number;
+  psr_subsolar_lat_extreme_deg?: number;
+  psr_solar_radius_deg?: number;
+  score_is_illustrative?: true;
+}
+
+/** One value changed by the 1.0.0 -> 1.1.0 migration (path is a JSON pointer). */
+export interface MigrationReplacement {
+  path: string;
+  from: unknown;
+  to: unknown;
+}
+
+/** Present only in files migrated from 1.0.0 by science/tools/migrate_dataset_1_0_to_1_1.py. */
+export interface DatasetMigration {
+  from_schema_version: '1.0.0';
+  tool: string;
+  tool_version: string;
+  source_sha256: string;
+  source_frontend_sha256: string;
+  /** The stored score values follow the 1.0.0 rule (no slope elimination). */
+  stored_scores_rule: '1.0.0';
+  psr_sentinel_nulled: { value_m: number; count: number };
+  added: string[];
+  replaced: MigrationReplacement[];
+  notes: string[];
 }
 
 export interface NavigatorProvenance {
@@ -51,6 +105,15 @@ export interface NavigatorProvenance {
   horizons_validation: HorizonsValidationProvenance;
   conventions: NavigatorConventions;
   limitations: string[];
+  migration?: DatasetMigration;
+}
+
+export interface SeasonalCoverage {
+  duration_days: number;
+  /** null when the producer did not record it (files migrated from 1.0.0). */
+  subsolar_lat_min_deg: number | null;
+  subsolar_lat_max_deg: number | null;
+  covers_seasonal_cycle: boolean;
 }
 
 export interface MissionWindow {
@@ -62,6 +125,7 @@ export interface MissionWindow {
   sun_dist_au: number[];
   earth_angular_radius_deg: number[];
   solar_angular_radius_deg: number[];
+  seasonal_coverage?: SeasonalCoverage;
 }
 
 export interface RelaySpec {
@@ -77,6 +141,8 @@ export interface RelaySpec {
   max_range_km: number;
   antenna_mask_deg: number;
   freq_ghz: number;
+  hypothetical?: boolean;
+  source?: string;
 }
 
 export interface RelayPresets {
@@ -91,7 +157,8 @@ export interface SiteCenter {
   elevation_m: number;
   slope_deg: number;
   cartesian_me_km: [number, number, number];
-  psr_distance_m: number;
+  /** null: no PSR point found within conventions.psr_search_radius_m (distance unknown). */
+  psr_distance_m: number | null;
   is_psr: boolean;
   observer_height_m: number;
 }
@@ -136,12 +203,17 @@ export interface CommsSummary {
   mean_elfo_fspl_db: number;
 }
 
+export type EliminationReason = 'slope_above_clps_limit';
+
 export interface ScoreSummary {
   total_0_100: number;
   safety_slope_0_100: number;
   power_0_100: number;
   comms_0_100: number;
   science_psr_0_100: number;
+  eliminated?: boolean;
+  elimination_reasons?: EliminationReason[];
+  total_without_relay_0_100?: number;
 }
 
 export interface LocalGridNode {
@@ -153,7 +225,7 @@ export interface LocalGridNode {
   longitude_east_deg: number;
   elevation_m: number;
   slope_deg: number;
-  psr_distance_m: number;
+  psr_distance_m: number | null;
   is_psr: boolean;
   horizon_elev_deg: number[];
   mean_illum_fraction: number;
@@ -170,6 +242,7 @@ export interface LandingSiteEntry {
   name: string;
   category: 'artemis_candidate' | 'reference_ridge' | 'psr_contrast';
   description: string;
+  coordinates_source?: string;
   center: SiteCenter;
   horizon_elev_deg: number[];
   sky_series: SkySeries;
@@ -186,7 +259,7 @@ export interface LandingSiteEntry {
 }
 
 export interface NavigatorDatasetV1 {
-  schema_version: '1.0.0';
+  schema_version: '1.1.0';
   generated_utc: string;
   provenance: NavigatorProvenance;
   mission_window: MissionWindow;

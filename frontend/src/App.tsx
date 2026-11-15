@@ -252,6 +252,7 @@ export function App({ dataset, datasetUrl }: AppProps) {
           selectedSiteId={selectedSite.id}
           config={config}
           slopeLimitDeg={dataset.provenance.conventions.clps_slope_limit_deg}
+          psrSearchRadiusM={dataset.provenance.conventions.psr_search_radius_m}
           relayPresets={dataset.relay_presets}
           windowLabel={windowLabel}
           epochIdx={shownEpoch}

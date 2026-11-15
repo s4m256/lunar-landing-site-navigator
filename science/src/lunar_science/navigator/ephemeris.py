@@ -784,6 +784,11 @@ HORIZONS_REPORT_FILENAME = "horizons_cross_validation.json"
 HORIZONS_RAW_DIRNAME = "horizons_raw"
 
 
+def horizons_raw_response_file(target_command: str) -> str:
+    """Path of a retained raw response, relative to ``outputs/validation/`` (``raw_responses[].response_file``)."""
+    return f"{HORIZONS_RAW_DIRNAME}/target_{target_command}.response.json"
+
+
 def write_horizons_validation_artifacts(validation_dir: Path, report: dict[str, Any]) -> dict[str, Path]:
     """Write the comparison report plus the exact raw Horizons responses next to it.
 
@@ -805,12 +810,13 @@ def write_horizons_validation_artifacts(validation_dir: Path, report: dict[str, 
     for query in report.get("horizons_queries", []):
         entry = dict(query)
         text = entry.pop("response_text")
-        raw_path = raw_dir / f"target_{entry['target_command']}.response.json"
+        response_file = horizons_raw_response_file(entry["target_command"])
+        raw_path = validation_dir / response_file
         raw_bytes = text.encode("utf-8")
         if hashlib.sha256(raw_bytes).hexdigest() != entry["response_sha256"]:
             raise ValueError(f"Retained Horizons response for target {entry['target_command']} does not match its SHA-256.")
         raw_path.write_bytes(raw_bytes)
-        entry["response_file"] = f"{HORIZONS_RAW_DIRNAME}/{raw_path.name}"
+        entry["response_file"] = response_file
         queries_out.append(entry)
         written[f"horizons_raw_{entry['target_command']}"] = raw_path
     if not queries_out:

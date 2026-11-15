@@ -330,13 +330,13 @@ def test_committed_precomputed_outputs_conform_to_schema() -> None:
 
     The Horizons status is deliberately not asserted (it used to require "verified", which only
     restated the file). Non-circular checks of the sky series are in test_ephemeris_regression.py.
+    Schema conformance of both copies, their equality and the frontend checksum are checked once, in
+    test_known_cases.py (section 1, "contract").
     """
     assert DATASET_PATH.is_file(), "Expected precomputed dataset in outputs/datasets/"
     assert FRONTEND_DATASET_PATH.is_file(), "Expected bundled dataset in frontend/src/data/"
 
     dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
-    validate_dataset_schema(dataset)
-    assert dataset == json.loads(FRONTEND_DATASET_PATH.read_text(encoding="utf-8"))
     assert len(dataset["sites"]) == 10
 
     # The PSR contrast point must be internally consistent: flagged PSR, never lit, no DTE.
@@ -346,26 +346,33 @@ def test_committed_precomputed_outputs_conform_to_schema() -> None:
     assert by_id["shackleton_psr_floor"]["engineering_summary"]["comms"]["dte_full_disk_duty_cycle_pct"] == 0.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "SPA-10 known gap: the committed horizons_cross_validation.json predates raw-response "
-        "retention and declared tolerances, so its 'verified' label is not backed by evidence. "
-        "Regenerate with network access (precompute-navigator), then remove this marker."
-    ),
-)
-def test_committed_horizons_status_is_backed_by_retained_evidence() -> None:
+def test_committed_horizons_status_matches_its_evidence() -> None:
+    """The Horizons label must say exactly what the retained evidence supports (contract 1.1.0).
+
+    ``verified``/``failed`` need the report with tolerance and raw responses; the migrated
+    ``unverified_no_raw_response`` keeps the legacy report but declares no tolerance and no raw
+    response; any other status must not sit next to a comparison artifact.
+    """
     dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
-    status = dataset["provenance"]["horizons_validation"]["status"]
+    hv = dataset["provenance"]["horizons_validation"]
+    status = hv["status"]
+    if status == "unverified_no_raw_response":
+        assert hv["tolerance_deg"] is None and hv["raw_responses"] == []
+        report = json.loads(HORIZONS_PATH.read_text(encoding="utf-8"))
+        assert "horizons_queries" not in report and "tolerance_deg" not in report
+        assert not (HORIZONS_PATH.parent / "horizons_raw").exists()
+        assert "verified" not in json.dumps(report)
+        return
     if status not in ("verified", "failed"):
         assert not HORIZONS_PATH.exists(), "A Horizons artifact must not sit next to a dataset without comparison."
         return
     report = json.loads(HORIZONS_PATH.read_text(encoding="utf-8"))
     assert report.get("status") == status
     assert isinstance(report.get("tolerance_deg"), (int, float))
+    assert hv["tolerance_deg"] == report["tolerance_deg"] and hv["sample_count"] == report["sample_count"]
     queries = report.get("horizons_queries") or []
     assert [q.get("target_command") for q in queries] == ["10", "399"]
+    assert [r["response_file"] for r in hv["raw_responses"]] == [q["response_file"] for q in queries]
     for q in queries:
         raw = HORIZONS_PATH.parent / q["response_file"]
         assert raw.is_file()
@@ -376,15 +383,24 @@ def test_committed_horizons_status_is_backed_by_retained_evidence() -> None:
     strict=True,
     raises=AssertionError,
     reason=(
-        "SPA-10 known gap: the committed dataset was generated before the labeling fixes "
-        "(fixed 'cross-checked with Skyfield' string, unlabeled 30-day summer window, "
-        "unlabeled hypothetical relays). Regenerate, then remove this marker."
+        "SPA-10/SPA-12 known gap: the committed Horizons comparison has no retained raw response and no "
+        "tolerance (status unverified_no_raw_response). Regenerate with network access "
+        "(precompute-navigator), then remove this marker."
     ),
 )
+def test_committed_horizons_comparison_has_retained_evidence() -> None:
+    dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
+    assert dataset["provenance"]["horizons_validation"]["status"] in ("verified", "failed")
+
+
 def test_committed_dataset_carries_current_honesty_labels() -> None:
+    """SPA-10 labels, carried into the committed dataset by the 1.1.0 migration (SPA-12)."""
     dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
     prov = dataset["provenance"]
     assert "Skyfield" not in prov["ephemeris"]["engine"]
     limitations = " ".join(prov["limitations"])
     assert "seasonal cycle" in limitations and "ILLUSTRATIVE" in limitations
     assert all("Hypothetical" in p["name"] for p in dataset["relay_presets"].values())
+    assert all(p["hypothetical"] is True for p in dataset["relay_presets"].values())
+    assert prov["conventions"]["score_is_illustrative"] is True
+    assert "verified" != prov["horizons_validation"]["status"]

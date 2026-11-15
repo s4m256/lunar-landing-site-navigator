@@ -67,11 +67,13 @@ def test_psr_distance_is_none_when_nothing_is_found() -> None:
     assert distance_to_psr_cloud_m(3.0, 4.0, False, np.array([0.0]), np.array([0.0])) == 5.0
 
 
-def test_flat_site_without_psr_emits_documented_sentinel_and_zero_science_score() -> None:
+def test_flat_site_without_psr_emits_null_distance_and_zero_science_score() -> None:
+    """Contract 1.1.0: "no PSR point within the search radius" is null, never the radius itself."""
     entry = _evaluate(_dem_with_pit(None)[0])
     assert entry["center"]["is_psr"] is False
-    assert entry["center"]["psr_distance_m"] == DEFAULT_PSR_SEARCH_RADIUS_M
-    assert all(n["psr_distance_m"] == DEFAULT_PSR_SEARCH_RADIUS_M for n in entry["local_grid"]["nodes"])
+    assert entry["center"]["psr_distance_m"] is None
+    assert all(n["psr_distance_m"] is None for n in entry["local_grid"]["nodes"])
+    assert DEFAULT_PSR_SEARCH_RADIUS_M not in {n["psr_distance_m"] for n in entry["local_grid"]["nodes"]}
     assert entry["engineering_summary"]["score"]["science_psr_0_100"] == 0.0
 
 

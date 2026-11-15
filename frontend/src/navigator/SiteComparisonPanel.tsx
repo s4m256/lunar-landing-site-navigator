@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatDeg, formatHours, formatNumber, formatPct } from './format';
 import { horizonState } from './horizonState';
-import { DEFAULT_CONFIG, LiveScore, LiveSiteAnalysis, PSR_NOT_FOUND_MARKER_M, psrSearchFoundNothing } from './math';
+import { DEFAULT_CONFIG, LiveScore, LiveSiteAnalysis, psrSearchFoundNothing } from './math';
 import { EngineeringConfig, LandingSiteEntry, PanelMode, RelayPresets } from './types';
 
 interface SiteRow {
@@ -17,6 +17,8 @@ interface SiteComparisonPanelProps {
   config: EngineeringConfig;
   /** Slope value recorded in the file conventions (no cited source). */
   slopeLimitDeg: number;
+  /** conventions.psr_search_radius_m; undefined when the file does not declare it. */
+  psrSearchRadiusM?: number;
   relayPresets: RelayPresets;
   windowLabel: string;
   /** null when the requested instant has no sample. */
@@ -31,12 +33,16 @@ function scoreText(score: LiveScore): string {
   return score.unavailableReason === 'zero_weights' ? 'sem índice (todos os pesos em zero)' : 'sem índice';
 }
 
-const PSR_SEARCH_KM = formatNumber(PSR_NOT_FOUND_MARKER_M / 1000, 1);
+/** "até 5,2 km" from conventions.psr_search_radius_m, or a plain phrase when the file omits it. */
+export function psrSearchExtent(radiusM: number | undefined): string {
+  return radiusM === undefined ? 'na busca do gerador' : `até ${formatNumber(radiusM / 1000, 1)} km`;
+}
 
-function psrText(row: SiteRow): string {
+function psrText(row: SiteRow, radiusM: number | undefined): string {
   if (row.analysis.terrain.isPsr) return 'dentro (marcado no arquivo)';
-  if (psrSearchFoundNothing(row.site)) return `nenhuma encontrada até ${PSR_SEARCH_KM} km`;
-  return `${formatNumber(row.analysis.terrain.psrDistanceM, 0)} m`;
+  const distance = row.analysis.terrain.psrDistanceM;
+  if (psrSearchFoundNothing(row.site) || distance === null) return `nenhuma encontrada ${psrSearchExtent(radiusM)}`;
+  return `${formatNumber(distance, 0)} m`;
 }
 
 const stateWord = (el: number, ref: number) => (horizonState(el, ref) === 'above' ? 'acima' : 'não está acima');
@@ -46,6 +52,7 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
   selectedSiteId,
   config,
   slopeLimitDeg,
+  psrSearchRadiusM,
   relayPresets,
   windowLabel,
   epochIdx,
@@ -166,7 +173,7 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
                         {formatDeg(analysis.terrain.slopeDeg, 1)} ({steep ? 'acima de' : 'até'} {formatDeg(slopeLimitDeg, 0)})
                       </span>
                     </td>
-                    <td className="mono-cell">{psrText(row)}</td>
+                    <td className="mono-cell">{psrText(row, psrSearchRadiusM)}</td>
                     <td className="mono-cell">{formatPct(analysis.solar.meanIllumFraction * 100)}</td>
                     <td className="mono-cell">{formatHours(analysis.solar.maxContinuousShadowHours)}</td>
                     <td className="mono-cell">{formatPct(analysis.comms.dteDutyCyclePct)}</td>
@@ -187,8 +194,8 @@ export const SiteComparisonPanel: React.FC<SiteComparisonPanelProps> = ({
             escala de um módulo de pouso.
           </li>
           <li>
-            “Nenhuma encontrada até {PSR_SEARCH_KM} km”: o gerador grava {PSR_NOT_FOUND_MARKER_M} m quando sua busca não
-            encontra sombra permanente; esse marcador entra no índice como se fosse uma distância.
+            “Nenhuma encontrada {psrSearchExtent(psrSearchRadiusM)}”: a busca do gerador não achou sombra permanente e o
+            arquivo não tem distância para esse local (valor vazio). O índice não dá pontos de proximidade nesse caso.
           </li>
           <li>
             Luz do Sol e linha de visada se referem só ao período do arquivo ({windowLabel}); não representam outras

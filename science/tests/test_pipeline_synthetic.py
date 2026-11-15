@@ -8,6 +8,7 @@ produced here are not physical.
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 from pathlib import Path
 
@@ -67,14 +68,37 @@ def test_pipeline_labels_engine_window_score_and_relays_honestly(tmp_path: Path)
     assert "2026-11-15T00:00:00Z -> 2026-11-16T00:00:00Z (1.0 days" in limitations
     assert "ILLUSTRATIVE" in limitations and "hypothetical" in limitations
     assert "400 m baseline" in limitations  # 2 x 200 m synthetic pixels
-    assert "sentinel" in limitations
+    assert "psr_distance_m is null when no PSR point was found" in limitations
     assert prov["conventions"]["clps_slope_limit_deg"] == 12.0
     assert all("Hypothetical" in p["name"] for p in dataset["relay_presets"].values())
+
+    # Contract 1.1.0: the labels above are also machine-readable fields.
+    assert dataset["schema_version"] == "1.1.0"
+    assert "migration" not in prov  # a native 1.1.0 run, not a migrated 1.0.0 file
+    conv = prov["conventions"]
+    assert conv["slope_baseline_m"] == 400.0 and conv["score_is_illustrative"] is True
+    assert conv["psr_search_radius_m"] == 5200.0 and conv["psr_lattice_step_m"] == 1000.0
+    assert conv["psr_subsolar_lat_extreme_deg"] == -1.591 and conv["psr_solar_radius_deg"] == 0.272
+    coverage = dataset["mission_window"]["seasonal_coverage"]
+    assert coverage["duration_days"] == 1.0 and coverage["covers_seasonal_cycle"] is False
+    assert coverage["subsolar_lat_min_deg"] == pytest.approx(-1.5, abs=1e-6)  # SyntheticEphemeris default
+    assert all(p["hypothetical"] is True and p["source"] for p in dataset["relay_presets"].values())
+    for site in dataset["sites"]:
+        assert site["coordinates_source"]
+        score = site["engineering_summary"]["score"]
+        assert score["eliminated"] is False and score["elimination_reasons"] == []
+        assert 0.0 <= score["total_without_relay_0_100"] <= 100.0
 
     hv = prov["horizons_validation"]
     assert hv["status"] == "verified" == report["status"]
     assert any("<= 0.001 deg" in note for note in hv["notes"])
     assert any("horizons_raw" in note for note in hv["notes"])
+    assert hv["tolerance_deg"] == 0.001 and hv["sample_count"] == report["sample_count"] == 5
+    assert [r["target_command"] for r in hv["raw_responses"]] == ["10", "399"]
+    assert [r["response_file"] for r in hv["raw_responses"]] == [
+        "horizons_raw/target_10.response.json",
+        "horizons_raw/target_399.response.json",
+    ]
 
 
 def test_failed_comparison_is_published_with_numbers_and_raw_evidence(tmp_path: Path) -> None:
@@ -88,6 +112,14 @@ def test_failed_comparison_is_published_with_numbers_and_raw_evidence(tmp_path: 
     assert artifact["status"] == "failed"
     raw_files = sorted((tmp_path / "outputs" / "validation" / "horizons_raw").iterdir())
     assert [p.name for p in raw_files] == ["target_10.response.json", "target_399.response.json"]
+    # The dataset points at the same retained files, with the same SHA-256.
+    validation_dir = tmp_path / "outputs" / "validation"
+    for raw in hv["raw_responses"]:
+        assert hashlib.sha256((validation_dir / raw["response_file"]).read_bytes()).hexdigest() == raw["response_sha256"]
+    # The frontend copy has the same content and a sha256sum-style checksum next to it.
+    frontend = paths["frontend_dataset"].read_bytes()
+    assert json.loads(frontend) == json.loads(paths["dataset"].read_text())
+    assert paths["frontend_checksum"].read_text() == f"{hashlib.sha256(frontend).hexdigest()}  south_pole_precomputed.v1.json\n"
     md = paths["summary_md"].read_text()
     assert "ILLUSTRATIVE" in md and "Score w/o relay" in md
 
@@ -103,7 +135,9 @@ def test_network_failure_skips_and_removes_stale_artifacts(tmp_path: Path) -> No
 
     dataset2, report2 = _run(tmp_path, network_down)
     assert report2 is None
-    assert dataset2["provenance"]["horizons_validation"]["status"] == "skipped_network_unavailable"
+    hv2 = dataset2["provenance"]["horizons_validation"]
+    assert hv2["status"] == "skipped_network_unavailable"
+    assert hv2["tolerance_deg"] is None and hv2["sample_count"] is None and hv2["raw_responses"] == []
     paths = write_navigator_outputs(tmp_path, dataset2, report2)
     assert not (validation_dir / "horizons_cross_validation.json").exists()
     assert not (validation_dir / "horizons_raw").exists()

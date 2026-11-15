@@ -11,8 +11,9 @@ export interface ScienceStatus {
 
 const ajv = new Ajv({ allErrors: false });
 const validateStatus = ajv.compile<ScienceStatus>(schema);
-// allErrors: the error screen lists more than the first schema violation.
-const navigatorAjv = new Ajv({ allErrors: true });
+// allErrors: the error screen lists more than the first schema violation. allowUnionTypes: the
+// contract uses ["number", "null"] for values that may be unknown (e.g. psr_distance_m in 1.1.0).
+const navigatorAjv = new Ajv({ allErrors: true, allowUnionTypes: true });
 const validateNavigatorDataset = navigatorAjv.compile<NavigatorDatasetV1>(navigatorSchema);
 
 /** Maximum number of schema issues kept for display; the full list can be very long. */

@@ -1,6 +1,7 @@
 """End-to-end precomputation pipeline for Lunar Landing Site Navigator.
 
-"Validated" in this module means conformance with ``navigator-dataset.v1.schema.json`` only.
+"Validated" in this module means conformance with ``navigator-dataset.v1.schema.json`` (contract
+1.1.0) only.
 The only external comparison is the optional JPL Horizons check of Sun/Earth directions at one
 site; its status is ``verified`` only within a declared tolerance (see ``ephemeris.py``).
 """
@@ -47,6 +48,7 @@ from .ephemeris import (
     DEFAULT_HORIZONS_TOLERANCE_DEG,
     HORIZONS_API_URL,
     HORIZONS_RAW_DIRNAME,
+    horizons_raw_response_file,
     HorizonsNetworkError,
     SpiceLunarEphemeris,
     build_utc_grid,
@@ -63,6 +65,16 @@ from .scoring import (
 )
 from .solar import analyze_site_solar
 
+#: ``schema_version`` written by this producer (contracts/navigator-dataset.v1.schema.json).
+DATASET_SCHEMA_VERSION = "1.1.0"
+
+#: Reason code published in ``score.elimination_reasons`` (contract 1.1.0).
+SLOPE_ELIMINATION_REASON = "slope_above_clps_limit"
+
+#: File name of the frontend copy and of its SHA-256 checksum (sha256sum format), written next to it.
+FRONTEND_DATASET_FILENAME = "south_pole_precomputed.v1.json"
+FRONTEND_DATASET_CHECKSUM_FILENAME = FRONTEND_DATASET_FILENAME + ".sha256"
+
 EPHEMERIS_ENGINE_LABEL = "NAIF SPICE (spiceypy)"
 EPHEMERIS_FRAME_LABEL = "MOON_ME (Mean Earth / Polar Axis DE421)"
 
@@ -70,8 +82,8 @@ EPHEMERIS_FRAME_LABEL = "MOON_ME (Mean Earth / Polar Axis DE421)"
 #: 2000-2030 as 346.62 +/- 0.55 d (SPA-10); windows shorter than this are season-specific.
 SEASONAL_CYCLE_DAYS = 346.62
 
-#: Radius of the site-centered lattice searched for PSR points, and the value written to
-#: ``psr_distance_m`` when none is found (the contract requires a number; see AUDIT_FOLLOWUPS).
+#: Radius of the site-centered lattice searched for PSR points. Contract 1.1.0 publishes it as
+#: ``conventions.psr_search_radius_m``; ``psr_distance_m`` is null when no PSR point is found in it.
 DEFAULT_PSR_SEARCH_RADIUS_M = 5200.0
 DEFAULT_PSR_LATTICE_STEP_M = 500.0
 
@@ -168,9 +180,43 @@ def distance_to_psr_cloud_m(
     return float(math.sqrt(float(np.min(d2))))
 
 
-def _emit_psr_distance(distance_m: float | None, search_radius_m: float) -> float:
-    """Contract value: the measured distance, or the search radius as a documented sentinel."""
-    return round(float(search_radius_m if distance_m is None else distance_m), 1)
+def _emit_psr_distance(distance_m: float | None) -> float | None:
+    """Contract value: the measured distance, or ``None`` when no PSR point is known (1.1.0)."""
+    return None if distance_m is None else round(float(distance_m), 1)
+
+
+def contract_score_summary(
+    slope_deg: float,
+    mean_illum_fraction: float,
+    max_continuous_shadow_hours: float,
+    dte_full_disk_duty_cycle_pct: float,
+    combined_dte_elfo_duty_cycle_pct: float,
+    psr_distance_m: float | None,
+    is_psr: bool,
+    slope_limit_deg: float = DEFAULT_SLOPE_LIMIT_DEG,
+) -> dict[str, Any]:
+    """``engineering_summary.score`` object of contract 1.1.0 (illustrative index).
+
+    The five 0-100 fields come from :func:`compute_composite_landing_score` with the relay scenario;
+    ``total_without_relay_0_100`` is the same index with DTE only (the hypothetical constellation
+    saturates the comms term); ``eliminated`` and ``elimination_reasons`` expose the hard slope limit.
+    """
+    common = dict(
+        slope_deg=slope_deg,
+        mean_illum_fraction=mean_illum_fraction,
+        max_continuous_shadow_hours=max_continuous_shadow_hours,
+        dte_full_disk_duty_cycle_pct=dte_full_disk_duty_cycle_pct,
+        combined_dte_elfo_duty_cycle_pct=combined_dte_elfo_duty_cycle_pct,
+        psr_distance_m=psr_distance_m,
+        is_psr=is_psr,
+        slope_limit_deg=slope_limit_deg,
+    )
+    score: dict[str, Any] = compute_composite_landing_score(**common)
+    eliminated = is_slope_eliminated(slope_deg, slope_limit_deg)
+    score["eliminated"] = eliminated
+    score["elimination_reasons"] = [SLOPE_ELIMINATION_REASON] if eliminated else []
+    score["total_without_relay_0_100"] = compute_composite_landing_score(**common, use_relay=False)["total_0_100"]
+    return score
 
 
 def _terrain_point(
@@ -298,7 +344,7 @@ def evaluate_site_and_grid(
         horizon_elev_deg=center["horizon"],
         step_seconds=step_seconds,
     )
-    score_dict = compute_composite_landing_score(
+    score_dict = contract_score_summary(
         slope_deg=center["slope_deg"],
         mean_illum_fraction=float(solar_result["summary"]["mean_illum_fraction"]),
         max_continuous_shadow_hours=float(solar_result["summary"]["max_continuous_shadow_hours"]),
@@ -358,7 +404,7 @@ def evaluate_site_and_grid(
                 "longitude_east_deg": round(_normalize_lon_0_360(point["lon"]), 5),
                 "elevation_m": round(point["elev_m"], 2),
                 "slope_deg": round(point["slope_deg"], 2),
-                "psr_distance_m": _emit_psr_distance(npsr_dist, psr_search_radius_m),
+                "psr_distance_m": _emit_psr_distance(npsr_dist),
                 "is_psr": bool(point["is_psr"]),
                 "horizon_elev_deg": [round(float(v), 3) for v in point["horizon"]],
                 "mean_illum_fraction": float(nsolar["summary"]["mean_illum_fraction"]),
@@ -377,13 +423,14 @@ def evaluate_site_and_grid(
         "name": spec.name,
         "category": spec.category,
         "description": spec.description,
+        "coordinates_source": spec.coordinates_source,
         "center": {
             "latitude_deg": round(lat, 5),
             "longitude_east_deg": round(lon, 5),
             "elevation_m": round(center["elev_m"], 2),
             "slope_deg": round(center["slope_deg"], 2),
             "cartesian_me_km": [round(float(me_m[i] / 1000.0), 4) for i in range(3)],
-            "psr_distance_m": _emit_psr_distance(center_psr_dist, psr_search_radius_m),
+            "psr_distance_m": _emit_psr_distance(center_psr_dist),
             "is_psr": bool(center["is_psr"]),
             "observer_height_m": round(observer_height_m, 2),
         },
@@ -467,6 +514,18 @@ def horizons_provenance_from_report(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": status,
         "endpoint": HORIZONS_API_URL,
+        "tolerance_deg": float(report["tolerance_deg"]),
+        "sample_count": int(report["sample_count"]),
+        "raw_responses": [
+            {
+                "target_command": q["target_command"],
+                "request_url": q["request_url"],
+                "retrieved_utc": q["retrieved_utc"],
+                "response_file": horizons_raw_response_file(q["target_command"]),
+                "response_sha256": q["response_sha256"],
+            }
+            for q in report.get("horizons_queries", [])
+        ],
         "max_sun_az_diff_deg": _r(report["max_sun_az_diff_deg"]),
         "max_sun_el_diff_deg": _r(report["max_sun_el_diff_deg"]),
         "max_earth_az_diff_deg": _r(report["max_earth_az_diff_deg"]),
@@ -508,6 +567,9 @@ def run_horizons_validation_step(
             {
                 "status": "skipped_network_unavailable",
                 "endpoint": HORIZONS_API_URL,
+                "tolerance_deg": None,
+                "sample_count": None,
+                "raw_responses": [],
                 "max_sun_az_diff_deg": None,
                 "max_sun_el_diff_deg": None,
                 "max_earth_az_diff_deg": None,
@@ -549,8 +611,8 @@ def build_limitations(
             "excluded at an unsourced baseline efficiency eta=0.28 and an unsourced 100 W survival load."
         ),
         (
-            "Landing scores are an ILLUSTRATIVE index: weights, blends and thresholds have no cited source and no "
-            "sensitivity analysis. They are not a validated scientific ranking."
+            "Score fields are an ILLUSTRATIVE landing index: weights, blends and thresholds have no cited source and "
+            "no sensitivity analysis. They are not a validated scientific ranking."
         ),
         (
             f"slope_deg is the gradient over a {slope_baseline_m:.0f} m baseline (central differences of +/-1 pixel); "
@@ -561,9 +623,9 @@ def build_limitations(
             f"is_psr and psr_distance_m share one criterion: {psr_criterion.describe()}, using horizons computed at "
             f"{observer_height_m:g} m observer height (not ground level). PSR points are searched on a symmetric "
             f"{psr_lattice_step_m:g} m lattice within {psr_search_radius_m:g} m of each site center (flagged grid "
-            f"nodes included); psr_distance_m == {psr_search_radius_m:g} means no PSR point was found (a sentinel, "
-            "not a measured distance; it gets no proximity credit). Node distances only consider that lattice, so a "
-            "closer PSR outside it can be missed."
+            "nodes included); psr_distance_m is null when no PSR point was found within that radius (unknown "
+            "distance; it gets no proximity credit). Node distances only consider that lattice, so a closer PSR "
+            "outside it can be missed."
         ),
         *RELAY_PRESET_LIMITATIONS,
         (
@@ -732,6 +794,9 @@ def run_navigator_pipeline(
         horizons_prov = {
             "status": "not_requested",
             "endpoint": HORIZONS_API_URL,
+            "tolerance_deg": None,
+            "sample_count": None,
+            "raw_responses": [],
             "max_sun_az_diff_deg": None,
             "max_sun_el_diff_deg": None,
             "max_earth_az_diff_deg": None,
@@ -742,7 +807,7 @@ def run_navigator_pipeline(
     azimuths_list = [round(float(a), 3) for a in np.arange(0.0, 360.0, az_step_deg)]
 
     dataset: dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": DATASET_SCHEMA_VERSION,
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "provenance": {
             "dem_product": dem_meta,
@@ -758,6 +823,12 @@ def run_navigator_pipeline(
                 "earth_radius_km": EARTH_RADIUS_KM,
                 "lunar_radius_m": LUNAR_REFERENCE_RADIUS_M,
                 "clps_slope_limit_deg": float(slope_limit_deg),
+                "slope_baseline_m": float(dem.slope_baseline_m),
+                "psr_search_radius_m": float(psr_search_radius_m),
+                "psr_lattice_step_m": float(psr_lattice_step_m),
+                "psr_subsolar_lat_extreme_deg": float(criterion.subsolar_lat_extreme_deg),
+                "psr_solar_radius_deg": float(criterion.solar_radius_deg),
+                "score_is_illustrative": True,
             },
             "limitations": build_limitations(
                 coverage,
@@ -782,6 +853,12 @@ def run_navigator_pipeline(
             "solar_angular_radius_deg": [
                 round(float(v), 5) for v in rep_series.sun_angular_radius_deg
             ],
+            "seasonal_coverage": {
+                "duration_days": round(float(coverage["duration_days"]), 6),
+                "subsolar_lat_min_deg": round(float(coverage["subsolar_lat_min_deg"]), 5),
+                "subsolar_lat_max_deg": round(float(coverage["subsolar_lat_max_deg"]), 5),
+                "covers_seasonal_cycle": bool(coverage["covers_seasonal_cycle"]),
+            },
         },
         "relay_presets": {
             "lro": LRO_PRESET.to_contract_dict(),
@@ -810,13 +887,46 @@ def _check_horizons_consistency(dataset: dict[str, Any], horizons_report: dict[s
     return status
 
 
+def serialize_outputs_dataset(dataset: dict[str, Any]) -> bytes:
+    """Bytes of ``outputs/datasets/south_pole_precomputed.v1.json`` (indented, trailing newline)."""
+    return (json.dumps(dataset, indent=2) + "\n").encode("utf-8")
+
+
+def serialize_frontend_dataset(dataset: dict[str, Any]) -> bytes:
+    """Bytes of the minified copy served by the frontend (``frontend/src/data``)."""
+    return (json.dumps(dataset, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def sha256_checksum_line(data: bytes, filename: str = FRONTEND_DATASET_FILENAME) -> str:
+    """One ``sha256sum``-compatible line: ``<hex>  <filename>``."""
+    import hashlib
+
+    return f"{hashlib.sha256(data).hexdigest()}  {filename}\n"
+
+
+def write_dataset_copies(repo_root: Path, dataset: dict[str, Any]) -> dict[str, Path]:
+    """Write the outputs/ dataset, the frontend copy (same content) and the frontend copy's SHA-256."""
+    datasets_dir = repo_root / "outputs" / "datasets"
+    frontend_data_dir = repo_root / "frontend" / "src" / "data"
+    for d in (datasets_dir, frontend_data_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    dataset_path = datasets_dir / "south_pole_precomputed.v1.json"
+    dataset_path.write_bytes(serialize_outputs_dataset(dataset))
+    frontend_bytes = serialize_frontend_dataset(dataset)
+    frontend_dataset_path = frontend_data_dir / FRONTEND_DATASET_FILENAME
+    frontend_dataset_path.write_bytes(frontend_bytes)
+    checksum_path = frontend_data_dir / FRONTEND_DATASET_CHECKSUM_FILENAME
+    checksum_path.write_text(sha256_checksum_line(frontend_bytes), encoding="utf-8")
+    return {"dataset": dataset_path, "frontend_dataset": frontend_dataset_path, "frontend_checksum": checksum_path}
+
+
 def write_navigator_outputs(
     repo_root: Path,
     dataset: dict[str, Any],
     horizons_report: dict[str, Any] | None = None,
-    psr_search_radius_m: float = DEFAULT_PSR_SEARCH_RADIUS_M,
+    psr_search_radius_m: float | None = None,
 ) -> dict[str, Path]:
-    """Write the dataset, CSV/Markdown engineering reports and the Horizons evidence.
+    """Write the dataset copies, CSV/Markdown engineering reports and the Horizons evidence.
 
     When the run has no Horizons report (skipped or not requested), any previous
     ``horizons_cross_validation.json`` and raw responses are deleted so they cannot be read as
@@ -825,28 +935,13 @@ def write_navigator_outputs(
     _check_horizons_consistency(dataset, horizons_report)
 
     outputs_dir = repo_root / "outputs"
-    datasets_dir = outputs_dir / "datasets"
     reports_dir = outputs_dir / "reports"
     validation_dir = outputs_dir / "validation"
-    frontend_data_dir = repo_root / "frontend" / "src" / "data"
-
-    for d in (datasets_dir, reports_dir, validation_dir, frontend_data_dir):
+    for d in (reports_dir, validation_dir):
         d.mkdir(parents=True, exist_ok=True)
 
-    json_text = json.dumps(dataset, indent=2)
-    dataset_path = datasets_dir / "south_pole_precomputed.v1.json"
-    dataset_path.write_text(json_text + "\n", encoding="utf-8")
-
-    # Compact minified copy inside frontend/src/data for fast Vite bundling
-    frontend_dataset_path = frontend_data_dir / "south_pole_precomputed.v1.json"
-    frontend_dataset_path.write_text(
-        json.dumps(dataset, separators=(",", ":")) + "\n", encoding="utf-8"
-    )
-
-    written: dict[str, Path] = {
-        "dataset": dataset_path,
-        "frontend_dataset": frontend_dataset_path,
-    }
+    # The frontend copy is served as a static asset and checked against its SHA-256 (docs/integration.md).
+    written: dict[str, Path] = write_dataset_copies(repo_root, dataset)
 
     if horizons_report is not None:
         written.update(write_horizons_validation_artifacts(validation_dir, horizons_report))
@@ -854,26 +949,16 @@ def write_navigator_outputs(
         for i, removed in enumerate(remove_horizons_validation_artifacts(validation_dir)):
             written[f"removed_stale_horizons_{i}"] = removed
 
-    slope_limit = float(dataset["provenance"]["conventions"]["clps_slope_limit_deg"])
+    conventions = dataset["provenance"]["conventions"]
+    slope_limit = float(conventions["clps_slope_limit_deg"])
+    if psr_search_radius_m is None:
+        psr_search_radius_m = float(conventions.get("psr_search_radius_m", DEFAULT_PSR_SEARCH_RADIUS_M))
 
     def _psr_found(c: dict[str, Any]) -> bool:
-        return bool(c["is_psr"]) or float(c["psr_distance_m"]) != float(psr_search_radius_m)
+        return bool(c["is_psr"]) or c["psr_distance_m"] is not None
 
     def _score_without_relay(site: dict[str, Any]) -> float:
-        c = site["center"]
-        sol = site["engineering_summary"]["solar"]
-        com = site["engineering_summary"]["comms"]
-        return compute_composite_landing_score(
-            slope_deg=c["slope_deg"],
-            mean_illum_fraction=sol["mean_illum_fraction"],
-            max_continuous_shadow_hours=sol["max_continuous_shadow_hours"],
-            dte_full_disk_duty_cycle_pct=com["dte_full_disk_duty_cycle_pct"],
-            combined_dte_elfo_duty_cycle_pct=com["combined_dte_elfo_duty_cycle_pct"],
-            psr_distance_m=float(c["psr_distance_m"]) if _psr_found(c) else None,
-            is_psr=c["is_psr"],
-            use_relay=False,
-            slope_limit_deg=slope_limit,
-        )["total_0_100"]
+        return float(site["engineering_summary"]["score"]["total_without_relay_0_100"])
 
     # Engineering Summary CSV
     csv_path = reports_dir / "site_engineering_summary.csv"
@@ -931,7 +1016,7 @@ def write_navigator_outputs(
                     "elevation_m": c["elevation_m"],
                     "slope_deg": c["slope_deg"],
                     "slope_eliminated": is_slope_eliminated(c["slope_deg"], slope_limit),
-                    # Empty when no PSR was found within the search radius (sentinel in the JSON).
+                    # Empty when no PSR was found within the search radius (null in the JSON).
                     "psr_distance_m": c["psr_distance_m"] if _psr_found(c) else "",
                     "psr_search_radius_m": psr_search_radius_m,
                     "is_psr": c["is_psr"],

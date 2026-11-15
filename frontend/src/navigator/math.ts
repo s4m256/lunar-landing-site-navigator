@@ -11,19 +11,12 @@ import {
 export const SOLAR_CONSTANT_1AU_W_M2 = 1361.0;
 
 /**
- * science/.../pipeline.py `_distance_to_psr_patch_m` writes this value when its search found no
- * permanently shadowed point around the site (search radius 5200 m, 500 m lattice). It is a
- * marker for "not found", not a measured distance (scientific audit SPA-9, section 6.2).
+ * True when the generator's search found no permanently shadowed point around the site. Contract
+ * 1.1.0 writes `psr_distance_m: null` for that case (1.0.0 stored its 5200 m search radius as if it
+ * were a distance; the migration turned those values into null, see contracts/README.md).
  */
-export const PSR_NOT_FOUND_MARKER_M = 5200;
-
-/** True when the file's PSR distances for a site are all the "not found" marker. */
 export function psrSearchFoundNothing(site: LandingSiteEntry): boolean {
-  const isMarker = (isPsr: boolean, d: number) => !isPsr && d === PSR_NOT_FOUND_MARKER_M;
-  return (
-    isMarker(site.center.is_psr, site.center.psr_distance_m) &&
-    site.local_grid.nodes.every((n) => isMarker(n.is_psr, n.psr_distance_m))
-  );
+  return !site.center.is_psr && site.center.psr_distance_m === null;
 }
 
 /**
@@ -69,7 +62,8 @@ export interface InterpolatedTerrain {
   longitudeEastDeg: number;
   elevationM: number;
   slopeDeg: number;
-  psrDistanceM: number;
+  /** null when the file has no PSR distance for this point (or for a grid node used to interpolate it). */
+  psrDistanceM: number | null;
   isPsr: boolean;
   horizonElevDeg: number[];
 }
@@ -209,12 +203,11 @@ export function interpolateLocalGrid(
     );
   }
 
-  const psrDistanceM = bilerp(
-    n00.psr_distance_m,
-    n01.psr_distance_m,
-    n10.psr_distance_m,
-    n11.psr_distance_m,
-  );
+  // An unknown distance at any corner makes the interpolated distance unknown (never mixed in).
+  const corners = [n00.psr_distance_m, n01.psr_distance_m, n10.psr_distance_m, n11.psr_distance_m];
+  const psrDistanceM = corners.some((d) => d === null)
+    ? null
+    : bilerp(corners[0] as number, corners[1] as number, corners[2] as number, corners[3] as number);
   const nearest = getNode(Math.round(rowF), Math.round(colF));
 
   return {
@@ -230,7 +223,7 @@ export function interpolateLocalGrid(
     elevationM: bilerp(n00.elevation_m, n01.elevation_m, n10.elevation_m, n11.elevation_m),
     slopeDeg: bilerp(n00.slope_deg, n01.slope_deg, n10.slope_deg, n11.slope_deg),
     psrDistanceM,
-    isPsr: nearest.is_psr || psrDistanceM <= 80,
+    isPsr: nearest.is_psr || (psrDistanceM !== null && psrDistanceM <= 80),
     horizonElevDeg,
   };
 }
@@ -241,7 +234,7 @@ export function computeCompositeScore(
   maxContinuousShadowHours: number,
   dteDutyPct: number,
   combinedDutyPct: number,
-  psrDistanceM: number,
+  psrDistanceM: number | null,
   isPsr: boolean,
   weights: ScoreWeightsConfig,
   relayEnabled: boolean,
@@ -255,7 +248,10 @@ export function computeCompositeScore(
 
   let sciencePsr = 15;
   if (!isPsr) {
-    if (psrDistanceM <= 500) {
+    // Unknown distance (no PSR found by the search): no proximity credit, as in scoring.py.
+    if (psrDistanceM === null) {
+      sciencePsr = 0;
+    } else if (psrDistanceM <= 500) {
       sciencePsr = 100;
     } else if (psrDistanceM <= 5000) {
       sciencePsr = clamp(100 - (80 * (psrDistanceM - 500)) / 4500, 0, 100);

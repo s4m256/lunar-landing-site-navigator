@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import statusExample from '../../contracts/examples/science-status.json';
+import syntheticJson from '../../contracts/examples/navigator-dataset.synthetic.json';
+import { validateDataset } from './datasetLoader';
 import datasetJson from './data/south_pole_precomputed.v1.json';
 import { parseNavigatorDataset, parseScienceStatus } from './contract';
 import {
@@ -63,11 +65,24 @@ describe('Contrato e cálculos', () => {
     expect(off.score.unavailableReason).toBe('relay_unknown_off_center');
   });
 
-  it('no centro, com os padrões do gerador, reproduz o índice gravado no arquivo', () => {
+  it('no centro, com os padrões do gerador, reproduz o índice gravado onde a regra não mudou (contrato 1.1.0)', () => {
+    // The migrated file keeps the 1.0.0 scores; the page applies the 1.1.0 rule, which gives no proximity
+    // credit when the PSR distance is unknown (null). That is the only rule change that touches site centres.
+    expect(dataset.provenance.migration?.stored_scores_rule).toBe('1.0.0');
+    let unknownDistance = 0;
     for (const site of dataset.sites) {
       const live = evaluateLiveSite(site, 0, 0, dataset.horizon_azimuths_deg, dataset.mission_window, DEFAULT_CONFIG);
-      expect(live.score.total_0_100).toBeCloseTo(site.engineering_summary.score.total_0_100, 0);
+      const stored = site.engineering_summary.score;
+      if (!site.center.is_psr && site.center.psr_distance_m === null) {
+        unknownDistance += 1;
+        expect(live.score.science_psr_0_100).toBe(0);
+        const without = stored.total_0_100 - DEFAULT_CONFIG.weights.science_psr * stored.science_psr_0_100;
+        expect(live.score.total_0_100).toBeCloseTo(without, 0);
+      } else {
+        expect(live.score.total_0_100).toBeCloseTo(stored.total_0_100, 0);
+      }
     }
+    expect(unknownDistance).toBe(1);
   });
 
   it('a página começa sem o cenário hipotético de retransmissores e com a máscara do arquivo', () => {
@@ -187,21 +202,32 @@ describe('Interface: seleção, estados e rótulos honestos', () => {
     const panel = screen.getByRole('region', { name: 'Origem e limitações dos dados' });
     expect(panel).toBeVisible();
     expect(panel).toHaveTextContent('De 15/11/2026 00:00 UTC a 15/12/2026 00:00 UTC (30 dias), 721 instantes, um a cada 1 h');
-    expect(panel).toHaveTextContent('Validação contra o JPL Horizons não confirmada');
-    expect(panel).toHaveTextContent('“cross-checked with Skyfield” não é evidência');
+    expect(panel).toHaveTextContent('Comparação com o JPL Horizons (auditoria). Comparação não confirmada');
+    expect(panel).toHaveTextContent('Sem conferência com o Skyfield (auditoria)');
     expect(panel).toHaveTextContent(/Índice ilustrativo/);
     expect(panel).toHaveTextContent(/Retransmissores hipotéticos/);
     expect(panel).toHaveTextContent(/perto do verão do hemisfério sul da Lua/);
-    // The file's own label is quoted as a declaration, in English, never as the page's verdict.
-    const quoted = within(panel).getByText('verified');
-    expect(quoted.tagName).toBe('Q');
-    expect(quoted).toHaveAttribute('lang', 'en');
+    // The file's own label is shown as a code value next to its plain-language meaning, never as a verdict.
+    const label = within(panel).getByText('unverified_no_raw_response');
+    expect(label.tagName).toBe('CODE');
+    expect(panel).toHaveTextContent('Tolerância declarada: nenhuma; respostas brutas guardadas: 0');
+    expect(panel).toHaveTextContent(/Convertido da versão 1\.0\.0 do contrato .* sem recalcular números/);
+    expect(panel).toHaveTextContent(/mais curto que um ciclo de estações da Lua/);
     expect(screen.getByRole('banner')).toHaveTextContent('Dados disponíveis de 15/11/2026 00:00 UTC a 15/12/2026 00:00 UTC');
     expect(screen.getByRole('banner')).not.toHaveTextContent(/verified|verificad|validad/i);
     expect(within(panel).getByRole('link', { name: /Licenças do código de terceiros/ })).toHaveAttribute(
       'href',
       '/third-party-licenses.txt',
     );
+  });
+
+  it('renderiza um arquivo 1.1.0 nativo (exemplo sintético) sem tratá-lo como o arquivo auditado', () => {
+    render(<App dataset={validateDataset(syntheticJson)} />);
+    const panel = screen.getByRole('region', { name: 'Origem e limitações dos dados' });
+    expect(panel).toHaveTextContent('não é o arquivo revisado pela auditoria científica SPA-9');
+    expect(panel).toHaveTextContent('dentro da tolerância declarada de 0,0010° (5 instantes)');
+    expect(panel).not.toHaveTextContent('Migração de versão');
+    expect(panel).not.toHaveTextContent('Sem conferência com o Skyfield');
   });
 
   it('animação só começa por ação do usuário, pode ser pausada e fica mais lenta com movimento reduzido', () => {

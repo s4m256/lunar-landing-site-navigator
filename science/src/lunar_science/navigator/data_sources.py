@@ -99,6 +99,13 @@ LOLA_DEM_ASSETS: tuple[RemoteAsset, ...] = (
 ALL_REMOTE_ASSETS: tuple[RemoteAsset, ...] = NAIF_KERNELS + LOLA_DEM_ASSETS
 
 
+#: Published as ``sites[].coordinates_source`` (contract 1.1.0); see the module docstring.
+UNSOURCED_SITE_COORDINATES = (
+    "Representative point chosen by the original author, without a cited source. NASA publishes Artemis III "
+    "candidate regions (2024-10-28 update), not point coordinates."
+)
+
+
 @dataclass(frozen=True)
 class CandidateSiteSpec:
     site_id: str
@@ -108,6 +115,7 @@ class CandidateSiteSpec:
     longitude_east_deg: float
     description: str
     observer_height_m: float = 2.0
+    coordinates_source: str = UNSOURCED_SITE_COORDINATES
 
 
 DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
