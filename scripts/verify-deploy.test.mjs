@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,4 +44,31 @@ test('fails when the build contains an empty stylesheet', async (t) => {
   const root = await fixture(t, '<link rel="stylesheet" href="/assets/app.css"><script src="/assets/app.js"></script>');
   await writeFile(resolve(root, 'frontend/dist/assets/app.css'), '');
   await assert.rejects(verifyDeploy(root), /Empty or invalid asset/);
+});
+
+test('fails when the JavaScript bundle exceeds the size budget', async (t) => {
+  const root = await fixture(t);
+  await assert.rejects(verifyDeploy(root, { maxJsBytes: 10 }), /bundle budget exceeded/);
+  assert.match(await verifyDeploy(root, { maxJsBytes: 1024 }), /of 1024 budgeted bytes/);
+});
+
+test('checks module preloads and counts them once towards the budget', async (t) => {
+  const html =
+    '<script type="module" src="/assets/app.js"></script>' +
+    '<link rel="modulepreload" href="/assets/vendor.js"><link rel="modulepreload" href="/assets/app.js">';
+  const root = await fixture(t, html);
+  await assert.rejects(verifyDeploy(root), /ENOENT/);
+  await writeFile(resolve(root, 'frontend/dist/assets/vendor.js'), 'x'.repeat(100));
+  const appBytes = Buffer.byteLength('console.log("fixture");');
+  assert.match(await verifyDeploy(root), new RegExp(`1 JavaScript bundle\\(s\\), ${appBytes + 100} of`));
+  await assert.rejects(verifyDeploy(root, { maxJsBytes: appBytes + 99 }), /bundle budget exceeded/);
+});
+
+test('fails when the lockfile no longer matches the root package', async (t) => {
+  const root = await fixture(t);
+  const lockPath = resolve(root, 'package-lock.json');
+  const lock = JSON.parse(await readFile(lockPath, 'utf8'));
+  lock.packages[''].engines = { node: '>=18' };
+  await writeFile(lockPath, JSON.stringify(lock));
+  await assert.rejects(verifyDeploy(root), /engines\.node must match/);
 });
