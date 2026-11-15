@@ -84,31 +84,31 @@ const fontLicense = await readFile(
 const html = `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="A guided lunar mission: choose a site and explore the directions of the Sun and Earth.">
-<title>Lunar — One mission, two directions</title>
+<meta name="description" content="Compare lunar sites and dates using the directions of the Sun and Earth.">
+<title>Lunar — Landing Site Explorer</title>
 <style>${style.replace(/<\/style/gi, "<\\/style")}</style>
 </head><body><div id="root"></div>
-<noscript>Enable JavaScript in your browser to explore the lunar mission.</noscript>
+<noscript>Enable JavaScript in your browser to explore the Moon and compare sites.</noscript>
 <script type="text/plain" id="jetbrains-mono-license">${fontLicense.replace(/<\/script/gi, "<\\/script")}</script>
 <script>${script.replace(/<\/script/gi, "<\\/script")}</script>
 </body></html>`;
 await mkdir(directory, { recursive: true });
 await writeFile(output, html);
 const readme = [
-  "LUNAR — One mission, two directions",
+  "LUNAR — Landing Site Explorer",
   "",
-  "Open Lunar-English.html in a modern desktop browser (Chrome, Edge, or Firefox).",
+  "Open Lunar-Explorer.html in a modern desktop browser (Chrome, Edge, or Firefox).",
   "The app, assets, font, and science data are embedded. No installation is required.",
-  "Back returns to the previous line. Continue reveals a typing line, then advances on the next click.",
-  "Voice controls are temporarily removed. Reduced-motion preferences are respected.",
+  "Choose a point on the Moon or select a site and date. Add a second scenario to compare independently.",
+  "Use the scenario heading to choose which scenario the Moon edits. Keyboard arrows rotate the Moon; +/- zoom.",
   "External source links require internet only when opened.",
   "",
   "The four sites are hypothetical; the exercise compares body centers with an idealized tangent horizon.",
   "It does not calculate mountain obstruction, generated power, radio performance, or landing safety.",
-  "CLPS missions are robotic. The guide and flights are illustrative.",
+  "The four sites and three dates are educational samples. CLPS missions are robotic.",
   "",
   "Build from source: npm ci, npm run typecheck, npm run build:offline.",
-  "Source credits and data provenance are available under About.",
+  "Source credits and data provenance are available under About & data.",
   "",
 ].join("\n");
 await writeFile(path.join(directory, "README.txt"), readme);
@@ -117,3 +117,5 @@ await writeFile(path.join(directory, "Lunar-English.html"), html);
 console.log(
   `HTML autocontido: ${output} (${(Buffer.byteLength(html) / 1024 / 1024).toFixed(2)} MiB)`,
 );
+
+await writeFile(path.join(directory, "Lunar-Explorer.html"), html);

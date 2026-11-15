@@ -1,5 +1,6 @@
 # Guide and voice status
 
+> Historical guided experience. The active entry point is now the [minimal comparison explorer](minimal-comparison.md).
 The selected guide remains the existing Astronaut image by Poly (CC BY 2.0). [Asset credits](assets/astronaut.md) are also available in About. The first English line explains that Lua is fictional and CLPS missions carry no astronauts.
 
 Voice is temporarily removed from the active application. Neither `GameDialogue` nor the legacy `MissionDialogue` mounts `SpeechControl`. The speech implementation remains in source for a later, explicit accessibility decision; the active app does not access the Web Speech API.

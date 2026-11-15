@@ -1,5 +1,6 @@
 # Guided mission implementation
 
+> Historical guided experience. The active entry point is now the [minimal comparison explorer](minimal-comparison.md).
 The English interface follows briefing → illustrative flight → arrival dialogue → Moon selection and analysis → illustrative landing → final dialogue. The astronaut appears in the scenery; monospaced text has no dialogue box. Back and Continue are the only conversation controls. Continue reveals incomplete text before advancing; Back revisits earlier lines. On the first line, Back is disabled. The globe and scientific comparisons are unchanged.
 
 ## Components

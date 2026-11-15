@@ -1,6 +1,6 @@
-import { MissionApp } from "./mission/MissionApp";
+import { ComparisonApp } from "./comparison/ComparisonApp";
 
-/** A guided exercise comparing four lunar observers at three sampled UTC dates. */
+/** Direct access to the existing Moon and validated site/date comparisons. */
 export function App() {
-  return <MissionApp />;
+  return <ComparisonApp />;
 }

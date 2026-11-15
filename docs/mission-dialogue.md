@@ -1,5 +1,6 @@
 # English mission script
 
+> Historical guided experience. The active entry point is now the [minimal comparison explorer](minimal-comparison.md).
 Short, casual dialogue for the existing fictional guide, Lua. CLPS remains explicitly robotic. The application imports these lines from `frontend/src/mission/mission-copy.ts`.
 
 ## Briefing

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { MissionSite } from "../types";
@@ -12,8 +12,9 @@ interface Props {
   selectedSiteId?: string;
   visitedSiteIds: string[];
   onSelect: (id: string) => void;
-  onDiscover: () => void;
-  discovered: boolean;
+  onDiscover?: () => void;
+  discovered?: boolean;
+  comparisonSiteIds?: string[];
 }
 
 type Pin = { id: string; x: number; y: number; visible: boolean };
@@ -36,10 +37,14 @@ export function MissionGlobe({
   onSelect,
   onDiscover,
   discovered,
+  comparisonSiteIds = [],
 }: Props) {
+  const instructionsId = useId();
   const mount = useRef<HTMLDivElement>(null);
   const reset = useRef<(() => void) | null>(null);
   const wholeMoon = useRef<(() => void) | null>(null);
+  const zoom = useRef<((factor: number) => void) | null>(null);
+  const orbit = useRef<((azimuth: number, polar: number) => void) | null>(null);
   const sitesRef = useRef(sites);
   sitesRef.current = sites;
   const [pins, setPins] = useState<Pin[]>([]);
@@ -88,6 +93,43 @@ export function MissionGlobe({
     controls.maxDistance = 5;
     controls.rotateSpeed = 0.65;
     controls.zoomSpeed = 0.85;
+    zoom.current = (factor) => {
+      const offset = camera.position.clone().sub(controls.target);
+      offset.setLength(
+        THREE.MathUtils.clamp(
+          offset.length() * factor,
+          controls.minDistance,
+          controls.maxDistance,
+        ),
+      );
+      camera.position.copy(controls.target).add(offset);
+      setOverview(true);
+      controls.update();
+      render();
+    };
+    orbit.current = (azimuth, polar) => {
+      // Match OrbitControls' axis convention when the camera's up axis is -Z.
+      const toYUp = new THREE.Quaternion().setFromUnitVectors(
+        camera.up,
+        new THREE.Vector3(0, 1, 0),
+      );
+      const offset = camera.position
+        .clone()
+        .sub(controls.target)
+        .applyQuaternion(toYUp);
+      const spherical = new THREE.Spherical().setFromVector3(offset);
+      spherical.theta += azimuth;
+      spherical.phi = THREE.MathUtils.clamp(
+        spherical.phi + polar,
+        0.01,
+        Math.PI - 0.01,
+      );
+      offset.setFromSpherical(spherical).applyQuaternion(toYUp.invert());
+      camera.position.copy(controls.target).add(offset);
+      setOverview(true);
+      controls.update();
+      render();
+    };
     const group = new THREE.Group();
     // The original viewport rotates its Moon by π around X, placing south at +Y.
     group.rotation.x = Math.PI;
@@ -206,6 +248,16 @@ export function MissionGlobe({
     let height = 1;
     function render() {
       if (!active) return;
+      // Blend into the measured polar detail only when close to the surface.
+      // At globe scale use the continuous LROC mosaic, avoiding a false crater-like patch.
+      polarUniform.value = polarLoaded
+        ? 1 -
+          THREE.MathUtils.smoothstep(
+            camera.position.distanceTo(controls.target),
+            1.65,
+            2.5,
+          )
+        : 0;
       group.updateMatrixWorld();
       camera.updateMatrixWorld();
       renderer.render(scene, camera);
@@ -267,6 +319,8 @@ export function MissionGlobe({
       active = false;
       reset.current = null;
       wholeMoon.current = null;
+      zoom.current = null;
+      orbit.current = null;
       observer.disconnect();
       controls.removeEventListener("change", render);
       controls.removeEventListener("start", onOrbitStart);
@@ -295,7 +349,37 @@ export function MissionGlobe({
         className="mission-globe-stage"
         ref={mount}
         role="group"
-        aria-label="Moon: drag to rotate and use the mouse wheel to zoom"
+        tabIndex={available ? 0 : -1}
+        aria-label="Interactive Moon"
+        aria-describedby={instructionsId}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || !available) return;
+          const step = THREE.MathUtils.degToRad(event.shiftKey ? 10 : 4);
+          switch (event.key) {
+            case "ArrowLeft":
+              orbit.current?.(-step, 0);
+              break;
+            case "ArrowRight":
+              orbit.current?.(step, 0);
+              break;
+            case "ArrowUp":
+              orbit.current?.(0, -step);
+              break;
+            case "ArrowDown":
+              orbit.current?.(0, step);
+              break;
+            case "+":
+            case "=":
+              zoom.current?.(0.82);
+              break;
+            case "-":
+              zoom.current?.(1 / 0.82);
+              break;
+            default:
+              return;
+          }
+          event.preventDefault();
+        }}
       >
         {available &&
           ready &&
@@ -312,6 +396,7 @@ export function MissionGlobe({
                 onClick={() => onSelect(pin.id)}
                 aria-label={`${site.label}, ${site.latitudeDeg} degrees latitude, ${site.longitudeDeg} degrees east`}
                 aria-pressed={selectedSiteId === pin.id}
+                data-compared={comparisonSiteIds.includes(pin.id) || undefined}
               >
                 <span>{site.label.replace("Site ", "")}</span>
               </button>
@@ -319,8 +404,8 @@ export function MissionGlobe({
           })}
         {!available && (
           <p className="mission-globe-unavailable" role="status">
-            The Moon view is unavailable in this browser. Choose a site by
-            its coordinates in the list.
+            The Moon view is unavailable in this browser. Choose a site by its
+            coordinates in the list.
           </p>
         )}
         {available && !ready && (
@@ -329,6 +414,10 @@ export function MissionGlobe({
           </p>
         )}
       </div>
+      <p className="mission-globe-hint" id={instructionsId}>
+        Drag to rotate · Scroll to zoom. Keyboard: arrow keys to rotate, + / −
+        to zoom.
+      </p>
       {available && ready && crowded && (
         <p className="mission-globe-hint">
           Zoom in on the south pole to choose a site.
@@ -336,14 +425,32 @@ export function MissionGlobe({
       )}
       <div className="mission-globe-controls">
         {available && (
-          <button
-            type="button"
-            onClick={() =>
-              overview ? reset.current?.() : wholeMoon.current?.()
-            }
-          >
-            {overview ? "South pole" : "View whole Moon"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                overview ? reset.current?.() : wholeMoon.current?.()
+              }
+            >
+              {overview ? "South pole" : "View whole Moon"}
+            </button>
+            <button
+              type="button"
+              className="mission-globe-zoom"
+              aria-label="Zoom in"
+              onClick={() => zoom.current?.(0.82)}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="mission-globe-zoom"
+              aria-label="Zoom out"
+              onClick={() => zoom.current?.(1 / 0.82)}
+            >
+              −
+            </button>
+          </>
         )}
         <details className="mission-globe-list" open={!available || undefined}>
           <summary>Site list</summary>
@@ -354,29 +461,32 @@ export function MissionGlobe({
                 key={site.id}
                 onClick={() => onSelect(site.id)}
                 aria-pressed={selectedSiteId === site.id}
+                data-compared={comparisonSiteIds.includes(site.id) || undefined}
               >
                 {site.label} · {site.latitudeDeg}°, {site.longitudeDeg}° E
                 {visitedSiteIds.includes(site.id) ? " ✓" : ""}
+                {comparisonSiteIds.includes(site.id) ? " · Compared" : ""}
               </button>
             ))}
           </div>
         </details>
-        <button
-          className="mission-globe-bonus"
-          type="button"
-          onClick={onDiscover}
-          aria-label={
-            discovered
-              ? "Reopen educational bonus"
-              : "Unknown signal, educational bonus"
-          }
-        >
-          ?
-        </button>
+        {onDiscover && (
+          <button
+            className="mission-globe-bonus"
+            type="button"
+            onClick={onDiscover}
+            aria-label={
+              discovered
+                ? "Reopen educational bonus"
+                : "Unknown signal, educational bonus"
+            }
+          >
+            ?
+          </button>
+        )}
       </div>
       <p className="mission-globe-credit">
-        LROC / LOLA · Hypothetical sites. Shading illustrates terrain only.
-        The DEM uses MOON_ME; analysis uses IAU_MOON, so the map is approximate.
+        LROC / LOLA · Approximate terrain reference. Shading is illustrative.
       </p>
     </div>
   );

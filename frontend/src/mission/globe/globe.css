@@ -42,6 +42,22 @@
   background: #fff;
   outline: 3px solid #ecd08b;
 }
+.mission-globe-pin[data-compared="true"]:not([aria-pressed="true"]) span {
+  background: #dce7ed;
+  outline: 2px dashed #fff;
+  outline-offset: 2px;
+}
+.mission-globe-controls button[data-compared="true"]:not([aria-pressed="true"]) {
+  border-bottom: 2px dashed #dce7ed;
+}
+.mission-globe-controls .mission-globe-zoom {
+  min-width: 44px;
+  font-size: 20px;
+}
+.mission-globe-stage:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: -3px;
+}
 .mission-globe-controls {
   display: flex;
   flex-wrap: wrap;
