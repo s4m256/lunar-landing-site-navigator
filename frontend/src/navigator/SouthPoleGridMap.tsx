@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
+import { formatDeg, formatNumber } from './format';
 import { InterpolatedTerrain } from './math';
 import { LandingSiteEntry, LocalGridNode } from './types';
 
@@ -7,7 +8,6 @@ type HeatmapLayer = 'score' | 'slope' | 'illum' | 'comms';
 interface SouthPoleGridMapProps {
   sites: LandingSiteEntry[];
   selectedSite: LandingSiteEntry;
-  selectedSiteLiveScores: Record<string, number>;
   liveTerrain: InterpolatedTerrain;
   relayEnabled: boolean;
   offsetXNorm: number;
@@ -29,9 +29,8 @@ function projectStereo(latDeg: number, lonEastDeg: number, scale = 11.5): { x: n
 
 function colorForValue(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean): string {
   if (layer === 'slope') {
-    if (node.slope_deg >= 15) return 'rgba(239, 68, 68, 0.72)';
-    if (node.slope_deg >= 10) return 'rgba(245, 158, 11, 0.72)';
-    const t = Math.max(0, Math.min(1, 1 - node.slope_deg / 10));
+    // Continuous ramp only; the number printed in each cell carries the value.
+    const t = Math.max(0, Math.min(1, 1 - node.slope_deg / 20));
     return `rgba(${Math.round(30 + (1 - t) * 140)}, ${Math.round(145 + t * 75)}, ${Math.round(125 + t * 65)}, 0.75)`;
   }
   if (layer === 'illum') {
@@ -47,19 +46,47 @@ function colorForValue(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: b
 }
 
 function metricLabel(node: LocalGridNode, layer: HeatmapLayer, relayEnabled: boolean): string {
-  if (layer === 'slope') return `${node.slope_deg.toFixed(1)}°`;
-  if (layer === 'illum') return `${(node.mean_illum_fraction * 100).toFixed(0)}%`;
+  if (layer === 'slope') return formatDeg(node.slope_deg, 1);
+  if (layer === 'illum') return `${formatNumber(node.mean_illum_fraction * 100, 0)}%`;
   if (layer === 'comms') {
     const v = relayEnabled ? node.combined_dte_elfo_duty_cycle_pct : node.dte_full_disk_duty_cycle_pct;
-    return `${v.toFixed(0)}%`;
+    return `${formatNumber(v, 0)}%`;
   }
-  return `${node.landing_score_0_100.toFixed(0)}`;
+  return formatNumber(node.landing_score_0_100, 0);
 }
+
+function layerOptions(relayEnabled: boolean): Array<{ key: HeatmapLayer; label: string; description: string }> {
+  return [
+    { key: 'slope', label: 'Declive (°)', description: 'o declive do terreno em graus' },
+    {
+      key: 'illum',
+      label: 'Disco solar acima do relevo (%)',
+      description: 'a parte média do disco solar acima do relevo no período do arquivo, em %',
+    },
+    relayEnabled
+      ? {
+          key: 'comms',
+          label: 'Terra ou retransmissor hipotético (%)',
+          description: 'a parte do período com visada para a Terra ou para a constelação hipotética, em %',
+        }
+      : {
+          key: 'comms',
+          label: 'Visada para a Terra (%)',
+          description: 'a parte do período com o disco inteiro da Terra acima do relevo, em %',
+        },
+    {
+      key: 'score',
+      label: 'Índice ilustrativo do arquivo',
+      description: 'o índice ilustrativo gravado no arquivo (pesos iniciais, com o cenário hipotético de retransmissores)',
+    },
+  ];
+}
+
+const signed = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(0)}`;
 
 export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
   sites,
   selectedSite,
-  selectedSiteLiveScores,
   liveTerrain,
   relayEnabled,
   offsetXNorm,
@@ -67,95 +94,62 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
   onSelectSite,
   onChangeOffset,
 }) => {
-  const [layer, setLayer] = useState<HeatmapLayer>('score');
+  const [layer, setLayer] = useState<HeatmapLayer>('slope');
   const gridSvgRef = useRef<SVGSVGElement | null>(null);
   const draggingRef = useRef(false);
+  const ids = useId();
 
   const sitePoints = useMemo(
     () =>
-      sites.map((s) => ({
+      sites.map((s, i) => ({
         site: s,
+        number: i + 1,
         pt: projectStereo(s.center.latitude_deg, s.center.longitude_east_deg),
-        score: selectedSiteLiveScores[s.id] ?? s.engineering_summary.score.total_0_100,
       })),
-    [sites, selectedSiteLiveScores],
+    [sites],
   );
 
   const gridSize = selectedSite.local_grid.grid_size;
-  const halfSpanM = ((gridSize - 1) / 2) * selectedSite.local_grid.spacing_m;
+  const spacingM = selectedSite.local_grid.spacing_m;
+  const halfSpanM = ((gridSize - 1) / 2) * spacingM;
+  const layers = layerOptions(relayEnabled);
+  const activeLayer = layers.find((l) => l.key === layer) ?? layers[0];
 
   const updateOffsetFromPointer = (clientX: number, clientY: number) => {
     const svg = gridSvgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const padX = 24;
-    const padY = 20;
-    const innerW = 200;
-    const innerH = 200;
+    if (rect.width === 0 || rect.height === 0) return;
     const svgX = ((clientX - rect.left) / rect.width) * 248;
     const svgY = ((clientY - rect.top) / rect.height) * 240;
-    const nx = Math.max(-1, Math.min(1, ((svgX - padX) / innerW) * 2 - 1));
-    const ny = Math.max(-1, Math.min(1, 1 - ((svgY - padY) / innerH) * 2));
+    const nx = Math.max(-1, Math.min(1, ((svgX - 24) / 200) * 2 - 1));
+    const ny = Math.max(-1, Math.min(1, 1 - ((svgY - 20) / 200) * 2));
     onChangeOffset(nx, ny);
   };
 
-  const cursorX = 24 + ((offsetXNorm + 1) * 0.5) * 200;
-  const cursorY = 20 + ((1 - offsetYNorm) * 0.5) * 200;
+  const cursorX = 24 + (offsetXNorm + 1) * 0.5 * 200;
+  const cursorY = 20 + (1 - offsetYNorm) * 0.5 * 200;
 
   return (
-    <div className="panel spatial-panel">
+    <section className="panel spatial-panel" aria-labelledby={`${ids}-titulo`}>
       <div className="panel-head">
-        <div>
-          <span className="eyebrow">Topografia LOLA 80 m/px & Grade Local</span>
-          <h2>Mapa Polar Sul (80°S–90°S) & Malha 5×5 ({selectedSite.local_grid.spacing_m} m)</h2>
-        </div>
-        <div className="layer-pills" role="group" aria-label="Camada de calor local">
-          {(
-            [
-              ['score', 'Score'],
-              ['slope', 'Declive (°)'],
-              ['illum', 'Solar (%)'],
-              ['comms', 'Link (%)'],
-            ] as [HeatmapLayer, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={`pill-btn ${layer === key ? 'active' : ''}`}
-              onClick={() => setLayer(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <h2 id={`${ids}-titulo`}>4. Mapa dos locais</h2>
       </div>
 
       <div className="spatial-dual">
         <div className="map-card">
+          <h3>Polo sul da Lua (80° S a 90° S)</h3>
           <svg
             viewBox="0 0 260 260"
             className="polar-svg"
             role="img"
             aria-label="Mapa estereográfico do Polo Sul Lunar"
+            aria-describedby={`${ids}-mapa-desc`}
           >
-            <defs>
-              <radialGradient id="poleBg" cx="50%" cy="50%" r="55%">
-                <stop offset="0%" stopColor="#142231" />
-                <stop offset="100%" stopColor="#091019" />
-              </radialGradient>
-            </defs>
-            <circle cx={130} cy={130} r={118} fill="url(#poleBg)" stroke="#23374d" strokeWidth={1.2} />
+            <circle cx={130} cy={130} r={118} fill="#0c1826" stroke="#5b7896" strokeWidth={1.2} />
             {[2, 4, 6, 8].map((colat) => (
               <g key={colat}>
-                <circle
-                  cx={130}
-                  cy={130}
-                  r={colat * 11.5}
-                  fill="none"
-                  stroke="#203245"
-                  strokeDasharray="3 3"
-                  strokeWidth={0.8}
-                />
+                <circle cx={130} cy={130} r={colat * 11.5} fill="none" stroke="#3a536e" strokeDasharray="3 3" strokeWidth={0.8} />
                 <text x={133} y={130 - colat * 11.5 + 9} className="svg-muted-label">
                   {-(90 - colat)}°
                 </text>
@@ -164,100 +158,81 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
             {[0, 90, 180, 270].map((lon) => {
               const rad = (lon * Math.PI) / 180;
               return (
-                <line
-                  key={lon}
-                  x1={130}
-                  y1={130}
-                  x2={130 + 108 * Math.sin(rad)}
-                  y2={130 - 108 * Math.cos(rad)}
-                  stroke="#1c2c3d"
-                  strokeWidth={0.8}
-                />
+                <line key={lon} x1={130} y1={130} x2={130 + 108 * Math.sin(rad)} y2={130 - 108 * Math.cos(rad)} stroke="#3a536e" strokeWidth={0.8} />
               );
             })}
             <text x={130} y={15} textAnchor="middle" className="svg-cardinal">
-              0°E (Direção Terra)
+              0° L
             </text>
             <text x={245} y={133} textAnchor="end" className="svg-cardinal">
-              90°E
+              90° L
             </text>
             <text x={130} y={253} textAnchor="middle" className="svg-cardinal">
-              180°E
+              180° L
             </text>
             <text x={15} y={133} textAnchor="start" className="svg-cardinal">
-              270°E
+              270° L
             </text>
 
-            {/* Shackleton Crater physical ring (~89.67°S, 129°E, diameter 21 km ≈ 0.35° radius) */}
-            <circle
-              cx={projectStereo(-89.65, 125).x}
-              cy={projectStereo(-89.65, 125).y}
-              r={4.2}
-              fill="rgba(56, 189, 248, 0.14)"
-              stroke="#38bdf8"
-              strokeWidth={0.8}
-              strokeDasharray="1.5 1.5"
-            />
-
-            {sitePoints.map(({ site, pt, score }) => {
+            {sitePoints.map(({ site, pt, number }) => {
               const active = site.id === selectedSite.id;
-              const isPsr = site.center.is_psr;
-              const fill = isPsr ? '#38bdf8' : score >= 75 ? '#34d399' : score >= 55 ? '#fbbf24' : '#f87171';
+              const r = active ? 7.5 : 6;
               return (
-                <g
-                  key={site.id}
-                  className="site-dot-group"
-                  onClick={() => onSelectSite(site.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {active && (
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r={10.5}
-                      fill="none"
-                      stroke="#b5e9d4"
-                      strokeWidth={1.3}
-                      strokeDasharray="2.5 2"
-                    />
+                <g key={site.id} className="site-dot-group" onClick={() => onSelectSite(site.id)}>
+                  {site.center.is_psr ? (
+                    <rect x={pt.x - r} y={pt.y - r} width={r * 2} height={r * 2} fill={active ? '#ffffff' : '#0c1826'} stroke="#ffffff" strokeWidth={active ? 2.2 : 1.2} />
+                  ) : (
+                    <circle cx={pt.x} cy={pt.y} r={r} fill={active ? '#ffffff' : '#0c1826'} stroke="#ffffff" strokeWidth={active ? 2.2 : 1.2} />
                   )}
-                  <circle
-                    cx={pt.x}
-                    cy={pt.y}
-                    r={active ? 5.2 : 3.8}
-                    fill={fill}
-                    stroke="#091019"
-                    strokeWidth={1.2}
-                  />
-                  <title>{`${site.name} (${score.toFixed(1)}/100)`}</title>
+                  <text x={pt.x} y={pt.y + 2.6} textAnchor="middle" className={`site-dot-number ${active ? 'active' : ''}`}>
+                    {number}
+                  </text>
                 </g>
               );
             })}
           </svg>
-          <div className="map-caption">
-            Clique em um ponto para selecionar. Verde: Score ≥75 | Amarelo: 55–75 | Azul: PSR.
-          </div>
+          <p id={`${ids}-mapa-desc`} className="map-caption">
+            Cada número é um local da lista abaixo. Marcador preenchido: local selecionado. Marcador quadrado: o
+            centro do local é marcado no arquivo como região permanentemente sombreada. Locais próximos podem se
+            sobrepor no mapa; use a lista para escolher.
+          </p>
+          <ol className="site-legend" aria-label="Locais do mapa">
+            {sitePoints.map(({ site }) => (
+              <li key={site.id}>
+                <button
+                  type="button"
+                  className="site-legend-btn"
+                  aria-pressed={site.id === selectedSite.id}
+                  onClick={() => onSelectSite(site.id)}
+                >
+                  {site.name}
+                  <span className="site-cat-sub">
+                    latitude {formatDeg(site.center.latitude_deg, 2)}, longitude {formatDeg(site.center.longitude_east_deg, 1)} L
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
         </div>
 
         <div className="map-card">
-          <div className="local-grid-header">
-            <span>
-              Zoom local: ±{(halfSpanM / 1000).toFixed(1)} km ({selectedSite.name})
-            </span>
-            <button
-              type="button"
-              className="mini-reset-btn"
-              onClick={() => onChangeOffset(0, 0)}
-            >
-              Centro (0, 0)
-            </button>
+          <h3>
+            Arredores de {selectedSite.name} (±{formatNumber(halfSpanM / 1000, 1)} km)
+          </h3>
+          <div className="layer-pills" role="group" aria-label="Valor mostrado na grade">
+            {layers.map(({ key, label }) => (
+              <button key={key} type="button" className="btn btn-small" aria-pressed={layer === key} onClick={() => setLayer(key)}>
+                {label}
+              </button>
+            ))}
           </div>
           <svg
             ref={gridSvgRef}
             viewBox="0 0 248 240"
             className="grid-svg"
             role="img"
-            aria-label="Grade topográfica local 5 por 5 de 500 metros"
+            aria-label={`Grade local de ${gridSize} por ${gridSize} pontos, um a cada ${formatNumber(spacingM, 0)} metros, mostrando ${activeLayer.description}`}
+            aria-describedby={`${ids}-grade-desc`}
             onPointerDown={(e) => {
               draggingRef.current = true;
               updateOffsetFromPointer(e.clientX, e.clientY);
@@ -285,35 +260,97 @@ export const SouthPoleGridMap: React.FC<SouthPoleGridMapProps> = ({
                     height={cellW - 2}
                     rx={4}
                     fill={colorForValue(node, layer, relayEnabled)}
-                    stroke={node.is_psr ? '#38bdf8' : '#1e3044'}
-                    strokeWidth={node.is_psr ? 1.5 : 0.8}
+                    stroke={node.is_psr ? '#ffffff' : '#3a536e'}
+                    strokeWidth={node.is_psr ? 1.6 : 0.8}
+                    strokeDasharray={node.is_psr ? '3 2' : undefined}
                   />
-                  <text
-                    x={x + cellW / 2}
-                    y={y + cellW / 2 + 3.5}
-                    textAnchor="middle"
-                    className="grid-cell-text"
-                  >
+                  <text x={x + cellW / 2} y={y + cellW / 2 + 3.5} textAnchor="middle" className="grid-cell-text">
                     {metricLabel(node, layer, relayEnabled)}
                   </text>
                 </g>
               );
             })}
-            {/* Continuous bilinear interpolation crosshair */}
-            <line x1={cursorX} y1={20} x2={cursorX} y2={220} stroke="#ffffff" strokeWidth={0.9} strokeDasharray="3 2" opacity={0.75} />
-            <line x1={24} y1={cursorY} x2={224} y2={cursorY} stroke="#ffffff" strokeWidth={0.9} strokeDasharray="3 2" opacity={0.75} />
-            <circle cx={cursorX} cy={cursorY} r={5.5} fill="rgba(181, 233, 212, 0.35)" stroke="#ffffff" strokeWidth={1.6} />
-            <text x={124} y={234} textAnchor="middle" className="svg-muted-label">
-              Offset interpolado: Δx={liveTerrain.dxM >= 0 ? '+' : ''}
-              {liveTerrain.dxM.toFixed(0)} m, Δy={liveTerrain.dyM >= 0 ? '+' : ''}
-              {liveTerrain.dyM.toFixed(0)} m | Alt: {liveTerrain.elevationM.toFixed(0)} m
-            </text>
+            <line x1={cursorX} y1={20} x2={cursorX} y2={220} stroke="#ffffff" strokeWidth={0.9} strokeDasharray="3 2" />
+            <line x1={24} y1={cursorY} x2={224} y2={cursorY} stroke="#ffffff" strokeWidth={0.9} strokeDasharray="3 2" />
+            <circle cx={cursorX} cy={cursorY} r={7} fill="none" stroke="#ffffff" strokeWidth={1.8} />
           </svg>
-          <div className="map-caption">
-            Clique ou arraste na grade para interpolar em &lt;5 ms a curva do horizonte e métricas.
+          <p id={`${ids}-grade-desc`} className="map-caption">
+            Cada célula mostra {activeLayer.description}, como gravado no arquivo para aquele ponto; esses valores não
+            mudam com as opções avançadas. Borda tracejada: ponto marcado no arquivo como região permanentemente
+            sombreada. A cruz indica o ponto analisado: Δx {signed(liveTerrain.dxM)} m, Δy {signed(liveTerrain.dyM)} m
+            do centro, altitude {formatNumber(liveTerrain.elevationM, 0)} m, declive {formatDeg(liveTerrain.slopeDeg, 1)}
+            {liveTerrain.dxM === 0 && liveTerrain.dyM === 0 ? ' (centro do local).' : ' (valores interpolados nesta página).'}
+          </p>
+          <div className="field">
+            <label htmlFor={`${ids}-dx`}>Mover o ponto analisado na horizontal (Δx)</label>
+            <input
+              id={`${ids}-dx`}
+              type="range"
+              min={-1}
+              max={1}
+              step={0.05}
+              value={offsetXNorm}
+              aria-valuetext={`${signed(offsetXNorm * halfSpanM)} metros`}
+              onChange={(e) => onChangeOffset(Number(e.target.value), offsetYNorm)}
+            />
           </div>
+          <div className="field">
+            <label htmlFor={`${ids}-dy`}>Mover o ponto analisado na vertical (Δy)</label>
+            <input
+              id={`${ids}-dy`}
+              type="range"
+              min={-1}
+              max={1}
+              step={0.05}
+              value={offsetYNorm}
+              aria-valuetext={`${signed(offsetYNorm * halfSpanM)} metros`}
+              onChange={(e) => onChangeOffset(offsetXNorm, Number(e.target.value))}
+            />
+          </div>
+          <button type="button" className="btn btn-small" disabled={offsetXNorm === 0 && offsetYNorm === 0} onClick={() => onChangeOffset(0, 0)}>
+            Voltar ao centro do local
+          </button>
+          <p className="map-caption">
+            Você também pode clicar ou arrastar na grade. Fora do centro, o relevo é interpolado nesta página entre os
+            pontos da grade e as posições do Sol e da Terra são as do centro; a visibilidade dos retransmissores
+            hipotéticos não existe no arquivo para esses pontos.
+          </p>
+          <details>
+            <summary>Ver a grade em tabela</summary>
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="Tabela da grade local">
+              <table className="ranking-table data-table">
+                <caption>Pontos da grade local de {selectedSite.name}, como gravados no arquivo.</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Δx (m)</th>
+                    <th scope="col">Δy (m)</th>
+                    <th scope="col">Altitude (m)</th>
+                    <th scope="col">Declive (°)</th>
+                    <th scope="col">Disco solar acima do relevo, em média (%)</th>
+                    <th scope="col">{layers[2].label}</th>
+                    <th scope="col">Índice ilustrativo do arquivo</th>
+                    <th scope="col">Sombra permanente</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedSite.local_grid.nodes.map((node) => (
+                    <tr key={`${node.row}-${node.col}`}>
+                      <td className="mono-cell">{signed(node.dx_m)}</td>
+                      <td className="mono-cell">{signed(node.dy_m)}</td>
+                      <td className="mono-cell">{formatNumber(node.elevation_m, 0)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'slope', relayEnabled)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'illum', relayEnabled)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'comms', relayEnabled)}</td>
+                      <td className="mono-cell">{metricLabel(node, 'score', relayEnabled)}</td>
+                      <td>{node.is_psr ? 'sim' : 'não'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

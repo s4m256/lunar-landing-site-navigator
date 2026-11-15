@@ -7,9 +7,10 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
 // Budget for the sum of JavaScript referenced by index.html (uncompressed bytes).
-// The precomputed dataset (~1.4 MB) is inlined in the bundle, so the budget leaves
-// headroom above the current ~1.8 MB; raise it deliberately, not by accident.
-export const DEFAULT_MAX_JS_BYTES = 3 * 1024 * 1024;
+// The precomputed dataset (~1.4 MB) is a separate static asset fetched at run time (SPA-11), so the
+// initial JavaScript is ~0.37 MB. 1 MiB leaves headroom and still fails if the dataset is inlined
+// into the bundle again; raise it deliberately, not by accident.
+export const DEFAULT_MAX_JS_BYTES = 1024 * 1024;
 
 function resolveJsBudget(value = process.env.DEPLOY_MAX_JS_BYTES) {
   if (value === undefined || value === '') return DEFAULT_MAX_JS_BYTES;
