@@ -1,0 +1,253 @@
+.game-scene {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: 100svh;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  color: #fff;
+  background: #050609;
+}
+
+.game-scene-world,
+.game-scene-stars,
+.game-scene-terrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.game-scene-world {
+  z-index: -1;
+  overflow: hidden;
+}
+.game-scene-stars {
+  background-color: #050609;
+  background-image: radial-gradient(1px 1px at 14% 24%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 78% 20%, #d1d8df 99%, transparent),
+    radial-gradient(1px 1px at 47% 36%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 87% 46%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 29% 58%, #aeb6c0 99%, transparent);
+  background-size:
+    270px 240px,
+    340px 290px,
+    390px 310px,
+    430px 330px,
+    230px 260px;
+}
+.game-scene-terrain {
+  top: 30%;
+  background:
+    linear-gradient(to bottom, transparent 55%, rgba(0, 0, 0, 0.45)),
+    url("../assets/game-scene/lunar-terrain.webp") center top / cover no-repeat;
+  filter: brightness(0.66);
+}
+.game-scene-world::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.2),
+    transparent 42%,
+    rgba(0, 0, 0, 0.32)
+  );
+}
+.game-scene-guide {
+  position: absolute;
+  z-index: 1;
+  height: min(62vh, 580px);
+  max-height: 60%;
+  width: auto;
+  bottom: 15%;
+  left: 15%;
+  filter: drop-shadow(0 14px 14px rgba(0, 0, 0, 0.55));
+}
+.game-scene-overlay {
+  position: relative;
+  z-index: 2;
+  width: min(100% - 48px, 1100px);
+  margin: 0 auto clamp(24px, 4vh, 48px);
+}
+.game-scene-craft {
+  position: absolute;
+  z-index: 1;
+  width: clamp(230px, 32vw, 460px);
+  left: 50%;
+  top: 16%;
+  transform: translateX(-50%);
+}
+.game-scene-craft .rocket-illustration {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.game-scene-craft .rocket-illustration > :not(defs):not(.rocket-craft) {
+  display: none;
+}
+.lunar-mission .game-scene-craft .rocket-craft {
+  animation: none;
+  transform: none;
+}
+.game-scene--launch .game-scene-terrain {
+  opacity: 0;
+}
+.game-scene--launch .game-scene-craft {
+  animation: game-scene-flight 3.2s ease-in-out both;
+}
+.game-scene--launch .game-scene-stars {
+  animation: game-scene-drift 3.2s linear both;
+}
+.game-scene--landing .game-scene-craft {
+  animation: game-scene-descent 3.2s ease-out both;
+}
+.game-scene--landing .game-scene-terrain {
+  animation: game-scene-approach 3.2s ease-out both;
+}
+
+@keyframes game-scene-flight {
+  from {
+    transform: translate(-50%, 42%) scale(0.72) rotate(-12deg);
+  }
+  to {
+    transform: translate(-28%, -22%) scale(1.05) rotate(-12deg);
+  }
+}
+@keyframes game-scene-drift {
+  to {
+    transform: translate(-4%, 8%) scale(1.1);
+  }
+}
+@keyframes game-scene-descent {
+  from {
+    transform: translate(-50%, -35%) scale(0.55);
+  }
+  to {
+    transform: translate(-50%, 15%) scale(0.9);
+  }
+}
+@keyframes game-scene-approach {
+  from {
+    transform: scale(1.25) translateY(12%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .game-scene-guide {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 25%;
+    height: min(52vh, 440px);
+  }
+  .game-scene-terrain {
+    top: 32%;
+    background-position: 45% top;
+  }
+  .game-scene-overlay {
+    width: calc(100% - 24px);
+    margin-bottom: 12px;
+  }
+  .game-scene-craft {
+    top: 17%;
+    width: min(75vw, 340px);
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .game-scene {
+    min-height: 500px;
+  }
+  .game-scene-guide {
+    height: 65%;
+    bottom: 16%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-scene *,
+  .game-scene *::before,
+  .game-scene *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Dialogue is part of the scene, with enough contrast over bright terrain. */
+.game-dialogue {
+  box-sizing: border-box;
+  width: 100%;
+  padding: clamp(18px, 2.4vw, 28px) clamp(20px, 3vw, 36px);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(5, 8, 13, 0.9);
+  color: #f7f8fa;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+}
+.game-dialogue-speaker {
+  margin-bottom: 10px;
+  color: #c6d1db;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.game-dialogue-text {
+  max-width: 74ch;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  line-height: 1.5;
+}
+.game-dialogue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.lunar-mission .game-dialogue-actions button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #e7edf3;
+  border-radius: 2px;
+  background: #edf1f4;
+  color: #10151c;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lunar-mission .game-dialogue-actions .game-dialogue-skip {
+  background: transparent;
+  color: #edf1f4;
+  border-color: #858f99;
+}
+.lunar-mission .game-dialogue-actions button:hover:not(:disabled) {
+  background: #cbd5df;
+  color: #10151c;
+}
+.lunar-mission .game-dialogue-actions button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+.lunar-mission .game-dialogue-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+@media (max-width: 600px) {
+  .game-dialogue {
+    padding: 16px;
+  }
+  .game-dialogue-text {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+  .game-dialogue-actions {
+    margin-top: 14px;
+  }
+  .lunar-mission .game-dialogue-actions button {
+    padding-inline: 14px;
+  }
+}

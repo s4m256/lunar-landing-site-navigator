@@ -2,7 +2,7 @@
 
 Uma missão guiada para aprender por que **local e data** importam em um pouso lunar. Uma astronauta fictícia apresenta a iniciativa CLPS, que envolve entregas robóticas comerciais. O usuário escolhe entre quatro locais hipotéticos, compara as direções do Sol e da Terra e registra uma escolha. Um quinto alvo oferece um bônus educativo opcional.
 
-O visual usa ilustrações SVG próprias, mapa polar esquemático e corte do horizonte. Decolagem e pouso são transições curtas, puláveis; movimento reduzido elimina as animações. É possível ir direto ao mapa. A experiência principal dispensa WebGL, vídeos, câmera e servidor científico.
+O início tem formato de diálogo de jogo: astronauta no cenário, caixa de fala com letras aparecendo e um botão que completa a frase ou avança. A imagem do astronauta é de Poly (CC BY 2.0); o terreno ilustrativo vem do NASA 3D Resources. Conversas curtas alternam com viagem e pouso animados de 3,2 segundos, puláveis. Movimento reduzido elimina as animações. É possível pular a conversa e ir direto ao mapa polar esquemático e ao corte do horizonte. A experiência principal dispensa WebGL, vídeos, câmera e servidor científico.
 
 ## Abrir sem instalação
 

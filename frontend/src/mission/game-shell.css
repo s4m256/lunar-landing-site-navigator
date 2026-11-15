@@ -1,0 +1,217 @@
+.lunar-mission.game-experience {
+  --mission-ink: #080c12;
+  --mission-paper: #f3f5f8;
+  --mission-mint: #e0e9f7;
+  --mission-muted: #bdc6d1;
+  --mission-line: #424f5e;
+  background: #050609;
+}
+.game-experience .mission-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 5;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 28px;
+  border: 0;
+  background: linear-gradient(#050609c9, transparent);
+}
+.game-experience .mission-brand {
+  font-size: 17px;
+}
+.game-experience .mission-tagline {
+  display: none;
+}
+.game-experience .mission-header .mission-button {
+  color: #e3e8ef;
+  font-size: 14px;
+}
+.game-experience .game-scene-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.game-cinematic-caption {
+  width: fit-content;
+  max-width: 100%;
+  padding: 18px 22px;
+  background: #070b12df;
+  border: 1px solid #6a7481;
+}
+.lunar-mission .game-cinematic-caption h1 {
+  font-size: clamp(22px, 3vw, 32px);
+}
+.game-cinematic-caption p {
+  color: #bec6d2;
+  margin: 4px 0 12px;
+}
+.game-cinematic-caption button {
+  min-height: 44px;
+  padding: 10px 16px;
+  color: #f3f5f8;
+  background: #111923;
+  border: 1px solid #8994a3;
+  border-radius: 3px;
+}
+.game-voice {
+  font-size: 14px;
+}
+.game-voice summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  min-height: 44px;
+  border: 1px solid transparent;
+}
+.game-voice summary:focus-visible {
+  outline: 3px solid #edc384;
+  outline-offset: 3px;
+}
+.game-voice[open] {
+  flex: 1 0 100%;
+}
+.game-voice .speech-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.game-voice .speech-toggle {
+  min-height: 44px;
+  padding: 8px 12px;
+  color: #f3f5f8;
+  background: #111923;
+  border: 1px solid #8994a3;
+  border-radius: 3px;
+}
+.game-voice .speech-control__status {
+  max-width: 600px;
+  font-size: 14px;
+}
+.game-result-caption {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 24px);
+  padding: 20px;
+  max-width: 420px;
+  background: #070b12e8;
+  border: 1px solid #697481;
+}
+.lunar-mission .game-result-caption h1 {
+  font-size: 22px;
+}
+.lunar-mission .game-result-caption h2 {
+  margin-top: 12px;
+  font-size: 19px;
+}
+.game-result-caption .mission-footnote {
+  margin-top: 8px;
+}
+.game-scene--selection {
+  display: block;
+  padding: 92px 0 32px;
+}
+.game-scene--selection .game-scene-overlay {
+  width: min(1220px, calc(100% - 48px));
+  margin: 0 auto;
+}
+.game-scene--selection .game-scene-guide {
+  height: 180px;
+  max-height: none;
+  top: 68px;
+  left: auto;
+  right: 32px;
+  bottom: auto;
+}
+.game-scene--selection .mission-selection {
+  width: 100%;
+  padding: 0;
+}
+.game-scene--selection .mission-section-heading {
+  padding-right: 120px;
+  margin-bottom: 22px;
+}
+.game-scene--selection .mission-section-heading .mission-title {
+  font-size: clamp(26px, 4vw, 42px);
+}
+.game-scene--selection .mission-section-heading > p {
+  max-width: 320px;
+}
+.game-scene--selection .mission-workspace {
+  border: 1px solid #6b7682;
+  background: #080c12ed;
+  padding: 24px;
+  gap: 28px;
+}
+.game-scene--selection .mission-map-panel {
+  min-width: 0;
+}
+.game-scene--selection .mission-analysis-panel {
+  padding-left: 28px;
+  background: #0c131ddd;
+}
+.game-experience .mission-content[inert] .game-scene * {
+  animation-play-state: paused !important;
+}
+.game-scene--selection .mission-date-control select {
+  background-color: #141c28;
+}
+.game-scene--selection .target-card {
+  background: #111b26;
+}
+.game-scene--selection .target-card.is-selected {
+  background: #1d2b3e;
+  border-color: #b9cce9;
+}
+@media (max-width: 760px) {
+  .game-experience .mission-header {
+    padding-inline: 16px;
+    gap: 8px;
+  }
+  .game-experience .mission-brand {
+    gap: 7px;
+    font-size: 15px;
+  }
+  .game-experience .mission-header .mission-button {
+    padding-inline: 6px;
+  }
+  .game-scene--selection .game-scene-overlay {
+    width: calc(100% - 24px);
+  }
+  .game-scene--selection .mission-section-heading {
+    min-height: 112px;
+    padding-right: 76px;
+  }
+  .game-scene--selection .game-scene-guide {
+    right: 12px;
+    height: 140px;
+    transform: none;
+  }
+  .game-scene--selection .mission-workspace {
+    padding: 16px 12px;
+    gap: 20px;
+  }
+  .game-scene--selection .mission-analysis-panel {
+    padding-left: 0;
+  }
+  .game-result-caption {
+    position: static;
+    margin: 0 0 12px auto;
+    padding: 12px 16px;
+    max-width: 320px;
+  }
+  .lunar-mission .game-result-caption h1 {
+    font-size: 18px;
+  }
+  .lunar-mission .game-result-caption h2 {
+    font-size: 16px;
+    margin-top: 4px;
+  }
+  .game-result-caption p {
+    font-size: 14px;
+  }
+}

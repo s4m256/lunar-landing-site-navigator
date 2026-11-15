@@ -44,48 +44,81 @@ function useReducedMotion() {
   return reduced;
 }
 
-function AnimatedText({
-  text,
-  intervalMs,
-  className,
-  reducedMotion,
-  children,
-}: Required<Pick<TypewriterTextProps, "text" | "intervalMs">> & {
-  className?: string;
-  reducedMotion: boolean;
-  children?: ReactNode;
-}) {
-  // Array.from iterates Unicode code points, preserving surrogate pairs.
+/** Shared animation state for dialogue controls that remain mounted across lines. */
+export function useTypewriter(text: string, intervalMs = 30, active = true) {
+  const reducedMotion = useReducedMotion();
   const characters = useMemo(() => Array.from(text), [text]);
-  const [visibleCount, setVisibleCount] = useState(0);
-  const complete = reducedMotion || visibleCount >= characters.length;
+  const [progress, setProgress] = useState({ text, count: 0 });
+  const [previousText, setPreviousText] = useState(text);
+  if (previousText !== text) {
+    setPreviousText(text);
+    setProgress({ text, count: 0 });
+  }
+  const count = progress.text === text ? progress.count : 0;
+  const complete = reducedMotion || count >= characters.length;
   const delay = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 30;
 
   useEffect(() => {
     if (reducedMotion) {
-      setVisibleCount(characters.length);
+      setProgress({ text, count: characters.length });
       return;
     }
-    if (complete) return;
+    if (!active || complete) return;
     const timer = window.setInterval(() => {
-      setVisibleCount((count) => Math.min(count + 1, characters.length));
+      setProgress((previous) => ({
+        text,
+        count: Math.min(
+          (previous.text === text ? previous.count : 0) + 1,
+          characters.length,
+        ),
+      }));
     }, delay);
     return () => window.clearInterval(timer);
-  }, [characters, complete, delay, reducedMotion]);
+  }, [active, characters, complete, delay, reducedMotion, text]);
 
+  return {
+    complete,
+    visibleText: complete ? text : characters.slice(0, count).join(""),
+    reveal: () => setProgress({ text, count: characters.length }),
+  };
+}
+
+/** A stable layout with one accessible copy and a non-announced visual copy. */
+export function TypewriterContent({
+  text,
+  visibleText,
+}: {
+  text: string;
+  visibleText: string;
+}) {
   return (
-    <div className={className} style={{ font: "inherit" }}>
-      {/* One complete accessible copy; visual updates are never live announcements. */}
+    <>
       <span style={visuallyHidden}>{text}</span>
       <span
         aria-hidden="true"
         style={{ display: "grid", whiteSpace: "pre-wrap" }}
       >
         <span style={{ gridArea: "1 / 1", visibility: "hidden" }}>{text}</span>
-        <span style={{ gridArea: "1 / 1" }}>
-          {complete ? text : characters.slice(0, visibleCount).join("")}
-        </span>
+        <span style={{ gridArea: "1 / 1" }}>{visibleText}</span>
       </span>
+    </>
+  );
+}
+
+function AnimatedText({
+  text,
+  intervalMs,
+  className,
+  children,
+}: Required<Pick<TypewriterTextProps, "text" | "intervalMs">> & {
+  className?: string;
+  children?: ReactNode;
+}) {
+  const { complete, visibleText, reveal } = useTypewriter(text, intervalMs);
+
+  return (
+    <div className={className} style={{ font: "inherit" }}>
+      <TypewriterContent text={text} visibleText={visibleText} />
       <div className="typewriter-controls">
         {children}
         <button
@@ -93,7 +126,7 @@ function AnimatedText({
           style={{ font: "inherit" }}
           aria-disabled={complete}
           onClick={() => {
-            if (!complete) setVisibleCount(characters.length);
+            if (!complete) reveal();
           }}
         >
           Mostrar texto inteiro
@@ -110,7 +143,6 @@ export function TypewriterText({
   className,
   children,
 }: TypewriterTextProps) {
-  const reducedMotion = useReducedMotion();
   // A new utterance unmounts its previous animation and cancels its timer.
   return (
     <AnimatedText
@@ -118,7 +150,6 @@ export function TypewriterText({
       text={text}
       intervalMs={intervalMs}
       className={className}
-      reducedMotion={reducedMotion}
     >
       {children}
     </AnimatedText>

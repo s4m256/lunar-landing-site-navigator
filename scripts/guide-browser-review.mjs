@@ -31,14 +31,14 @@ try {
     route.request().url() === preview ? route.continue() : route.abort(),
   );
   await page.goto(preview, { waitUntil: "networkidle" });
-  const skip = page.getByRole("button", { name: "Mostrar texto inteiro" });
+  const skip = page.locator(".game-dialogue-next");
   await skip.focus();
   await page.keyboard.press("Enter");
   assert(await skip.evaluate((button) => button === document.activeElement));
-  assert.equal(await skip.getAttribute("aria-disabled"), "true");
+  assert.equal(await skip.innerText(), "Continuar");
   assert(
     await page
-      .locator(".guide-portrait")
+      .locator(".game-scene-guide")
       .evaluate(
         (image) =>
           image.complete &&
@@ -46,6 +46,7 @@ try {
           image.naturalHeight === 1024,
       ),
   );
+  await page.locator(".game-voice > summary").click();
   report.native = await page.evaluate(() => ({
     supported: "speechSynthesis" in window,
     voices:
@@ -67,6 +68,7 @@ try {
     ).violations.length,
     0,
   );
+  await page.locator(".game-voice > summary").click();
   await page.screenshot({ path: `${output}/guia.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert(
@@ -127,6 +129,11 @@ try {
     await mission.evaluate(() => window.__speechReview.utterances.length),
     0,
   );
+  if (
+    !(await mission.locator(".game-voice").getAttribute("open")) &&
+    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
+  )
+    await mission.locator(".game-voice > summary").click();
   await mission.getByRole("button", { name: "Ouvir fala" }).click();
   assert.equal(
     await mission.locator(".speech-control__status").innerText(),
@@ -136,9 +143,17 @@ try {
     const utterance = window.__speechReview.utterances.at(-1);
     return { text: utterance.text, language: utterance.lang };
   });
-  assert.match(spoken.text, /as missões CLPS não levam astronautas/);
+  assert.match(
+    spoken.text,
+    /As missões CLPS são robóticas: não levam astronautas/,
+  );
   assert.equal(spoken.language, "pt-BR");
   await mission.getByRole("button", { name: "Parar fala" }).click();
+  if (
+    !(await mission.locator(".game-voice").getAttribute("open")) &&
+    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
+  )
+    await mission.locator(".game-voice > summary").click();
   await mission.getByRole("button", { name: "Ouvir fala" }).click();
   const beforeModal = await mission.evaluate(
     () => window.__speechReview.cancellations,
@@ -150,11 +165,16 @@ try {
   );
   assert(await mission.getByRole("link", { name: "CC BY 2.0" }).isVisible());
   await mission.getByRole("button", { name: "Fechar janela" }).click();
+  if (
+    !(await mission.locator(".game-voice").getAttribute("open")) &&
+    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
+  )
+    await mission.locator(".game-voice > summary").click();
   await mission.getByRole("button", { name: "Ouvir fala" }).click();
   const beforeMap = await mission.evaluate(
     () => window.__speechReview.cancellations,
   );
-  await mission.getByRole("button", { name: "Ir direto ao mapa" }).click();
+  await mission.getByRole("button", { name: "Pular conversa" }).click();
   assert.equal(
     await mission.evaluate(() => window.__speechReview.cancellations),
     beforeMap + 1,
@@ -162,6 +182,11 @@ try {
   await mission.getByRole("button", { name: /^Local B,/ }).click();
   await mission.getByRole("button", { name: "Pousar neste local" }).click();
   await mission.getByRole("heading", { name: "Escolha registrada." }).waitFor();
+  if (
+    !(await mission.locator(".game-voice").getAttribute("open")) &&
+    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
+  )
+    await mission.locator(".game-voice > summary").click();
   await mission.getByRole("button", { name: "Ouvir fala" }).click();
   assert.match(
     await mission.evaluate(() => window.__speechReview.utterances.at(-1).text),

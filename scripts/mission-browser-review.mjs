@@ -72,15 +72,15 @@ try {
     );
   };
   await page.goto(url, { waitUntil: "networkidle" });
-  await page
-    .getByRole("heading", { name: "Um bom pouso começa com uma escolha." })
-    .waitFor();
+  await page.locator(".game-scene--briefing").waitFor();
   assert.equal(
     await page.evaluate(() => document.activeElement?.tagName),
     "BODY",
   );
   assert(
-    (await page.locator(".guide-copy").innerText()).includes("nave é robótica"),
+    (await page.locator(".game-dialogue-text").innerText()).includes(
+      "As missões CLPS são robóticas",
+    ),
   );
   await audit("briefing");
   await page.screenshot({ path: `${output}/briefing.png`, fullPage: true });
@@ -113,7 +113,14 @@ try {
     "Briefing explains robotic CLPS; dialog isolates background, traps/restores focus and downloads the exact scientific result objects.",
   );
 
-  await page.getByRole("button", { name: "Iniciar missão" }).click();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.getByRole("button", { name: "Vamos nessa", exact: true }).click();
+  await page.locator(".game-scene--arrival").waitFor();
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Escolher um local", exact: true })
+    .click();
   await page.getByRole("heading", { name: "Onde vamos pousar?" }).waitFor();
   assert.equal(await page.locator(".mission-map-site").count(), 4);
   assert.equal(await page.locator(".mission-map-bonus").count(), 1);
@@ -244,7 +251,7 @@ try {
     path: `${output}/mobile-briefing.png`,
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Ir direto ao mapa" }).click();
+  await page.getByRole("button", { name: "Pular conversa" }).click();
   await page.getByRole("button", { name: /^Local A,/ }).focus();
   await page.keyboard.press("Enter");
   assert.equal(
@@ -268,13 +275,47 @@ try {
   }
   const flightPage = await animated.newPage();
   await flightPage.goto(url, { waitUntil: "networkidle" });
-  await flightPage.getByRole("button", { name: "Iniciar missão" }).click();
+  for (const label of ["Continuar", "Continuar", "Vamos nessa"]) {
+    const reveal = flightPage.getByRole("button", {
+      name: "Mostrar fala",
+      exact: true,
+    });
+    if (await reveal.count()) await reveal.click();
+    await flightPage.getByRole("button", { name: label, exact: true }).click();
+  }
+  await flightPage.locator(".game-scene--launch").waitFor();
+  await flightPage.waitForFunction(() => {
+    const craft = document.querySelector(".game-scene-craft");
+    return craft
+      ?.getAnimations()
+      .some(
+        (animation) =>
+          animation.playState === "running" &&
+          Number(animation.currentTime) > 500,
+      );
+  });
+  await flightPage.screenshot({ path: `${output}/launch.png`, fullPage: true });
   await flightPage.getByRole("button", { name: "Pular decolagem" }).click();
+  await flightPage.locator(".game-scene--arrival").waitFor();
+  await flightPage.getByRole("button", { name: "Pular conversa" }).click();
   await flightPage.getByRole("button", { name: /^Local B,/ }).click();
   await flightPage.getByRole("button", { name: /Pousar neste local/ }).click();
-  await flightPage
-    .getByRole("button", { name: "Pular pouso e ver resumo" })
-    .click();
+  await flightPage.locator(".game-scene--landing").waitFor();
+  await flightPage.waitForFunction(() =>
+    document
+      .querySelector(".game-scene-craft")
+      ?.getAnimations()
+      .some(
+        (animation) =>
+          animation.playState === "running" &&
+          Number(animation.currentTime) > 500,
+      ),
+  );
+  await flightPage.screenshot({
+    path: `${output}/landing.png`,
+    fullPage: true,
+  });
+  await flightPage.getByRole("button", { name: "Pular pouso" }).click();
   await flightPage
     .getByRole("heading", { name: "Escolha registrada." })
     .waitFor();

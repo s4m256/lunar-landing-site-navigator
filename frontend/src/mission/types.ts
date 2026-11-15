@@ -3,6 +3,7 @@ export type TargetName = "sun" | "earth";
 export type MissionStage =
   | "briefing"
   | "launch"
+  | "arrival"
   | "selection"
   | "landing"
   | "complete";

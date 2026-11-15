@@ -5,13 +5,11 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import {
-  GuidePortrait,
-  PolarMissionMap,
-  RocketIllustration,
-} from "./MissionArt";
+import { PolarMissionMap } from "./MissionArt";
 import { HorizonDiagram } from "./HorizonDiagram";
-import { MissionDialogue, WELCOME_DIALOGUE } from "./MissionDialogue";
+import { GameDialogue } from "./GameDialogue";
+import { GameScene, CINEMATIC_DURATION_MS } from "./GameScene";
+import { SpeechControl } from "./SpeechControl";
 import {
   DEFAULT_MISSION_DATE,
   MISSION_AUDIT,
@@ -27,6 +25,17 @@ import type {
   TargetName,
 } from "./types";
 import "./mission.css";
+import "./game-shell.css";
+
+const openingDialogue = [
+  "Oi! Eu sou a Lua, sua guia fictícia. As missões CLPS são robóticas: não levam astronautas.",
+  "A NASA contrata empresas para levar equipamentos científicos até a Lua. Nosso trabalho é ajudar a escolher onde pousar.",
+  "Bora acompanhar a viagem? Depois vamos procurar um lugar com Sol à vista e caminho livre na direção da Terra.",
+];
+const arrivalDialogue = [
+  "Chegamos! Para os painéis solares, faz diferença onde o Sol aparece no céu. Uma sombra pode mudar tudo.",
+  "E para falar com a Terra, precisamos olhar na direção dela. Escolha um ponto e vamos investigar as duas direções.",
+];
 
 const targetLabels: Record<TargetName, string> = { sun: "Sol", earth: "Terra" };
 
@@ -104,6 +113,8 @@ function useReducedMotion() {
 
 export function MissionApp() {
   const [stage, setStage] = useState<MissionStage>("briefing");
+  const [dialogueIndex, setDialogueIndex] = useState(0);
+  const [arrivalIndex, setArrivalIndex] = useState(0);
   const [selectedSiteId, setSelectedSiteId] = useState<string>();
   const [selectionRevision, setSelectionRevision] = useState(0);
   const [date, setDate] = useState(DEFAULT_MISSION_DATE);
@@ -118,6 +129,10 @@ export function MissionApp() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const previousStage = useRef(stage);
+  const cinematicClock = useRef<{
+    stage: MissionStage;
+    remaining: number;
+  } | null>(null);
   const reducedMotion = useReducedMotion();
 
   const result = useMemo((): { analysis?: MissionAnalysis; error?: string } => {
@@ -164,15 +179,30 @@ export function MissionApp() {
   }, [selectionRevision]);
 
   useEffect(() => {
-    if (stage !== "launch" && stage !== "landing") return;
-    const nextStage = stage === "launch" ? "selection" : "complete";
+    if (stage !== "launch" && stage !== "landing") {
+      cinematicClock.current = null;
+      return;
+    }
+    if (cinematicClock.current?.stage !== stage) {
+      cinematicClock.current = { stage, remaining: CINEMATIC_DURATION_MS };
+    }
+    const nextStage = stage === "launch" ? "arrival" : "complete";
+    if (dialog) return;
     if (reducedMotion) {
       setStage(nextStage);
       return;
     }
-    const timer = window.setTimeout(() => setStage(nextStage), 1600);
-    return () => window.clearTimeout(timer);
-  }, [stage, reducedMotion]);
+    const clock = cinematicClock.current;
+    const started = performance.now();
+    const timer = window.setTimeout(() => setStage(nextStage), clock.remaining);
+    return () => {
+      window.clearTimeout(timer);
+      clock.remaining = Math.max(
+        0,
+        clock.remaining - (performance.now() - started),
+      );
+    };
+  }, [stage, reducedMotion, dialog]);
 
   useEffect(() => {
     if (!dialog) return;
@@ -240,20 +270,27 @@ export function MissionApp() {
     setDialog("bonus");
   }
 
-  const step =
-    stage === "briefing" || stage === "launch"
-      ? 0
-      : stage === "selection"
-        ? 1
-        : 2;
+  const spokenText =
+    stage === "briefing"
+      ? openingDialogue[dialogueIndex]
+      : stage === "arrival"
+        ? arrivalDialogue[arrivalIndex]
+        : "Boa! Você encontrou o Sol e a Terra acima do horizonte do exercício. Num pouso real, ainda precisamos estudar o relevo, a energia e a comunicação.";
+
+  const voiceControl = !dialog && (
+    <details className="game-voice" key={spokenText}>
+      <summary>Voz</summary>
+      <SpeechControl text={spokenText} />
+    </details>
+  );
 
   return (
-    <main className="lunar-mission">
+    <main className={`lunar-mission game-experience stage-${stage}`}>
       <div className="mission-content" inert={dialog !== null}>
         <header className="mission-header">
           <div className="mission-brand">
             <span aria-hidden="true">◒</span> LUNAR{" "}
-            <span className="mission-tagline">Uma missão, duas direções.</span>
+            <span className="mission-tagline">Missão lunar</span>
           </div>
           <div className="mission-header-actions">
             <button
@@ -265,369 +302,279 @@ export function MissionApp() {
           </div>
         </header>
 
-        <ol className="mission-progress" aria-label="Etapas da missão">
-          {["Briefing", "Escolha do local", "Pouso ilustrativo"].map(
-            (label, index) => (
-              <li
-                key={label}
-                className={
-                  index === step
-                    ? "is-current"
-                    : index < step
-                      ? "is-complete"
-                      : ""
-                }
-                aria-current={index === step ? "step" : undefined}
-              >
-                <span className="step-number" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                {label}
-              </li>
-            ),
-          )}
-        </ol>
-
         {stage === "briefing" && (
-          <section
-            className="mission-briefing"
-            aria-labelledby="mission-heading"
-          >
-            <div className="briefing-copy">
-              <p className="mission-eyebrow">
-                Pequenas escolhas. Grandes descobertas.
-              </p>
-              <h1
-                className="mission-title"
-                id="mission-heading"
-                ref={headingRef}
-                tabIndex={-1}
-              >
-                Um bom pouso começa com uma escolha.
-              </h1>
-              <p className="mission-intro">
-                Explore o polo sul da Lua e descubra como a posição do Sol e da
-                Terra muda a sua decisão.
-              </p>
-              <div className="mission-guide">
-                <div className="guide-copy">
-                  <MissionDialogue text={WELCOME_DIALOGUE} active={!dialog} />
-                </div>
-              </div>
-              <ul className="mission-objectives">
-                <li>
-                  <span aria-hidden="true">☀</span>
-                  <span>
-                    <strong>Encontre o Sol</strong>A luz solar ajuda a alimentar
-                    os painéis.
-                  </span>
-                </li>
-                <li>
-                  <span aria-hidden="true">◉</span>
-                  <span>
-                    <strong>Encontre a Terra</strong>Uma direção desobstruída é
-                    parte da comunicação direta.
-                  </span>
-                </li>
-              </ul>
-              <div className="mission-actions">
-                <button
-                  className="mission-button mission-button-primary"
-                  onClick={() => setStage("launch")}
-                >
-                  Iniciar missão <Arrow />
-                </button>
-                <button
-                  className="mission-button mission-button-secondary"
-                  onClick={() => setStage("selection")}
-                >
-                  Ir direto ao mapa
-                </button>
-              </div>
-            </div>
-            <div className="briefing-art">
-              <GuidePortrait mood="welcome" />
-              <p className="art-caption">
-                Lua, sua guia de missão
-                <br />
-                <span>Personagem fictícia · nave robótica</span>
-              </p>
-            </div>
-          </section>
+          <GameScene phase="briefing">
+            <h1 className="game-scene-heading" ref={headingRef} tabIndex={-1}>
+              Missão lunar
+            </h1>
+            <GameDialogue
+              text={openingDialogue[dialogueIndex]}
+              active={!dialog}
+              nextLabel={
+                dialogueIndex === openingDialogue.length - 1
+                  ? "Vamos nessa"
+                  : "Continuar"
+              }
+              onNext={() => {
+                if (dialogueIndex < openingDialogue.length - 1)
+                  setDialogueIndex((index) => index + 1);
+                else setStage("launch");
+              }}
+              onSkip={() => setStage("selection")}
+            >
+              {voiceControl}
+            </GameDialogue>
+          </GameScene>
         )}
 
         {(stage === "launch" || stage === "landing") && (
-          <section
-            className="mission-transition"
-            aria-labelledby="mission-heading"
-          >
-            <div className="transition-art">
-              <RocketIllustration
-                phase={stage === "launch" ? "launch" : "landing"}
-              />
-            </div>
-            <div className="transition-copy">
-              <p className="mission-eyebrow">
-                {stage === "launch" ? "Rumo à Lua" : "Decisão registrada"}
-              </p>
-              <h1
-                id="mission-heading"
-                className="mission-title"
-                tabIndex={-1}
-                ref={headingRef}
-              >
+          <GameScene phase={stage}>
+            <div className="game-cinematic-caption">
+              <h1 ref={headingRef} tabIndex={-1}>
                 {stage === "launch"
-                  ? "Próxima parada: sua descoberta."
-                  : "Vamos imaginar esse pouso."}
+                  ? "Rumo à Lua"
+                  : "Aproximando da superfície"}
               </h1>
-              <p>Uma viagem ilustrativa de poucos segundos.</p>
+              <p>Viagem ilustrativa</p>
               <button
-                className="mission-button mission-button-secondary"
+                className="game-dialogue-skip"
                 onClick={() =>
-                  setStage(stage === "launch" ? "selection" : "complete")
+                  setStage(stage === "launch" ? "arrival" : "complete")
                 }
               >
-                {stage === "launch"
-                  ? "Pular decolagem"
-                  : "Pular pouso e ver resumo"}
+                {stage === "launch" ? "Pular decolagem" : "Pular pouso"}
               </button>
             </div>
-          </section>
+          </GameScene>
+        )}
+
+        {stage === "arrival" && (
+          <GameScene phase="arrival">
+            <h1 className="game-scene-heading" ref={headingRef} tabIndex={-1}>
+              Chegamos à Lua
+            </h1>
+            <GameDialogue
+              text={arrivalDialogue[arrivalIndex]}
+              active={!dialog}
+              nextLabel={
+                arrivalIndex === arrivalDialogue.length - 1
+                  ? "Escolher um local"
+                  : "Continuar"
+              }
+              onNext={() => {
+                if (arrivalIndex < arrivalDialogue.length - 1)
+                  setArrivalIndex((index) => index + 1);
+                else setStage("selection");
+              }}
+              onSkip={() => setStage("selection")}
+            >
+              {voiceControl}
+            </GameDialogue>
+          </GameScene>
         )}
 
         {stage === "selection" && (
-          <section
-            className="mission-selection"
-            aria-labelledby="mission-heading"
-          >
-            <div className="mission-section-heading">
-              <div>
-                <p className="mission-eyebrow">Você está no comando</p>
-                <h1
-                  id="mission-heading"
-                  className="mission-title"
-                  ref={headingRef}
-                  tabIndex={-1}
-                >
-                  Onde vamos pousar?
-                </h1>
-              </div>
-              <p>
-                Neste exercício, procure Sol e Terra acima do horizonte
-                idealizado.
-              </p>
-            </div>
-            <div className="mission-workspace">
-              <div className="mission-map-panel" id="mission-map-panel">
-                <div className="map-heading">
-                  <h2 tabIndex={-1} ref={mapHeadingRef}>
-                    Explore os locais
-                  </h2>
-                  <span className="mission-map-counter">
-                    {visitedSiteIds.length} de {MISSION_SITES.length} explorados
-                  </span>
+          <GameScene phase="selection">
+            <section
+              className="mission-selection"
+              aria-labelledby="mission-heading"
+            >
+              <div className="mission-section-heading">
+                <div>
+                  <p className="mission-eyebrow">Você está no comando</p>
+                  <h1
+                    id="mission-heading"
+                    className="mission-title"
+                    ref={headingRef}
+                    tabIndex={-1}
+                  >
+                    Onde vamos pousar?
+                  </h1>
                 </div>
-                <p className="map-caption">
-                  Selecione um dos quatro pontos para investigar.
+                <p>
+                  Neste exercício, procure Sol e Terra acima do horizonte
+                  idealizado.
                 </p>
-                <PolarMissionMap
-                  sites={MISSION_SITES}
-                  selectedSiteId={selectedSiteId}
-                  visitedSiteIds={visitedSiteIds}
-                  onSelect={selectSite}
-                  onDiscover={discover}
-                  discovered={discovered}
-                />
               </div>
-              <div className="mission-analysis-panel" ref={analysisPanelRef}>
-                {selectedSiteId && (
-                  <button
-                    className="mission-map-return mission-button mission-button-quiet"
-                    aria-controls="mission-map-panel"
-                    onClick={returnToMap}
-                  >
-                    Voltar ao mapa
-                  </button>
-                )}
-                <div className="mission-date-control">
-                  <label htmlFor="mission-date">
-                    Data da observação <span>· 00:00 UTC</span>
-                  </label>
-                  <select
-                    id="mission-date"
-                    value={date}
-                    onChange={(event) => setDate(event.target.value)}
-                  >
-                    {MISSION_DATES.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {!selectedSiteId && (
-                  <div className="analysis-empty">
-                    <span aria-hidden="true">
-                      <Arrow direction="up-left" />
+              <div className="mission-workspace">
+                <div className="mission-map-panel" id="mission-map-panel">
+                  <div className="map-heading">
+                    <h2 tabIndex={-1} ref={mapHeadingRef}>
+                      Explore os locais
+                    </h2>
+                    <span className="mission-map-counter">
+                      {visitedSiteIds.length} de {MISSION_SITES.length}{" "}
+                      explorados
                     </span>
-                    <h2>Sua descoberta começa no mapa.</h2>
-                    <p>
-                      Escolha um local para comparar o Sol e a Terra. Você pode
-                      experimentar quantas opções quiser.
-                    </p>
                   </div>
-                )}
-                {result.error && (
-                  <div role="alert" className="mission-error">
-                    <h2>Dados indisponíveis</h2>
-                    <p>{result.error}</p>
-                  </div>
-                )}
-                {analysis && (
-                  <div className="analysis-content">
-                    <div className="mission-site-heading">
-                      <p className="mission-eyebrow">Local em análise</p>
-                      <h2>{analysis.site.label}</h2>
-                      <p>
-                        {analysis.site.latitudeDeg}° de latitude ·{" "}
-                        {analysis.site.longitudeDeg}° de longitude
-                      </p>
-                    </div>
-                    <div
-                      className="target-cards"
-                      aria-label="Direção para explicar"
+                  <p className="map-caption">
+                    Selecione um dos quatro pontos para investigar.
+                  </p>
+                  <PolarMissionMap
+                    sites={MISSION_SITES}
+                    selectedSiteId={selectedSiteId}
+                    visitedSiteIds={visitedSiteIds}
+                    onSelect={selectSite}
+                    onDiscover={discover}
+                    discovered={discovered}
+                  />
+                </div>
+                <div className="mission-analysis-panel" ref={analysisPanelRef}>
+                  {selectedSiteId && (
+                    <button
+                      className="mission-map-return mission-button mission-button-quiet"
+                      aria-controls="mission-map-panel"
+                      onClick={returnToMap}
                     >
-                      {(["sun", "earth"] as const).map((name) => (
-                        <button
-                          key={name}
-                          className={`target-card${target === name ? " is-selected" : ""}`}
-                          aria-pressed={target === name}
-                          onClick={() => setTarget(name)}
-                        >
-                          <span className="target-name">
-                            <span aria-hidden="true">
-                              {name === "sun" ? "☀" : "◉"}
-                            </span>
-                            {targetLabels[name]}
-                          </span>
-                          <span className="target-elevation">
-                            {formatAngle(analysis[name].elevationDeg)}
-                          </span>
-                          <span className="target-status">
-                            {directionLabel(analysis[name])}
-                          </span>
-                        </button>
+                      Voltar ao mapa
+                    </button>
+                  )}
+                  <div className="mission-date-control">
+                    <label htmlFor="mission-date">
+                      Data da observação <span>· 00:00 UTC</span>
+                    </label>
+                    <select
+                      id="mission-date"
+                      value={date}
+                      onChange={(event) => setDate(event.target.value)}
+                    >
+                      {MISSION_DATES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
                       ))}
-                    </div>
-                    <div className="mission-diagram-panel">
-                      <HorizonDiagram analysis={analysis} target={target} />
-                    </div>
-                    <div
-                      className={`mission-explanation ${meetsGoal ? "is-positive" : "is-negative"}`}
-                      role="status"
-                    >
-                      <h3>
-                        {meetsGoal
-                          ? "As duas direções estão acima."
-                          : "Este ponto ainda não atende ao objetivo."}
-                      </h3>
+                    </select>
+                  </div>
+                  {!selectedSiteId && (
+                    <div className="analysis-empty">
+                      <span aria-hidden="true">
+                        <Arrow direction="up-left" />
+                      </span>
+                      <h2>Sua descoberta começa no mapa.</h2>
                       <p>
-                        {meetsGoal
-                          ? "Os centros do Sol e da Terra estão acima do horizonte idealizado nesta data. Você encontrou uma opção para concluir o exercício."
-                          : `${analysis.sun.elevationDeg <= 0 && analysis.earth.elevationDeg <= 0 ? "O Sol e a Terra estão" : analysis.sun.elevationDeg <= 0 ? "O Sol está" : "A Terra está"} no horizonte ou abaixo dele nesta data. Experimente outro ponto ou outra data e compare.`}
+                        Escolha um local para comparar o Sol e a Terra. Você
+                        pode experimentar quantas opções quiser.
                       </p>
                     </div>
-                    <div className="mission-actions">
-                      <button
-                        className="mission-button mission-button-primary"
-                        disabled={!meetsGoal}
-                        onClick={() => {
-                          if (meetsGoal) setStage("landing");
-                        }}
-                      >
-                        Pousar neste local <Arrow direction="down" />
-                      </button>
-                      {!meetsGoal && (
-                        <button
-                          className="mission-button mission-button-secondary"
-                          onClick={returnToMap}
-                        >
-                          Escolher outro ponto
-                        </button>
-                      )}
+                  )}
+                  {result.error && (
+                    <div role="alert" className="mission-error">
+                      <h2>Dados indisponíveis</h2>
+                      <p>{result.error}</p>
                     </div>
-                    <p className="mission-footnote">
-                      Ângulos dos centros dos astros. Esta comparação não
-                      determina energia, comunicação ou segurança de um pouso
-                      real.
-                    </p>
-                  </div>
-                )}
+                  )}
+                  {analysis && (
+                    <div className="analysis-content">
+                      <div className="mission-site-heading">
+                        <p className="mission-eyebrow">Local em análise</p>
+                        <h2>{analysis.site.label}</h2>
+                        <p>
+                          {analysis.site.latitudeDeg}° de latitude ·{" "}
+                          {analysis.site.longitudeDeg}° de longitude
+                        </p>
+                      </div>
+                      <div
+                        className="target-cards"
+                        aria-label="Direção para explicar"
+                      >
+                        {(["sun", "earth"] as const).map((name) => (
+                          <button
+                            key={name}
+                            className={`target-card${target === name ? " is-selected" : ""}`}
+                            aria-pressed={target === name}
+                            onClick={() => setTarget(name)}
+                          >
+                            <span className="target-name">
+                              <span aria-hidden="true">
+                                {name === "sun" ? "☀" : "◉"}
+                              </span>
+                              {targetLabels[name]}
+                            </span>
+                            <span className="target-elevation">
+                              {formatAngle(analysis[name].elevationDeg)}
+                            </span>
+                            <span className="target-status">
+                              {directionLabel(analysis[name])}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mission-diagram-panel">
+                        <HorizonDiagram analysis={analysis} target={target} />
+                      </div>
+                      <div
+                        className={`mission-explanation ${meetsGoal ? "is-positive" : "is-negative"}`}
+                        role="status"
+                      >
+                        <h3>
+                          {meetsGoal
+                            ? "As duas direções estão acima."
+                            : "Este ponto ainda não atende ao objetivo."}
+                        </h3>
+                        <p>
+                          {meetsGoal
+                            ? "Os centros do Sol e da Terra estão acima do horizonte idealizado nesta data. Você encontrou uma opção para concluir o exercício."
+                            : `${analysis.sun.elevationDeg <= 0 && analysis.earth.elevationDeg <= 0 ? "O Sol e a Terra estão" : analysis.sun.elevationDeg <= 0 ? "O Sol está" : "A Terra está"} no horizonte ou abaixo dele nesta data. Experimente outro ponto ou outra data e compare.`}
+                        </p>
+                      </div>
+                      <div className="mission-actions">
+                        <button
+                          className="mission-button mission-button-primary"
+                          disabled={!meetsGoal}
+                          onClick={() => {
+                            if (meetsGoal) setStage("landing");
+                          }}
+                        >
+                          Pousar neste local <Arrow direction="down" />
+                        </button>
+                        {!meetsGoal && (
+                          <button
+                            className="mission-button mission-button-secondary"
+                            onClick={returnToMap}
+                          >
+                            Escolher outro ponto
+                          </button>
+                        )}
+                      </div>
+                      <p className="mission-footnote">
+                        Ângulos dos centros dos astros. Esta comparação não
+                        determina energia, comunicação ou segurança de um pouso
+                        real.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </GameScene>
         )}
 
         {stage === "complete" && analysis && (
-          <section
-            className="mission-complete"
-            aria-labelledby="mission-heading"
-          >
-            <div className="complete-art">
-              <RocketIllustration phase="landed" />
-              <GuidePortrait mood="happy" />
-            </div>
-            <div className="complete-copy">
-              <p className="mission-eyebrow">Uma escolha, uma descoberta</p>
-              <h1
-                className="mission-title"
-                id="mission-heading"
-                tabIndex={-1}
-                ref={headingRef}
-              >
+          <GameScene phase="complete">
+            <div className="game-result-caption">
+              <h1 ref={headingRef} tabIndex={-1}>
                 Escolha registrada.
               </h1>
-              <p className="mission-intro">
-                Você comparou o céu antes de escolher o chão.
+              <h2>{analysis.site.label}</h2>
+              <p>{dateLabel}</p>
+              <p>
+                Sol {formatAngle(analysis.sun.elevationDeg)} · Terra{" "}
+                {formatAngle(analysis.earth.elevationDeg)}
               </p>
-              <div className="mission-summary">
-                <h2>{analysis.site.label}</h2>
-                <p>{dateLabel}</p>
-                <dl>
-                  {(["sun", "earth"] as const).map((name) => (
-                    <div key={name}>
-                      <dt>{targetLabels[name]}</dt>
-                      <dd>
-                        {formatAngle(analysis[name].elevationDeg)}{" "}
-                        <span>{directionLabel(analysis[name])}</span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-              <MissionDialogue
-                text="Boa! Você encontrou o Sol e a Terra acima do horizonte deste exercício. Num pouso de verdade, ainda precisamos estudar o relevo, a energia e a comunicação. Quer testar outro local?"
-                active={!dialog}
-              />
-              <div className="mission-actions">
-                <button
-                  className="mission-button mission-button-primary"
-                  onClick={() => setStage("selection")}
-                >
-                  Explorar outra opção <Arrow />
-                </button>
-              </div>
               <p className="mission-footnote">
                 Pouso ilustrativo em um local hipotético.
               </p>
             </div>
-          </section>
+            <GameDialogue
+              text={spokenText}
+              active={!dialog}
+              nextLabel="Explorar outra opção"
+              onNext={() => setStage("selection")}
+            >
+              {voiceControl}
+            </GameDialogue>
+          </GameScene>
         )}
-
-        <footer className="mission-footer">
-          <span>Uma missão de curiosidade.</span>
-          <span>Direções calculadas · cenário ilustrado</span>
-        </footer>
       </div>
 
       {dialog && (
@@ -701,6 +648,13 @@ export function MissionApp() {
                     <dd>{MISSION_PROVENANCE.limitation}</dd>
                   </div>
                 </dl>
+                <p className="mission-asset-credit">
+                  Cenário: ilustração de terreno lunar do acervo{" "}
+                  <a href="https://github.com/nasa/NASA-3D-Resources/blob/11ebb4ee043715aefbba6aeec8a61746fad67fa7/Images%20and%20Textures/Moon%20-%20Lunar%20Terrain/Moon%20-%20Lunar%20Terrain.jpg">
+                    NASA 3D Resources
+                  </a>
+                  . Não representa o local escolhido nem um horizonte calculado.
+                </p>
                 <p className="mission-asset-credit">
                   Astronauta:{" "}
                   <a href="https://poly.google.com/view/dLHpzNdygsg">
