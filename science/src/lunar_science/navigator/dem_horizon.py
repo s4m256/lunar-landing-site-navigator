@@ -1,4 +1,8 @@
-"""LRO LOLA South Pole DEM parser, slope estimator, geodesic horizon ray-marcher, and PSR proximity."""
+"""LRO LOLA South Pole DEM parser, slope estimator, horizon ray-marcher, and PSR classification.
+
+Rays are marched along great circles of the reference sphere (R_ref = 1737.4 km) with the
+curvature formula below; this is a spherical model, not an exact geodesic on the real figure.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,58 @@ from typing import Tuple
 import numpy as np
 
 from .data_sources import LUNAR_REFERENCE_RADIUS_M
+
+#: Mean inclination of the lunar equator to the ecliptic (deg). This was the old fixed sub-solar
+#: latitude of the solar envelope; it is NOT a bound in MOON_ME (DE421 gives -1.557 deg on
+#: 2026-11-15, the start of the committed window).
+MEAN_LUNAR_EQUATOR_TO_ECLIPTIC_DEG = 1.543
+
+#: Most southern Moon-centered sub-solar latitude in MOON_ME over 1900-2050 according to DE421
+#: positions + moon_pa_de421_1900-2050.bpc orientation: -1.5903 deg (1927-03-19), computed by
+#: tests/fixtures/generate_independent_de421_reference.py (key
+#: ``subsolar_latitude_extremes_1900_2050``) and rounded outward. Default of the PSR envelope.
+DE421_SUBSOLAR_LAT_SOUTH_EXTREME_DEG = -1.591
+
+#: Largest solar angular radius seen from the Moon: asin(R_sun / d_min) with d_min ~ Earth
+#: perihelion (0.9833 AU) minus the lunar apogee distance (~0.0027 AU), i.e. ~0.2717 deg.
+#: Used so a PSR point keeps even the top limb of the largest solar disk below its horizon.
+MAX_SOLAR_ANGULAR_RADIUS_DEG = 0.272
+
+
+@dataclass(frozen=True)
+class PsrCriterion:
+    """Single definition of "permanently shadowed" for ``is_psr`` flags and PSR distances.
+
+    A point is PSR when, at every azimuth of its horizon profile, the terrain horizon is at or
+    above the top limb of the Sun placed on the maximum-elevation envelope, i.e. with the sub-solar
+    latitude at ``subsolar_lat_extreme_deg`` (the most southern value considered) and a disk of
+    radius ``solar_radius_deg``. It refers to the horizon computed at the caller's observer
+    height (the pipeline uses the site observer height, 2 m by default), not to ground level.
+    The Sun is treated as infinitely far (topocentric parallax <= 0.0007 deg is neglected).
+    """
+
+    subsolar_lat_extreme_deg: float = DE421_SUBSOLAR_LAT_SOUTH_EXTREME_DEG
+    solar_radius_deg: float = MAX_SOLAR_ANGULAR_RADIUS_DEG
+
+    def describe(self) -> str:
+        return (
+            f"horizon >= solar-center envelope (sub-solar latitude {self.subsolar_lat_extreme_deg:.3f} deg) "
+            f"+ {self.solar_radius_deg:.3f} deg solar radius at every azimuth"
+        )
+
+
+def is_permanently_shadowed(
+    lat_deg: float,
+    horizon_az_deg: np.ndarray,
+    horizon_elev_deg: np.ndarray,
+    criterion: PsrCriterion | None = None,
+) -> bool:
+    """Apply :class:`PsrCriterion` to one horizon profile (South Pole region, ``lat_deg < 0``)."""
+    crit = criterion or PsrCriterion()
+    envelope = max_solar_elevation_curve(
+        lat_deg, np.asarray(horizon_az_deg, dtype=np.float64), subsolar_lat_deg=crit.subsolar_lat_extreme_deg
+    )
+    return bool(np.all(np.asarray(horizon_elev_deg, dtype=np.float64) >= envelope + crit.solar_radius_deg))
 
 
 @dataclass(frozen=True)
@@ -87,16 +143,25 @@ def selenographic_to_cartesian_me(
     )
 
 
-def max_solar_elevation_curve(lat_deg: float, azimuths_deg: np.ndarray) -> np.ndarray:
+def max_solar_elevation_curve(
+    lat_deg: float,
+    azimuths_deg: np.ndarray,
+    subsolar_lat_deg: float = DE421_SUBSOLAR_LAT_SOUTH_EXTREME_DEG,
+) -> np.ndarray:
     """
-    Analytical upper bound of solar center elevation over an 18.6-year lunar cycle
-    for each topocentric azimuth (North=0, East=90) at southern latitude lat_deg.
-    Derived from sin(delta_sun) = sin(lat)*sin(el) + cos(lat)*cos(el)*cos(az),
-    evaluated at southern summer peak subsolar latitude delta_sun = -1.543 deg.
+    Solar-center elevation at each topocentric azimuth (North=0, East=90) for southern latitude
+    ``lat_deg`` when the sub-solar latitude is ``subsolar_lat_deg``, from
+    sin(delta_sun) = sin(lat)*sin(el) + cos(lat)*cos(el)*cos(az) (Sun treated as infinitely far).
+
+    With the most southern sub-solar latitude reached, this is the maximum-elevation envelope
+    used for PSR classification. It is an upper bound only if ``subsolar_lat_deg`` really is the
+    extreme. The default is the DE421 extreme over 1900-2050 (-1.591 deg, see
+    ``DE421_SUBSOLAR_LAT_SOUTH_EXTREME_DEG``); the previous fixed -1.543 deg was exceeded already
+    in the committed window (-1.557 deg).
     """
     phi = math.radians(lat_deg)
     az = np.radians(azimuths_deg)
-    sin_delta = math.sin(math.radians(-1.543))
+    sin_delta = math.sin(math.radians(subsolar_lat_deg))
     a = math.sin(phi)
     b = math.cos(phi) * np.cos(az)
     norm = np.hypot(a, b)
@@ -222,8 +287,18 @@ class LolaSouthPoleDem:
         row, col = self.latlon_to_rowcol(lat_deg, lon_east_deg)
         return self.sample_elevation_rowcol(row, col)
 
+    @property
+    def slope_baseline_m(self) -> float:
+        """Map-grid baseline of :meth:`compute_slope_deg`: central differences over +/-1 pixel."""
+        return 2.0 * float(self.meta.map_scale_m)
+
     def compute_slope_deg(self, lat_deg: float, lon_east_deg: float) -> float:
-        """Compute local topographic slope angle via central finite differences on the DEM grid."""
+        """Topographic slope from central finite differences over a 2-pixel baseline.
+
+        On the 80 m/px LOLA grid the baseline is 160 m (``slope_baseline_m``; ground distance is
+        divided by the polar stereographic scale factor). This smooths relief at lander-footprint
+        scale (meters), so it is not a touchdown hazard slope; finer DEMs or imagery are needed.
+        """
         row, col = self.latlon_to_rowcol(lat_deg, lon_east_deg)
         r_f = float(row)
         c_f = float(col)
@@ -254,9 +329,11 @@ class LolaSouthPoleDem:
         az_step_deg: float = 1.0,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Geodesic ray-marching over sphere R_ref to determine horizon elevation h_horiz(Az).
-        Uses exact lunar curvature formula:
+        Ray-marching along great circles of the sphere R_ref to get horizon elevation h_horiz(Az).
+        Elevation of each terrain sample, including lunar curvature:
             theta_elev(s_i) = atan(((R_ref + z_i)*cos(psi_i) - (R_ref + z_0)) / ((R_ref + z_i)*sin(psi_i)))
+        Samples outside the DEM grid are assigned -90 deg (ignored); obstacles beyond
+        ``max_distance_m`` are not seen.
         """
         step = step_m if step_m is not None else self.meta.map_scale_m
         azimuths = np.arange(0.0, 360.0, az_step_deg, dtype=np.float64)
@@ -303,10 +380,15 @@ class LolaSouthPoleDem:
         horizon_elev = np.max(elev_deg, axis=1)
         return azimuths, horizon_elev
 
-    def is_site_psr(self, lat_deg: float, horizon_elev_deg: np.ndarray, azimuths_deg: np.ndarray) -> bool:
-        """Check whether a point remains shadowed across the maximum 18.6-year solar envelope."""
-        solar_max = max_solar_elevation_curve(lat_deg, azimuths_deg) + 0.27  # + solar angular radius
-        return bool(np.all(horizon_elev_deg > solar_max))
+    def is_site_psr(
+        self,
+        lat_deg: float,
+        horizon_elev_deg: np.ndarray,
+        azimuths_deg: np.ndarray,
+        criterion: PsrCriterion | None = None,
+    ) -> bool:
+        """Apply the single PSR criterion (:func:`is_permanently_shadowed`) to a horizon profile."""
+        return is_permanently_shadowed(lat_deg, azimuths_deg, horizon_elev_deg, criterion)
 
     def estimate_nearest_psr_distance_m(
         self,
@@ -314,10 +396,12 @@ class LolaSouthPoleDem:
         center_lon_east_deg: float,
         search_radius_m: float = 5000.0,
         coarse_step_m: float = 400.0,
-    ) -> float:
+        criterion: PsrCriterion | None = None,
+    ) -> float | None:
         """
-        Evaluate a local coarse patch around the landing site to locate real PSR pixels
-        on the LOLA DEM and return Euclidean distance (meters) to the closest PSR border.
+        Coarse standalone search (10 deg azimuths, adaptive ray steps to 80 km, 2 m observer) for
+        the nearest PSR point around a site. Not used by the pipeline. Returns ``None`` when no PSR
+        point is found within ``search_radius_m`` (the distance is then unknown, not the radius).
         """
         x0, y0 = self.latlon_to_xy_m(center_lat_deg, center_lon_east_deg)
         offsets = np.arange(-search_radius_m, search_radius_m + 0.1 * coarse_step_m, coarse_step_m)
@@ -358,6 +442,6 @@ class LolaSouthPoleDem:
             r0 = self.meta.reference_radius_m + float(z_p) + 2.0
             elev = np.where(in_b, np.degrees(np.arctan2(r_i * cos_psi - r0, r_i * sin_psi)), -90.0)
             horiz = np.max(elev, axis=1)
-            if self.is_site_psr(float(lat_p), horiz, az_coarse):
+            if self.is_site_psr(float(lat_p), horiz, az_coarse, criterion):
                 return float(d_m)
-        return float(search_radius_m)
+        return None
