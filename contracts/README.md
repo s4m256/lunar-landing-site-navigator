@@ -10,7 +10,7 @@
 | `status` | string | Literal `not_implemented` |
 | `message` | string | Texto de apresentação não vazio; não usar para decisões lógicas |
 
-Todos os campos são obrigatórios. Campos extras são rejeitados. Mensagens são objetos JSON em UTF-8. Não existe entrada científica nesta versão, nem coordenadas, unidades físicas, métricas ou resultados. `not_implemented` indica ausência de implementação, e nunca análise concluída, falha de análise ou ausência de candidatos.
+Todos os campos são obrigatórios. Campos extras são rejeitados. Mensagens são objetos JSON em UTF-8. **Este contrato de status** não tem entrada científica, coordenadas, unidades físicas, métricas nem resultados; esses dados ficam no contrato `navigator-dataset.v1`, descrito abaixo. `not_implemented` indica que não existe serviço de análise sob demanda por trás desse status. Não significa análise concluída, falha de análise nem ausência de candidatos, e não descreve o dataset pré-computado do navegador.
 
 ## Transporte e validação
 
@@ -24,5 +24,15 @@ Use versionamento semântico do contrato. Mudanças incompatíveis, inclusive no
 
 Define o payload pré-computado em grade para o navegador de sítios de pouso do Polo Sul lunar (`schema_version: "1.0.0"`), validado em Python (`jsonschema`) e no frontend (`Ajv`):
 
-- **Proveniência:** produto DEM LRO LOLA (`ldem_80s_80m`, raio de referência $R_{\text{ref}} = 1\,737\,400\text{ m}$, projeção estereográfica polar em `MOON_ME`), kernels NAIF SPICE com SHA-256 fixado e resumo de validação cruzada com o JPL Horizons.
-- **Sítios e malha local:** candidatos no Polo Sul e pontos vizinhos espaçados a $500\text{ m}$ contendo elevação, declividade ($\theta_{\text{slope}}$), distância até PSR, curva de horizonte $h_{\text{horiz}}(\text{Az})$ por *ray-marching* geodésico ($s_{\max} = 120\text{ km}$), séries horárias de Sol, Terra e satélites *relay* (LRO e ELFO *Lunar Pathfinder* / *LunaNet*), métricas solares/energéticas e *Landing Score* composto ($0\text{–}100$).
+- **Proveniência:** produto DEM LRO LOLA (`ldem_80s_80m`, raio de referência $R_{\text{ref}} = 1\,737\,400\text{ m}$, projeção estereográfica polar em `MOON_ME`), kernels NAIF SPICE com SHA-256 fixado e o resultado da comparação com o JPL Horizons (`horizons_validation`).
+- **Sítios e malha local:** candidatos no Polo Sul e pontos vizinhos espaçados a $500\text{ m}$ contendo elevação, declividade ($\theta_{\text{slope}}$, base de 160 m), distância até PSR, curva de horizonte $h_{\text{horiz}}(\text{Az})$ por *ray-marching* em círculos máximos da esfera de referência ($s_{\max} = 120\text{ km}$), séries horárias de Sol, Terra e satélites *relay* hipotéticos (cenário "LRO-like" e ELFO sem fonte; `LunaNet` é um arcabouço de interoperabilidade, não esta constelação), métricas solares/energéticas e um *Landing Score* composto ($0\text{–}100$) ilustrativo.
+
+### Semântica que o schema não expressa
+
+- **"Validado"** significa conformidade com este schema (forma), não validação científica.
+- **`horizons_validation.status`** (string livre no schema). O produtor atual usa `verified` quando todas as separações angulares estão dentro da tolerância declarada nas `notes` (resposta bruta retida em `outputs/validation/horizons_raw/`), `failed` fora da tolerância (com os números), `skipped_network_unavailable` quando o Horizons não pôde ser contatado e `not_requested`. O dataset commitado é anterior a essa regra: seu `verified` foi atribuído sem tolerância e sem retenção da resposta bruta.
+- **`psr_distance_m`**: quando nenhum PSR é encontrado no raio de busca, o produtor grava o próprio raio (5200 m) como sentinela, porque o schema exige número. Esse valor não é uma distância medida. O raio e o critério estão em `provenance.limitations`.
+- **`clps_slope_limit_deg`**: limite sem fonte. No produtor atual, declividade acima dele zera o score.
+- **Janela**: todas as métricas solares e de comunicação valem só para `mission_window`. O dataset commitado cobre 30 dias do pico do verão austral.
+
+Mudanças propostas para tornar essas regras explícitas no schema estão em [`../science/AUDIT_FOLLOWUPS.md`](../science/AUDIT_FOLLOWUPS.md); nenhuma foi aplicada.
