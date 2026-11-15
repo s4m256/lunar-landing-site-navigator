@@ -16,6 +16,14 @@ const browser = await chromium.launch({
   ],
 });
 const report = { checks: [], errors: [], samples: [] };
+// Reduced motion completes each line immediately; launch advances automatically.
+const reachMap = async (page) => {
+  for (let index = 0; index < 3; index++)
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.locator(".game-scene--arrival").waitFor();
+  for (let index = 0; index < 2; index++)
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+};
 try {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -36,7 +44,7 @@ try {
     { border: "0px", background: "rgba(0, 0, 0, 0)" },
   );
   await page.screenshot({ path: `${output}/dialogue.png`, fullPage: true });
-  await page.getByRole("button", { name: "Pular conversa" }).click();
+  await reachMap(page);
   await page.locator('.mission-globe[data-status="ready"]').waitFor();
   assert.equal(await page.locator(".mission-globe-pin").count(), 4);
   // Draw synchronously, then sample the real framebuffer before composition.
@@ -73,10 +81,10 @@ try {
     Math.max(...report.samples) - Math.min(...report.samples) > 20,
     "Polar relief must contain terrain detail, not a flat texture placeholder",
   );
-  await page.getByRole("button", { name: "Polo sul", exact: true }).click();
+  await page.getByRole("button", { name: "South pole", exact: true }).click();
   await page.screenshot({ path: `${output}/polar.png`, fullPage: true });
   await page
-    .getByRole("button", { name: "Ver Lua inteira", exact: true })
+    .getByRole("button", { name: "View whole Moon", exact: true })
     .click();
   await page.screenshot({ path: `${output}/globe.png`, fullPage: true });
   assert.equal(
@@ -84,12 +92,12 @@ try {
     0,
     "Overlapping zoomed-out hit targets are hidden until zoomed in",
   );
-  await page.getByRole("button", { name: "Polo sul", exact: true }).click();
-  const siteB = page.getByRole("button", { name: /^Local B,/ });
+  await page.getByRole("button", { name: "South pole", exact: true }).click();
+  const siteB = page.getByRole("button", { name: /^Site B,/ });
   await siteB.focus();
   await page.keyboard.press("Enter");
   assert.equal(await siteB.getAttribute("aria-pressed"), "true");
-  await page.getByRole("heading", { name: "Local B", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Site B", exact: true }).waitFor();
   for (const width of [320, 390, 768]) {
     await page.setViewportSize({ width, height: 844 });
     await page.locator(".mission-globe-stage").scrollIntoViewIfNeeded();
@@ -132,8 +140,8 @@ try {
         .loseContext(),
     );
   await page.locator('.mission-globe[data-status="unavailable"]').waitFor();
-  await page.getByRole("button", { name: /^Local C ·/ }).click();
-  await page.getByRole("heading", { name: "Local C", exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Site C ·/ }).click();
+  await page.getByRole("heading", { name: "Site C", exact: true }).waitFor();
   await context.close();
 
   const fallback = await browser.newContext({ reducedMotion: "reduce" });
@@ -152,13 +160,13 @@ try {
   const alternative = await fallback.newPage();
   alternative.on("pageerror", (error) => report.errors.push(String(error)));
   await alternative.goto(url, { waitUntil: "networkidle" });
-  await alternative.getByRole("button", { name: "Pular conversa" }).click();
+  await reachMap(alternative);
   await alternative
     .locator('.mission-globe[data-status="unavailable"]')
     .waitFor();
-  await alternative.getByRole("button", { name: /^Local B ·/ }).click();
+  await alternative.getByRole("button", { name: /^Site B ·/ }).click();
   await alternative
-    .getByRole("heading", { name: "Local B", exact: true })
+    .getByRole("heading", { name: "Site B", exact: true })
     .waitFor();
   report.checks.push(
     "Context loss and missing WebGL expose an operational coordinate list without fabricating a terrain view. Dialogue font loads and its panel border/background are absent.",

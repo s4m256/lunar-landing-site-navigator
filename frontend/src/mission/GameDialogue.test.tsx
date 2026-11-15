@@ -45,13 +45,13 @@ describe("GameDialogue", () => {
     const next = vi.fn();
     const { container } = render(<GameDialogue text="A🌖!" onNext={next} />);
     expect(
-      screen.getByRole("group", { name: "Fala de Lua" }),
+      screen.getByRole("group", { name: "Dialogue from Lua" }),
     ).toHaveTextContent("A🌖!");
     expect(visualText(container)?.textContent).toBe("");
     act(() => vi.advanceTimersByTime(60));
     expect(visualText(container)?.textContent).toBe("A🌖");
     act(() => vi.advanceTimersByTime(30));
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(next).toHaveBeenCalledOnce();
   });
 
@@ -60,21 +60,21 @@ describe("GameDialogue", () => {
     const { container, rerender } = render(
       <GameDialogue text="Primeira" onNext={next} />,
     );
-    const button = screen.getByRole("button", { name: "Mostrar fala" });
+    const button = screen.getByRole("button", { name: "Continue" });
     button.focus();
     fireEvent.click(button);
     expect(visualText(container)?.textContent).toBe("Primeira");
-    expect(button).toHaveTextContent("Continuar");
+    expect(button).toHaveTextContent("Continue");
     expect(button).toHaveFocus();
     expect(next).not.toHaveBeenCalled();
     fireEvent.click(button);
     expect(next).toHaveBeenCalledOnce();
-    rerender(<GameDialogue text="Segunda" onNext={next} nextLabel="Ir" />);
+    rerender(<GameDialogue text="Segunda" onNext={next} nextLabel="Go" />);
     expect(button).toHaveFocus();
-    expect(button).toHaveTextContent("Mostrar fala");
+    expect(button).toHaveTextContent("Go");
     expect(visualText(container)?.textContent).toBe("");
     fireEvent.click(button);
-    expect(button).toHaveTextContent("Ir");
+    expect(button).toHaveTextContent("Go");
   });
 
   it("cancels the previous line and pauses while inactive", () => {
@@ -88,12 +88,26 @@ describe("GameDialogue", () => {
     expect(clear).toHaveBeenCalledWith(timer);
     act(() => vi.advanceTimersByTime(100));
     expect(visualText(container)?.textContent).toBe("");
-    expect(screen.getByRole("button", { name: "Mostrar fala" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
     rerender(<GameDialogue text="Nova" onNext={vi.fn()} />);
     act(() => vi.advanceTimersByTime(30));
     expect(visualText(container)?.textContent).toBe("N");
     unmount();
     expect(listeners.size).toBe(0);
+  });
+
+  it("supports back navigation and moves focus to Continue when Back becomes disabled", () => {
+    const back = vi.fn();
+    const { rerender } = render(<GameDialogue text="Second" onNext={vi.fn()} onBack={back} />);
+    const button = screen.getByRole("button", { name: "Back" });
+    button.focus();
+    fireEvent.click(button);
+    expect(back).toHaveBeenCalledOnce();
+    rerender(<GameDialogue text="First" onNext={vi.fn()} />);
+    expect(button).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue" })).toHaveFocus();
+    rerender(<GameDialogue text="First" onNext={vi.fn()} onBack={back} active={false} />);
+    expect(button).toBeDisabled();
   });
 
   it("honors reduced motion and offers an optional skip", () => {
@@ -105,17 +119,17 @@ describe("GameDialogue", () => {
     const { container } = render(
       <GameDialogue
         text="Sem espera"
-        speaker="Guia"
+        speaker="Guide"
         onNext={vi.fn()}
         onSkip={skip}
       />,
     );
     expect(visualText(container)?.textContent).toBe("Sem espera");
     expect(
-      screen.getByRole("group", { name: "Fala de Guia" }),
+      screen.getByRole("group", { name: "Dialogue from Guide" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Pular conversa" }));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Skip intro" }));
     expect(skip).toHaveBeenCalledOnce();
   });
 });

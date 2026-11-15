@@ -295,7 +295,7 @@ export function MissionGlobe({
         className="mission-globe-stage"
         ref={mount}
         role="group"
-        aria-label="Lua: arraste para girar e use a roda do mouse para aproximar"
+        aria-label="Moon: drag to rotate and use the mouse wheel to zoom"
       >
         {available &&
           ready &&
@@ -310,28 +310,28 @@ export function MissionGlobe({
                 className="mission-globe-pin"
                 style={{ left: pin.x, top: pin.y }}
                 onClick={() => onSelect(pin.id)}
-                aria-label={`${site.label}, ${site.latitudeDeg} graus de latitude, ${site.longitudeDeg} graus leste`}
+                aria-label={`${site.label}, ${site.latitudeDeg} degrees latitude, ${site.longitudeDeg} degrees east`}
                 aria-pressed={selectedSiteId === pin.id}
               >
-                <span>{site.label.replace("Local ", "")}</span>
+                <span>{site.label.replace("Site ", "")}</span>
               </button>
             );
           })}
         {!available && (
           <p className="mission-globe-unavailable" role="status">
-            A visualização da Lua está indisponível neste navegador. Você pode
-            escolher pelas coordenadas na lista.
+            The Moon view is unavailable in this browser. Choose a site by
+            its coordinates in the list.
           </p>
         )}
         {available && !ready && (
           <p className="mission-globe-loading" role="status">
-            Carregando a superfície lunar…
+            Loading the lunar surface…
           </p>
         )}
       </div>
       {available && ready && crowded && (
         <p className="mission-globe-hint">
-          Aproxime o polo sul para escolher um ponto.
+          Zoom in on the south pole to choose a site.
         </p>
       )}
       <div className="mission-globe-controls">
@@ -342,11 +342,11 @@ export function MissionGlobe({
               overview ? reset.current?.() : wholeMoon.current?.()
             }
           >
-            {overview ? "Polo sul" : "Ver Lua inteira"}
+            {overview ? "South pole" : "View whole Moon"}
           </button>
         )}
         <details className="mission-globe-list" open={!available || undefined}>
-          <summary>Lista de locais</summary>
+          <summary>Site list</summary>
           <div className="mission-globe-list-items">
             {sites.map((site) => (
               <button
@@ -355,7 +355,7 @@ export function MissionGlobe({
                 onClick={() => onSelect(site.id)}
                 aria-pressed={selectedSiteId === site.id}
               >
-                {site.label} · {site.latitudeDeg}°, {site.longitudeDeg}° L
+                {site.label} · {site.latitudeDeg}°, {site.longitudeDeg}° E
                 {visitedSiteIds.includes(site.id) ? " ✓" : ""}
               </button>
             ))}
@@ -367,16 +367,16 @@ export function MissionGlobe({
           onClick={onDiscover}
           aria-label={
             discovered
-              ? "Reabrir bônus educativo"
-              : "Sinal desconhecido, bônus educativo"
+              ? "Reopen educational bonus"
+              : "Unknown signal, educational bonus"
           }
         >
           ?
         </button>
       </div>
       <p className="mission-globe-credit">
-        LROC / LOLA · Locais hipotéticos. Sombreamento apenas para mostrar o
-        relevo.
+        LROC / LOLA · Hypothetical sites. Shading illustrates terrain only.
+        The DEM uses MOON_ME; analysis uses IAU_MOON, so the map is approximate.
       </p>
     </div>
   );

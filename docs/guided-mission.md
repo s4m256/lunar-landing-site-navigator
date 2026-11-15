@@ -1,43 +1,39 @@
-# Implementação da missão guiada
+# Guided mission implementation
 
-## Escopo entregue
+The English interface follows briefing → illustrative flight → arrival dialogue → Moon selection and analysis → illustrative landing → final dialogue. The astronaut appears in the scenery; monospaced text has no dialogue box. Back and Continue are the only conversation controls. Continue reveals incomplete text before advancing; Back revisits earlier lines. On the first line, Back is disabled. The globe and scientific comparisons are unchanged.
 
-A aplicação abre em uma cena de jogo: astronauta no cenário lunar, falas curtas digitadas e diálogo monoespaçado sem caixa na parte inferior. A sequência é apresentação → viagem ilustrativa → conversa de chegada → mapa e análise → pouso ilustrativo → fala final. Conversas e animações podem ser puladas. São quatro observadores científicos hipotéticos e um bônus separado da superfície, sem coordenadas científicas. O usuário não precisa descobrir o bônus para concluir.
+## Components
 
-Sol e Terra ficam simultaneamente nos cartões; selecionar um cartão muda o corte explicativo. A data muda o resultado para todos os pontos. O corte conserva a proporção entre os eixos e o sinal do ângulo; raios abaixo do horizonte são tracejados. Não existem interseções de montanhas calculadas nesta versão.
+- `MissionApp.tsx`: stages, selection/date, navigation, focus, modal, audit download, and errors. Existing 3.2-second flights remain skippable and are bypassed for reduced motion. About pauses the active flight timer and resumes its remaining duration.
+- `mission-copy.ts`: the three briefing lines, two arrival lines, and completion text.
+- `GameDialogue.tsx` and `TypewriterText.tsx`: stable Back/Continue controls, typewriter effect, full accessible text, and reduced motion. No voice control is mounted.
+- `GameScene.tsx` and scene styles: the existing Poly astronaut, NASA 3D Resources terrain illustration, and symbolic SVG spacecraft. They do not represent measured landing-site terrain.
+- `globe/MissionGlobe.tsx`: camera, coordinates, markers, and LROC/LOLA assets adapted from commit 343d31f. See the [source and limitations](../frontend/src/mission/globe/README.md).
+- `HorizonDiagram.tsx`: a section in the selected azimuth, with equal angle scales and dashed rays below the ideal horizon. Icon distances and sizes are illustrative. No mountain intersections are computed.
+- `mission-data.ts`: validates schema, coordinates, UTC grid, kernels, and results. Errors never substitute invented values. The scientific JSON schemas remain unchanged.
 
-## Organização
+## Accessibility
 
-- `MissionApp.tsx`: etapas, decisões, seleção/data, foco, diálogo, download e erros. Viagens de 3,2 s, puláveis e omitidas com movimento reduzido. Abrir “Sobre a missão” pausa animação e contagem de tempo; fechar retoma o tempo restante.
-- `MissionArt.tsx` e `mission.css`: guia com a imagem existente Astronaut, de Poly (CC BY 2.0), nave em SVG e a versão antiga do mapa esquemático, preservada fora do fluxo principal. A seleção atual usa `globe/MissionGlobe.tsx`, que adapta câmera, coordenadas, marcadores e assets do commit 343d31f, com superfície global LROC e cap polar derivado do DEM LOLA. Ver [fonte e limitações](../frontend/src/mission/globe/README.md).
-- `GameScene.tsx`, `game-scene.css` e `game-shell.css`: cenário em tela cheia com ilustração existente do NASA 3D Resources, astronauta C e movimento ilustrativo da nave; não representam relevo medido do local.
-- `GameDialogue.tsx`, `TypewriterText.tsx` e `SpeechControl.tsx`: o mesmo botão completa a fala ou avança para a próxima; o controle de voz fica na opção recolhida “Voz”. Ver [voz e validação](guide-voice.md) e [crédito da imagem](assets/astronaut.md).
-- `HorizonDiagram.tsx`: corte no azimute selecionado. Origem no horizonte tangente; comprimentos e tamanhos não são distâncias físicas. A animação revela uma direção estática, sem interpolar data ou simular propagação da luz.
-- `mission-data.ts`: valida contrato, coordenadas, grade UTC, kernels e resultados. Falha gera erro tratável pela interface, nunca valores substitutos.
-- `types.ts`: contrato de apresentação. Contratos científicos JSON Schema intactos.
-- `base.css`: base mínima da entrada principal. O estilo anterior pertence a `LegacyApp.tsx`, evitando interferência na nova interface.
+The dialogue exposes complete text to assistive technology without announcing each typed character. Controls retain keyboard focus across lines; returning to the first line moves focus from the now-disabled Back control to Continue. Touch targets are at least 44 px. Reduced motion shows text immediately and bypasses flight animations.
 
-## Acessibilidade e celular
+The context modal makes its background inert, traps focus, closes with Escape, and restores focus. Stage transitions focus headings without stealing focus on initial load. Small-screen site selection scrolls to the analysis; Back to map preserves site, date, and selected body. The Moon provides a coordinate-list fallback when WebGL is absent or lost.
 
-Mapa com botões HTML de no mínimo 44 px, seleção por teclado e indicação textual de visitado. Cartões com `aria-pressed`; valores e explicações fora dos SVGs. O diálogo torna o fundo inerte, controla foco, fecha com Escape e restaura foco. Foco nas mudanças de etapa, sem roubar foco no carregamento inicial.
+## Standalone delivery
 
-Em telas pequenas, selecionar um local revela o painel por rolagem imediata. Voltar ao mapa preserva local, data e astro. Movimento reduzido elimina transições, animação dos raios e digitação progressiva. A voz é opcional, iniciada por botão; não há webcam, reprodução contínua ou vídeos obrigatórios.
+`npm run build:offline` embeds code, styles, assets, the font license, and scientific data in `Lunar-English.html` and the compatibility alias `Lunar-Missao.html`. README.txt explains how to open it. There are no required external requests. The audit download uses a Blob URL revoked on cleanup.
 
-## Distribuição autocontida
+`node scripts/build-guide-preview.mjs /path/to/delivery` also updates previous preview filenames to the same application. Vite remains available. Its existing large-chunk warning includes scientific JSON, validation, and Three.js; it is not suppressed.
 
-`npm run build:offline` incorpora JavaScript, CSS, ilustrações e dados em `Lunar-Missao.html`, junto de um LEIA-ME. A saída padrão fica no diretório temporário; um argumento escolhe outra pasta. Não depende de CDN ou fetch de recursos para a interface e os dados. As vozes vêm do navegador/dispositivo; algumas dependem de internet. A auditoria usa uma URL Blob, revogada no cleanup.
+## Browser review
 
-O build regular Vite permanece disponível. Seu aviso de chunk acima de 500 kB inclui os dados científicos completos e a validação; não foi ocultado. Three.js é carregado na experiência principal para a seleção lunar; o globo renderiza sob demanda, sem animação orbital contínua.
-
-## Revisão no navegador
-
-Após `npm run build`, inicie o preview:
+Build, then run a preview:
 
 ```sh
+npm run build
 npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4174
 ```
 
-Em outro terminal, na raiz:
+Install review-only dependencies outside the repository and run from the repository root:
 
 ```sh
 npm install --prefix /tmp/lunar-review-browser --no-audit --no-fund playwright@1.65.1 @axe-core/playwright@4.14.0
@@ -45,16 +41,10 @@ cp scripts/mission-browser-review.mjs /tmp/lunar-review-browser/mission-review.m
 node /tmp/lunar-review-browser/mission-review.mjs
 ```
 
-Ajuste `CHROMIUM_EXECUTABLE` para o navegador instalado. `REVIEW_URL` e `REVIEW_OUTPUT` alteram endereço e pasta de evidências. O runner confere as 12 combinações, download, teclado, transições, movimento reduzido, foco, bônus, layouts de 320/390/768 px e critérios automatizados de acessibilidade com Axe.
+`REVIEW_URL`, `REVIEW_OUTPUT`, and `CHROMIUM_EXECUTABLE` select the target, evidence directory, and browser. The mission runner checks all 12 site/date combinations, 24 elevations, 24 azimuths, decisions, audit download, modal focus, bonus, animations, reduced motion, mobile layouts, and selected Axe accessibility rules.
 
-Para a distribuição, sirva a pasta do HTML localmente e use `REVIEW_URL=http://127.0.0.1:PORTA/Lunar-Missao.html OFFLINE_REVIEW=1`. Qualquer pedido HTTP adicional ao HTML é bloqueado. Isso verifica autonomia dos recursos; não certifica abertura por duplo clique em todos os navegadores/aparelhos.
+`guide-browser-review.mjs` checks two-button navigation, going back across scenes, speech API absence, English metadata, and desktop/mobile dialogue. `globe-browser-review.mjs` checks real WebGL rendering, polar detail, camera reset, touch targets, keyboard input, and context-loss fallback.
 
-## Validação
+For the standalone HTML, serve its directory locally and pass `REVIEW_URL=http://127.0.0.1:4188/Lunar-English.html OFFLINE_REVIEW=1`. The mission and guide runners then block every extra HTTP request. The managed Chromium here blocks direct `file://` navigation, so the same bytes are verified over local HTTP; double-click behavior is not certified for every browser/device. Automated Axe checks do not establish complete accessibility conformance.
 
-TypeScript, 155 testes de frontend, 10 de infraestrutura e 62 de Python passaram; o pacote Python foi construído. Hashes da auditoria anterior preservados e dois lotes novos reproduzidos byte a byte. Isso não constitui validação física independente. Relatórios e capturas de navegador ficam fora do Git, na pasta indicada pelo runner.
-
-O runner completo passou tanto no build Vite quanto no HTML autocontido (aproximadamente 4,34 MiB), neste último bloqueando requisições HTTP adicionais. Conferiu 24 elevações, 24 azimutes e 12 decisões contra os resultados científicos. Nenhum erro de página ou requisição falhou. Axe não apontou violações nos critérios selecionados para sete estados/visualizações, incluindo celular e diálogos; essa revisão automatizada não certifica conformidade integral ou substitui testes com pessoas.
-
-A navegação direta `file://` é bloqueada pela política do Chromium gerenciado neste ambiente. Por isso, os mesmos bytes do HTML foram testados por HTTP local, sem recursos externos. A abertura por duplo clique não foi certificada aqui.
-
-A revisão específica `scripts/globe-browser-review.mjs` verifica WebGL real (SwiftShader no ambiente de teste), detalhe do relevo no framebuffer, enquadramento polar, vista global, alvos de toque, teclado e recuperação por lista após perda/ausência de WebGL. A fonte JetBrains Mono é local, com licença incorporada ao HTML; o diálogo não tem borda nem fundo próprio. A camada polar é sombreada por luz fixa, sem simulação solar. A consistência com o código reaproveitado não constitui validação independente da georreferência ou da transformação MOON_ME/IAU_MOON.
+Scientific hashes, datasets, and geometry are unchanged by the English dialogue update. Test reports and screenshots are generated outside Git.

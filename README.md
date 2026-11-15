@@ -1,14 +1,16 @@
 # Lunar Landing Site Navigator
 
-Uma missão guiada para aprender por que **local e data** importam em um pouso lunar. Uma astronauta fictícia apresenta a iniciativa CLPS, que envolve entregas robóticas comerciais. O usuário escolhe entre quatro locais hipotéticos, compara as direções do Sol e da Terra e registra uma escolha. Um quinto alvo oferece um bônus educativo opcional.
+A guided exercise exploring why **site and date** matter for a lunar landing. Lua is a fictional astronaut guide; NASA's CLPS missions are robotic and carry no astronauts. Choose among four hypothetical sites and compare the directions of the Sun and Earth. An optional bonus is separate from the scientific sites.
 
-O início tem formato de diálogo de jogo: astronauta no cenário, fala em fonte monoespaçada, sem caixa, com letras aparecendo e um botão que completa a frase ou avança. A imagem do astronauta é de Poly (CC BY 2.0); o terreno ilustrativo vem do NASA 3D Resources. Conversas curtas alternam com viagem e pouso animados de 3,2 segundos, puláveis. Movimento reduzido elimina as animações. É possível pular a conversa e ir direto ao globo lunar com seleção no polo sul e ao corte do horizonte. A seleção usa a base Three.js e os dados LROC/LOLA já presentes na branch feat/integrate-ai-studio-site. Uma lista de coordenadas permite continuar sem WebGL. A experiência dispensa vídeos, câmera e servidor científico.
+The interface and dialogue are in English. Text appears directly over the scenery in JetBrains Mono, with just **Back** and **Continue** below it. Continue reveals a typing line, then advances on the next click. Back revisits the previous line, including from arrival to the briefing. Voice controls are temporarily removed. The dialogue script lives in [mission-copy.ts](frontend/src/mission/mission-copy.ts).
 
-## Abrir sem instalação
+Site selection uses the repository's existing Three.js Moon with LROC/LOLA visual data, opened over the south pole. A coordinate list supports keyboard selection and devices without WebGL. Existing illustrative launch and landing transitions last 3.2 seconds and can be skipped; reduced motion bypasses them. New spacecraft animations remain outside this text-and-navigation change.
 
-A distribuição **Lunar-Missao.html** reúne interface, ilustrações e dados em um único arquivo. Abra-o em um navegador moderno no computador. A entrega fica fora do Git, em uma pasta temporária ou na pasta de saída informada.
+## Open without installation
 
-Para gerar a distribuição a partir do código, use Node.js 24 e npm 11:
+**Lunar-English.html** contains the application, images, font, and data in one file. Open it in a modern desktop browser. Generated deliveries stay outside Git.
+
+Build it with Node.js 24 and npm 11:
 
 ```sh
 npm ci --include=dev
@@ -16,16 +18,16 @@ npm run typecheck
 npm run build:offline
 ```
 
-O comando informa o caminho do HTML. Para escolher a pasta: `npm run build:offline -- /caminho/da/entrega`. Links externos de referência só precisam de internet quando abertos pelo usuário.
+The command prints the output path. Choose a directory with `npm run build:offline -- /path/to/delivery`. The same application is also written as `Lunar-Missao.html` for earlier links. External source links need internet only when opened.
 
-## Desenvolver
+## Develop
 
 ```sh
 npm ci --include=dev
 npm run dev
 ```
 
-Abra o endereço informado pelo Vite. Para testar o build estático:
+Open the URL printed by Vite. To preview the production build:
 
 ```sh
 npm run build
@@ -33,25 +35,25 @@ npm run check:deploy
 npm exec --workspace frontend -- vite preview --host 127.0.0.1 --port 4174
 ```
 
-Esses comandos não publicam o site. A configuração Vercel permanece na raiz, com saída em `frontend/dist`.
+These commands run locally. Vercel configuration remains at the repository root, with output in `frontend/dist`.
 
-## O que os resultados significam
+## What the results mean
 
-Os quatro observadores estão a −85° de latitude planetocêntrica, em longitudes leste 0°, 90°, 180° e 270°, sobre uma esfera de raio 1.737.400 m. As datas selecionadas são 24/03, 28/04 e 08/09 de 2026, às 00:00 UTC. Cada posição tem suas próprias direções calculadas com Python/SPICE, DE421, IAU_MOON e CN+S. O navegador consome artefatos estáticos validados.
+The four observers are at −85° planetocentric latitude and east longitudes 0°, 90°, 180°, and 270°, on a sphere with radius 1,737,400 m. Selected dates are March 24, April 28, and September 8, 2026, at 00:00 UTC. Directions were calculated with Python/SPICE, DE421, IAU_MOON, and CN+S. The browser consumes validated static artifacts.
 
-O objetivo exige os **centros** de Sol e Terra acima do horizonte tangente idealizado, usando os valores completos. Em março, B e C atendem; em abril, A; em setembro, D. Há mais de uma escolha possível, sem vencedor fixo. Mudar a data pode mudar o resultado.
+The exercise requires the **centers** of both bodies above the idealized tangent horizon, using full-precision values. B and C qualify in March, A in April, and D in September. The result depends on the site and date.
 
-**Não calcula interseção com montanhas, sombras, energia produzida, disponibilidade de enlace ou segurança de pouso.** A textura global e o relevo polar são referências visuais LROC/LOLA; o sombreamento fixo não representa a posição atual do Sol. A geometria é esférica e não existe transformação entre o referencial MOON_ME do terreno e o IAU_MOON dos cálculos. Nave e personagem são ilustrativos. As três datas não permitem inferir janelas contínuas ou horários de nascer/pôr. Fontes, método, limitações e download dos dados completos estão em Sobre a missão.
+**This does not calculate mountain obstruction, shadows, generated power, radio availability, or landing safety.** LROC imagery and LOLA relief are visual references. Fixed shading does not represent the selected date's Sun. The globe is spherical; no transformation connects the terrain's MOON_ME frame to the calculations' IAU_MOON frame. Characters and flights are illustrative. Three sampled dates cannot establish continuous visibility windows or rise/set times. About contains sources, limitations, and the complete data download.
 
-Os cálculos são reais e reproduzíveis, mas não foram validados independentemente contra Horizons. Kernels vieram de distribuições de terceiros com hashes conferidos; a completude atual do LSK não foi confirmada. Reprodução numérica não certifica precisão física. O projeto não pressupõe vínculo oficial com a NASA.
+Calculations are reproducible but have not been independently validated against Horizons. Kernel hashes were checked against third-party distributions; current LSK completeness is unconfirmed. Numerical reproduction does not certify physical accuracy. The project does not imply NASA endorsement.
 
-## Arquitetura e verificação
+## Architecture and verification
 
-- [Plano executado](docs/guided-mission-plan.md) e [implementação, testes e revisão no navegador](docs/guided-mission.md).
-- [Dados da missão](docs/mission-data.md) e [auditoria científica reproduzível](docs/audits/mission/README.md).
-- `frontend/src/mission/`: fluxo, arte, diagrama e consumidor científico.
-- `scripts/build-offline.mjs`: distribuição autocontida; `scripts/mission-browser-review.mjs`: revisão no Chromium.
-- Interfaces anteriores preservadas em `frontend/src/explorer/` e `LegacyApp.tsx`, fora da entrada principal. A [auditoria anterior](docs/audits/pr4/README.md) e os contratos normativos não mudaram.
+- [Current implementation and browser checks](docs/guided-mission.md), [English script and navigation](docs/mission-dialogue.md), and [guide/voice status](docs/guide-voice.md).
+- [Scientific data](docs/mission-data.md) and [reproducible audit](docs/audits/mission/README.md).
+- `frontend/src/mission/`: game flow, assets, diagram, and scientific consumer.
+- `scripts/build-offline.mjs`: standalone delivery. Browser review scripts live in `scripts/`.
+- Previous interfaces in `frontend/src/explorer/` and `LegacyApp.tsx` remain outside the main entry point. Scientific schemas and audit artifacts are unchanged.
 
 ```sh
 npm run typecheck
@@ -63,4 +65,4 @@ LUNAR_KERNEL_DIR=/tmp/lunar-review-historical-kernels .venv/bin/python -m pytest
 .venv/bin/python -m build science
 ```
 
-Preparação e convenções científicas: [GEOMETRY.md](science/GEOMETRY.md). Os testes Python requerem instalação de `./science[dev]`; os kernels históricos devem ser adquiridos e verificados conforme essa documentação. Sem kernels, parte dos testes é explicitamente pulada. Configuração de CI/publicação: [deploy](docs/deploy.md).
+See [GEOMETRY.md](science/GEOMETRY.md) for scientific conventions and kernel setup. Python tests require `./science[dev]`; kernel-dependent tests explicitly skip when kernels are missing. Deployment configuration is documented in [deploy.md](docs/deploy.md).

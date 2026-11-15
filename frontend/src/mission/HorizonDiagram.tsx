@@ -20,14 +20,14 @@ const movement = `
 export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
   const id = useId().replace(/:/g, "");
   const direction = analysis[target];
-  const name = target === "sun" ? "Sol" : "Terra";
+  const name = target === "sun" ? "Sun" : "Earth";
   if (
     !Number.isFinite(direction.elevationDeg) ||
     !Number.isFinite(direction.azimuthDeg)
   ) {
     return (
       <p className="mission-diagram-error" role="status">
-        Direção indisponível para este ponto.
+        Direction unavailable for this site.
       </p>
     );
   }
@@ -45,19 +45,19 @@ export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
     y: origin.y - Math.sin(radians) * length,
   };
   const format = (value: number) =>
-    `${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}°`;
+    `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}°`;
   const state = below
-    ? "abaixo do horizonte idealizado"
+    ? "below the idealized horizon"
     : onHorizon
-      ? "no horizonte idealizado"
-      : "acima do horizonte idealizado";
-  const label = `${name}: ${format(direction.elevationDeg)}, ${state}. Corte na direção de azimute ${format(direction.azimuthDeg)}.`;
+      ? "on the idealized horizon"
+      : "above the idealized horizon";
+  const label = `${name}: ${format(direction.elevationDeg)}, ${state}. Section along azimuth ${format(direction.azimuthDeg)}.`;
 
   return (
     <figure className="mission-horizon" style={{ margin: 0 }}>
       <style>{movement}</style>
       <p style={{ color: "#b2c0b8", fontSize: "0.875rem", margin: "0 0 8px" }}>
-        Vista na direção do {name}
+        View toward the {name}
       </p>
       <svg
         viewBox="0 0 380 210"
@@ -72,15 +72,15 @@ export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
       >
         <title id={`${id}-title`}>{label}</title>
         <desc id={`${id}-description`}>
-          O marcador branco é o observador. A linha mostra a direção calculada
-          do centro do astro.
+          The white marker is the observer. The line shows the calculated
+          direction to the center of the body.
           {below
-            ? " O trecho tracejado entra no lado abaixo do horizonte; o centro não satisfaz o critério deste exercício."
+            ? " The dashed section goes below the horizon; the center does not meet this exercise’s criterion."
             : onHorizon
-              ? " O centro está sobre a linha de zero graus."
-              : " O centro está acima da linha de zero graus."}
-          Este corte usa horizonte tangente idealizado, sem montanhas ou cálculo
-          de sombras. Distâncias e tamanhos dos ícones são ilustrativos.
+              ? " The center is on the zero-degree line."
+              : " The center is above the zero-degree line."}
+          This section uses an idealized tangent horizon, without mountains or shadow
+          calculations. Distances and icon sizes are illustrative.
         </desc>
         <defs>
           <linearGradient id={`${id}-ground`} x1="0" y1="0" x2="0" y2="1">
@@ -126,7 +126,7 @@ export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
           0°
         </text>
         <text x="24" y="179" fill="#b2c0b8" fontSize="16" fontFamily="inherit">
-          Horizonte idealizado
+          Idealized horizon
         </text>
         <path
           d={`M${origin.x} ${origin.y - 29}v15`}
@@ -141,7 +141,7 @@ export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
           fontSize="20"
           fontFamily="inherit"
         >
-          Seu ponto
+          Your site
         </text>
         <g key={`${analysis.site.id}-${analysis.utc}-${target}-${replayToken}`}>
           <g className="horizon-ray-reveal">
@@ -222,12 +222,12 @@ export function HorizonDiagram({ analysis, target, replayToken = 0 }: Props) {
         style={{ color: "#b2c0b8", fontSize: "0.875rem", lineHeight: 1.6 }}
       >
         {below
-          ? "A linha tracejada indica o centro abaixo do horizonte."
+          ? "The dashed line indicates the center is below the horizon."
           : onHorizon
-            ? "O centro está na linha do horizonte."
-            : "A linha indica o centro acima do horizonte."}{" "}
-        Azimute {format(direction.azimuthDeg)}. Não inclui bloqueio por
-        montanhas.
+            ? "The center is on the horizon line."
+            : "The line indicates the center is above the horizon."}{" "}
+        Azimuth {format(direction.azimuthDeg)}. Mountain blocking is not
+        included.
       </figcaption>
     </figure>
   );

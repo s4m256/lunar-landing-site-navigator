@@ -103,10 +103,10 @@ describe("guided mission scientific data", () => {
       [-85, 270],
     ]);
     expect(MISSION_SITES.map((site) => site.label)).toEqual([
-      "Local A",
-      "Local B",
-      "Local C",
-      "Local D",
+      "Site A",
+      "Site B",
+      "Site C",
+      "Site D",
     ]);
     expect(getMissionAnalysis("south-a", DEFAULT_MISSION_DATE)).toBeUndefined();
   });
@@ -129,7 +129,7 @@ describe("guided mission scientific data", () => {
     expect(classifyMissionElevation(1e-12)).toBe("above");
     expect(classifyMissionElevation(-1e-12)).toBe("below");
     for (const invalid of [NaN, Infinity, -Infinity, 90.1, -90.1])
-      expect(() => classifyMissionElevation(invalid)).toThrow("inválidos");
+      expect(() => classifyMissionElevation(invalid)).toThrow("Invalid mission scientific data");
   });
 
   it("accepts reordered batches and series, using their identities", () => {
@@ -280,7 +280,7 @@ describe("guided mission scientific data", () => {
       const invalid = fixture();
       mutate(invalid);
       expect(() => parseMissionResults(invalid)).toThrow(
-        "Dados científicos da missão inválidos",
+        "Invalid mission scientific data",
       );
     },
   );
@@ -295,7 +295,7 @@ describe("guided mission scientific data", () => {
       [batchAB, batchAB],
     ])
       expect(() => parseMissionResults(value)).toThrow(
-        "Dados científicos da missão inválidos",
+        "Invalid mission scientific data",
       );
   });
 
@@ -310,7 +310,7 @@ describe("guided mission scientific data", () => {
       expect(invalidModule.MISSION_SITES).toHaveLength(4);
       expect(() =>
         invalidModule.getMissionAnalysis("mission-a", DEFAULT_MISSION_DATE),
-      ).toThrow("Dados científicos da missão inválidos");
+      ).toThrow("Invalid mission scientific data");
     } finally {
       vi.doUnmock("../../../docs/audits/mission/result-ab-2026.json");
       vi.resetModules();

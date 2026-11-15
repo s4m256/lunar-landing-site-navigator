@@ -211,6 +211,7 @@
 }
 .lunar-mission .game-dialogue-actions button {
   min-height: 44px;
+  min-width: 44px;
   padding: 8px 4px;
   border: 0;
   border-bottom: 1px solid currentColor;

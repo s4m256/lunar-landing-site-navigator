@@ -1,9 +1,7 @@
 import {
   act,
   cleanup,
-  fireEvent,
   render,
-  screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TypewriterText } from "./TypewriterText";
@@ -71,29 +69,8 @@ describe("TypewriterText", () => {
     act(() => vi.advanceTimersByTime(30));
     expect(visualText(container)).toHaveTextContent(text);
     expect(
-      screen.getByRole("button", { name: "Mostrar texto inteiro" }),
-    ).toHaveAttribute("aria-disabled", "true");
-    expect(
       container.querySelectorAll("div > span:not([aria-hidden])"),
     ).toHaveLength(1);
-  });
-
-  it("allows skipping immediately without removing the focused control", () => {
-    const cancel = vi.spyOn(window, "clearInterval");
-    const schedule = vi.spyOn(window, "setInterval");
-    const { container } = render(
-      <TypewriterText text="Texto completo." intervalMs={100} />,
-    );
-    const timer = schedule.mock.results[0].value;
-    const skip = screen.getByRole("button", { name: "Mostrar texto inteiro" });
-    skip.focus();
-    fireEvent.click(skip);
-    expect(visualText(container)).toHaveTextContent("Texto completo.");
-    expect(skip).toHaveAttribute("aria-disabled", "true");
-    expect(skip).toHaveFocus();
-    expect(cancel).toHaveBeenCalledWith(timer);
-    act(() => vi.advanceTimersByTime(1000));
-    expect(visualText(container)).toHaveTextContent("Texto completo.");
   });
 
   it("cancels an earlier utterance and starts the new text at its own interval", () => {
@@ -127,9 +104,6 @@ describe("TypewriterText", () => {
     expect(schedule).not.toHaveBeenCalled();
     rerender(<TypewriterText text="Outra fala." />);
     expect(visualText(container)).toHaveTextContent("Outra fala.");
-    expect(
-      screen.getByRole("button", { name: "Mostrar texto inteiro" }),
-    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("observes preference changes, cancels animation and keeps the completed text", () => {
@@ -161,9 +135,6 @@ describe("TypewriterText", () => {
     const schedule = vi.spyOn(window, "setInterval");
     const { container } = render(<TypewriterText text="" />);
     expect(visualText(container)?.textContent).toBe("");
-    expect(
-      screen.getByRole("button", { name: "Mostrar texto inteiro" }),
-    ).toHaveAttribute("aria-disabled", "true");
     expect(schedule).not.toHaveBeenCalled();
   });
 });

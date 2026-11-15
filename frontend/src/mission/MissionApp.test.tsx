@@ -14,7 +14,7 @@ const dataControl = vi.hoisted(() => ({ mode: "valid", lookup: vi.fn() }));
 vi.mock("./mission-data", () => {
   const sites = ["a", "b", "c", "d"].map((name, index) => ({
     id: `mission-${name}`,
-    label: `Local ${name.toUpperCase()}`,
+    label: `Site ${name.toUpperCase()}`,
     latitudeDeg: -85,
     longitudeDeg: index * 90,
   }));
@@ -22,14 +22,14 @@ vi.mock("./mission-data", () => {
     MISSION_SITES: sites,
     DEFAULT_MISSION_DATE: "2026-03-24",
     MISSION_DATES: [
-      { value: "2026-03-24", label: "24 de março de 2026 — 00h UTC" },
-      { value: "2026-04-28", label: "28 de abril de 2026 — 00h UTC" },
+      { value: "2026-03-24", label: "March 24, 2026 — 00:00 UTC" },
+      { value: "2026-04-28", label: "April 28, 2026 — 00:00 UTC" },
     ],
     MISSION_PROVENANCE: {
-      summary: "Dados SPICE",
+      summary: "SPICE data",
       model: "DE421",
-      source: "Auditoria de teste",
-      limitation: "Horizonte idealizado",
+      source: "Test audit",
+      limitation: "Idealized horizon",
     },
     MISSION_AUDIT: { manifest: { model: "DE421" }, results: [] },
     getMissionAnalysis(id: string, date: string) {
@@ -59,7 +59,7 @@ vi.mock("./mission-data", () => {
 });
 
 vi.mock("./MissionArt", () => ({
-  GuidePortrait: () => <div aria-label="Guia ilustrada" />,
+  GuidePortrait: () => <div aria-label="Guide illustration" />,
   RocketIllustration: ({ phase }: { phase: string }) => (
     <div data-testid="rocket" data-phase={phase} />
   ),
@@ -87,7 +87,7 @@ vi.mock("./globe/MissionGlobe", () => ({
           {site.label}
         </button>
       ))}
-      <button onClick={onDiscover}>Descobrir bônus</button>
+      <button onClick={onDiscover}>Discover bonus</button>
     </div>
   ),
 }));
@@ -107,13 +107,26 @@ vi.mock("./HorizonDiagram", () => ({
 }));
 
 import { MissionApp } from "./MissionApp";
+import { openingDialogue, arrivalDialogue } from "./mission-copy";
+
+function continueLine() {
+  const button = screen.getByRole("button", { name: "Continue" });
+  fireEvent.click(button);
+  fireEvent.click(button);
+}
+
+function finishOpening() {
+  for (const _line of openingDialogue) continueLine();
+}
 
 function directMap() {
   render(<MissionApp />);
-  fireEvent.click(screen.getByRole("button", { name: "Pular conversa" }));
+  finishOpening();
+  fireEvent.click(screen.getByRole("button", { name: "Skip launch" }));
+  for (const _line of arrivalDialogue) continueLine();
 }
 
-function selectSite(label = "Local B") {
+function selectSite(label = "Site B") {
   fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
@@ -154,271 +167,212 @@ afterEach(() => {
 });
 
 describe("guided lunar mission", () => {
-  it("keeps speech optional and cancels it when opening context or advancing dialogue", () => {
+  it("offers only Back and Continue, without voice or speech API calls", () => {
     const speak = vi.fn();
     const cancel = vi.fn();
-    vi.stubGlobal("speechSynthesis", {
-      getVoices: () => [{ lang: "pt-BR", name: "Português" }],
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      speak,
-      cancel,
-    });
-    vi.stubGlobal(
-      "SpeechSynthesisUtterance",
-      class {
-        constructor(public text: string) {}
-      },
-    );
+    vi.stubGlobal("speechSynthesis", { speak, cancel });
+    vi.stubGlobal("SpeechSynthesisUtterance", vi.fn());
     render(<MissionApp />);
+    const dialogue = screen.getByRole("group", { name: "Dialogue from Lua" });
+    expect(within(dialogue).getAllByRole("button")).toHaveLength(2);
+    expect(within(dialogue).getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(within(dialogue).getByRole("button", { name: "Continue" })).toBeEnabled();
+    expect(dialogue).toHaveTextContent(openingDialogue[0]);
+    continueLine();
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
     expect(speak).not.toHaveBeenCalled();
-    const voice = screen.getByText("Voz").closest("details")!;
-    expect(voice).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText("Voz"));
-    fireEvent.click(screen.getByRole("button", { name: "Ouvir fala" }));
-    expect(speak.mock.calls[0][0].text).toContain(
-      "As missões CLPS são robóticas: não levam astronautas.",
-    );
-    let calls = cancel.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Sobre a missão" }));
-    expect(cancel).toHaveBeenCalledTimes(calls + 1);
-    fireEvent.click(screen.getByRole("button", { name: "Fechar janela" }));
-    fireEvent.click(screen.getByText("Voz"));
-    fireEvent.click(screen.getByRole("button", { name: "Ouvir fala" }));
-    calls = cancel.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(cancel).toHaveBeenCalledTimes(calls + 1);
-    expect(speak).toHaveBeenCalledTimes(2);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(globalThis.SpeechSynthesisUtterance).not.toHaveBeenCalled();
   });
 
-  it("explains the robotic mission and skips to an unselected map", () => {
+  it("returns while typing and retains focus at the first line boundary", () => {
     render(<MissionApp />);
-    expect(
-      screen.getByRole("group", { name: "Fala de Lua" }),
-    ).toHaveTextContent(
-      "As missões CLPS são robóticas: não levam astronautas.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Pular conversa" }));
-    expect(
-      screen.getByRole("heading", { name: "Onde vamos pousar?" }),
-    ).toHaveFocus();
-    expect(screen.getByText("Sua descoberta começa no mapa.")).toBeVisible();
-    expect(screen.queryByTestId("horizon")).not.toBeInTheDocument();
-    expect(dataControl.lookup).not.toHaveBeenCalled();
+    continueLine();
+    const dialogue = screen.getByRole("group", { name: "Dialogue from Lua" });
+    expect(dialogue).toHaveTextContent(openingDialogue[1]);
+    const back = within(dialogue).getByRole("button", { name: "Back" });
+    back.focus();
+    fireEvent.click(back);
+    expect(dialogue).toHaveTextContent(openingDialogue[0]);
+    expect(back).toBeDisabled();
+    expect(within(dialogue).getByRole("button", { name: "Continue" })).toHaveFocus();
   });
 
-  it("advances the opening dialogue with the same focused button and allows skipping the launch and arrival", () => {
+  it("skips launch, goes back across stages without replaying it, then reaches an unselected map", () => {
     vi.useFakeTimers();
     const schedule = vi.spyOn(window, "setTimeout");
     const cancel = vi.spyOn(window, "clearTimeout");
     render(<MissionApp />);
-    const button = screen.getByRole("button", { name: "Mostrar fala" });
+    const button = screen.getByRole("button", { name: "Continue" });
     button.focus();
-    for (let index = 0; index < 3; index++) {
-      expect(button).toHaveTextContent("Mostrar fala");
-      fireEvent.click(button);
-      expect(button).toHaveTextContent(
-        index === 2 ? "Vamos nessa" : "Continuar",
-      );
+    for (const _line of openingDialogue) {
       expect(button).toHaveFocus();
-      fireEvent.click(button);
-      if (index < 2) expect(button).toHaveFocus();
+      continueLine();
     }
-    const transitionIndex = schedule.mock.calls.findIndex(
-      ([, delay]) => delay === 3200,
-    );
+    const transitionIndex = schedule.mock.calls.findIndex(([, delay]) => delay === 3200);
     expect(transitionIndex).toBeGreaterThanOrEqual(0);
     const transitionTimer = schedule.mock.results[transitionIndex].value;
-    expect(screen.getByTestId("rocket")).toHaveAttribute(
-      "data-phase",
-      "launch",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Pular decolagem" }));
+    expect(screen.getByTestId("rocket")).toHaveAttribute("data-phase", "launch");
+    fireEvent.click(screen.getByRole("button", { name: "Skip launch" }));
     expect(cancel).toHaveBeenCalledWith(transitionTimer);
-    expect(
-      screen.getByRole("heading", { name: "Chegamos à Lua" }),
-    ).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Pular conversa" }));
-    expect(
-      screen.getByRole("heading", { name: "Onde vamos pousar?" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Welcome to the Moon" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("group", { name: "Dialogue from Lua" })).toHaveTextContent(openingDialogue.at(-1)!);
+    expect(screen.queryByRole("button", { name: "Skip launch" })).not.toBeInTheDocument();
+    continueLine();
+    fireEvent.click(screen.getByRole("button", { name: "Skip launch" }));
+    continueLine();
+    expect(screen.getByRole("group", { name: "Dialogue from Lua" })).toHaveTextContent(arrivalDialogue[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("group", { name: "Dialogue from Lua" })).toHaveTextContent(arrivalDialogue[0]);
+    for (const _line of arrivalDialogue) continueLine();
+    expect(screen.getByRole("heading", { name: "Where should we land?" })).toHaveFocus();
+    expect(screen.getByText("Pick a point on the Moon.")).toBeVisible();
+    expect(screen.queryByTestId("horizon")).not.toBeInTheDocument();
+    expect(dataControl.lookup).not.toHaveBeenCalled();
   });
 
   it("advances launch automatically and completes both arrival lines", () => {
     vi.useFakeTimers();
     render(<MissionApp />);
-    for (let index = 0; index < 3; index++) {
-      fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: index === 2 ? "Vamos nessa" : "Continuar",
-        }),
-      );
-    }
+    finishOpening();
     act(() => vi.advanceTimersByTime(3200));
-    expect(
-      screen.getByRole("heading", { name: "Chegamos à Lua" }),
-    ).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(
-      screen.getByRole("group", { name: "Fala de Lua" }),
-    ).toHaveTextContent("E para falar com a Terra");
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-    fireEvent.click(screen.getByRole("button", { name: "Escolher um local" }));
-    expect(
-      screen.getByRole("heading", { name: "Onde vamos pousar?" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Welcome to the Moon" })).toHaveFocus();
+    for (const _line of arrivalDialogue) continueLine();
+    expect(screen.getByRole("heading", { name: "Where should we land?" })).toHaveFocus();
   });
 
   it("pauses the launch timer while the context dialog is open", () => {
     vi.useFakeTimers();
     render(<MissionApp />);
-    for (let index = 0; index < 3; index++) {
-      fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: index === 2 ? "Vamos nessa" : "Continuar",
-        }),
-      );
-    }
+    finishOpening();
     act(() => vi.advanceTimersByTime(1000));
-    fireEvent.click(screen.getByRole("button", { name: "Sobre a missão" }));
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
     act(() => vi.advanceTimersByTime(5000));
-    expect(screen.getByTestId("rocket")).toHaveAttribute(
-      "data-phase",
-      "launch",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Fechar janela" }));
+    expect(screen.getByTestId("rocket")).toHaveAttribute("data-phase", "launch");
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
     act(() => vi.advanceTimersByTime(2199));
-    expect(screen.getByTestId("rocket")).toHaveAttribute(
-      "data-phase",
-      "launch",
-    );
+    expect(screen.getByTestId("rocket")).toHaveAttribute("data-phase", "launch");
     act(() => vi.advanceTimersByTime(1));
-    expect(
-      screen.getByRole("heading", { name: "Chegamos à Lua" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Welcome to the Moon" })).toHaveFocus();
   });
 
   it("explains an unsuitable choice and allows another point without replaying the briefing", () => {
     directMap();
-    selectSite("Local A");
+    selectSite("Site A");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "O Sol está no horizonte ou abaixo dele",
+      "The Sun’s center is on or below the horizon",
     );
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeDisabled();
     fireEvent.click(
-      screen.getByRole("button", { name: "Escolher outro ponto" }),
+      screen.getByRole("button", { name: "Choose another point" }),
     );
     expect(
-      screen.getByRole("heading", { name: "Explore os locais" }),
+      screen.getByRole("heading", { name: "Explore the sites" }),
     ).toHaveFocus();
     selectSite();
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeEnabled();
-    expect(screen.getByText("2 de 4 explorados")).toBeVisible();
+    expect(screen.getByText("2 of 4 explored")).toBeVisible();
   });
 
   it("recalculates on date changes and switches which target the diagram explains", () => {
     directMap();
     selectSite();
-    fireEvent.click(screen.getByRole("button", { name: /^Terra/ }));
-    expect(screen.getByRole("button", { name: /^Terra/ })).toHaveAttribute(
+    fireEvent.click(screen.getByRole("button", { name: /^Earth/ }));
+    expect(screen.getByRole("button", { name: /^Earth/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(screen.getByTestId("horizon")).toHaveTextContent(
       "mission-b / earth",
     );
-    fireEvent.change(screen.getByLabelText(/Data da observação/), {
+    fireEvent.change(screen.getByLabelText(/Date/), {
       target: { value: "2026-04-28" },
     });
     expect(dataControl.lookup).toHaveBeenLastCalledWith(
       "mission-b",
       "2026-04-28",
     );
-    expect(screen.getByRole("button", { name: /^Sol/ })).toHaveTextContent(
-      "-3,0°",
+    expect(screen.getByRole("button", { name: /^Sun/ })).toHaveTextContent(
+      "-3.0°",
     );
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeDisabled();
-    selectSite("Local A");
+    selectSite("Site A");
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeEnabled();
   });
 
   it("lets mobile explorers return to the map while preserving date, target, and chosen point", () => {
     window.innerWidth = 390;
     directMap();
-    fireEvent.change(screen.getByLabelText(/Data da observação/), {
+    fireEvent.change(screen.getByLabelText(/Date/), {
       target: { value: "2026-04-28" },
     });
-    const point = screen.getByRole("button", { name: "Local A" });
+    const point = screen.getByRole("button", { name: "Site A" });
     point.focus();
     fireEvent.click(point);
     expect(point).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: /^Terra/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Voltar ao mapa" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Earth/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to map" }));
     expect(
-      screen.getByRole("heading", { name: "Explore os locais" }),
+      screen.getByRole("heading", { name: "Explore the sites" }),
     ).toHaveFocus();
     expect(point).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText(/Data da observação/)).toHaveValue(
+    expect(screen.getByLabelText(/Date/)).toHaveValue(
       "2026-04-28",
     );
-    expect(screen.getByRole("button", { name: /^Terra/ })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /^Earth/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeEnabled();
-    selectSite("Local B");
+    selectSite("Site B");
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeDisabled();
     expect(screen.getByTestId("horizon")).toHaveTextContent(
       "mission-b / earth",
     );
-    expect(screen.getByLabelText(/Data da observação/)).toHaveValue(
+    expect(screen.getByLabelText(/Date/)).toHaveValue(
       "2026-04-28",
     );
   });
 
-  it("finishes either suitable choice, skips landing, and keeps exploration available", () => {
+  it.each(["Back", "Continue"])("returns to exploration from completion with %s", (action) => {
     directMap();
-    selectSite("Local C");
-    fireEvent.click(screen.getByRole("button", { name: "Pousar neste local" }));
+    selectSite("Site C");
+    fireEvent.click(screen.getByRole("button", { name: "Land here" }));
     expect(screen.getByTestId("rocket")).toHaveAttribute(
       "data-phase",
       "landing",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Pular pouso" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skip landing" }));
     expect(
-      screen.getByRole("heading", { name: "Escolha registrada." }),
+      screen.getByRole("heading", { name: "Site selected." }),
     ).toHaveFocus();
-    expect(screen.getByRole("heading", { name: "Local C" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Site C" })).toBeVisible();
     expect(
-      screen.getByText(/Pouso ilustrativo em um local hipotético/),
+      screen.getByText(/Illustrative landing at a hypothetical site/),
     ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar fala" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Explorar outra opção" }),
-    );
-    expect(screen.getByRole("button", { name: "Local C" })).toHaveAttribute(
+    if (action === "Continue") continueLine();
+    else fireEvent.click(screen.getByRole("button", { name: action }));
+    expect(screen.getByRole("button", { name: "Site C" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    selectSite("Local B");
+    selectSite("Site B");
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeEnabled();
   });
 
@@ -429,40 +383,34 @@ describe("guided lunar mission", () => {
       removeEventListener: vi.fn(),
     });
     render(<MissionApp />);
-    for (let index = 0; index < 3; index++) {
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: index === 2 ? "Vamos nessa" : "Continuar",
-        }),
-      );
+    for (const _line of openingDialogue) {
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     }
-    expect(
-      screen.getByRole("heading", { name: "Chegamos à Lua" }),
-    ).toHaveFocus();
-    expect(screen.queryByText("Pular decolagem")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Pular conversa" }));
-    expect(
-      screen.getByRole("heading", { name: "Onde vamos pousar?" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Welcome to the Moon" })).toHaveFocus();
+    expect(screen.queryByText("Skip launch")).not.toBeInTheDocument();
+    for (const _line of arrivalDialogue) {
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    }
+    expect(screen.getByRole("heading", { name: "Where should we land?" })).toHaveFocus();
     selectSite();
-    fireEvent.click(screen.getByRole("button", { name: "Pousar neste local" }));
+    fireEvent.click(screen.getByRole("button", { name: "Land here" }));
     expect(
-      screen.getByRole("heading", { name: "Escolha registrada." }),
+      screen.getByRole("heading", { name: "Site selected." }),
     ).toHaveFocus();
   });
 
   it("opens the optional bonus without selecting a point or blocking the mission", () => {
     directMap();
-    const bonus = screen.getByRole("button", { name: "Descobrir bônus" });
+    const bonus = screen.getByRole("button", { name: "Discover bonus" });
     bonus.focus();
     fireEvent.click(bonus);
     const dialog = screen.getByRole("dialog", {
-      name: "Na Lua, o silêncio é diferente.",
+      name: "Sound on the Moon",
     });
-    expect(dialog).toHaveTextContent(/O som precisa de um meio/);
-    const close = within(dialog).getByRole("button", { name: "Fechar janela" });
+    expect(dialog).toHaveTextContent(/Sound needs a medium/);
+    const close = within(dialog).getByRole("button", { name: "Close dialog" });
     const back = within(dialog).getByRole("button", {
-      name: "Voltar à exploração",
+      name: "Back to exploring",
     });
     expect(close).toHaveFocus();
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
@@ -474,25 +422,25 @@ describe("guided lunar mission", () => {
     expect(bonus).toHaveFocus();
     selectSite();
     expect(
-      screen.getByRole("button", { name: "Pousar neste local" }),
+      screen.getByRole("button", { name: "Land here" }),
     ).toBeEnabled();
   });
 
   it("shows provenance in a keyboard-contained dialog and restores focus", () => {
     render(<MissionApp />);
-    const about = screen.getByRole("button", { name: "Sobre a missão" });
+    const about = screen.getByRole("button", { name: "About" });
     about.focus();
     fireEvent.click(about);
-    const dialog = screen.getByRole("dialog", { name: "Sobre esta missão" });
-    const close = within(dialog).getByRole("button", { name: "Fechar janela" });
+    const dialog = screen.getByRole("dialog", { name: "About this mission" });
+    const close = within(dialog).getByRole("button", { name: "Close dialog" });
     const download = within(dialog).getByRole("link", {
-      name: "Baixar dados e auditoria (JSON)",
+      name: "Download data and audit (JSON)",
     });
     expect(dialog).toHaveTextContent("DE421");
-    expect(dialog).toHaveTextContent(/não medem obstruções por montanhas/);
+    expect(dialog).toHaveTextContent(/do not measure mountain obstruction/);
     expect(close).toHaveFocus();
     expect(download).toHaveAttribute("href", "blob:mission-audit");
-    expect(download).toHaveAttribute("download", "auditoria-missao-lunar.json");
+    expect(download).toHaveAttribute("download", "lunar-mission-audit.json");
     expect(document.body.style.overflow).toBe("hidden");
     expect(about.closest(".mission-content")).toHaveAttribute("inert");
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
@@ -518,17 +466,17 @@ describe("guided lunar mission", () => {
       dataControl.mode = mode;
       selectSite();
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "Não foi possível carregar os dados",
+        "We could not load this site and date",
       );
       expect(screen.queryByTestId("horizon")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Pousar neste local" }),
+        screen.queryByRole("button", { name: "Land here" }),
       ).not.toBeInTheDocument();
       dataControl.mode = "valid";
-      selectSite("Local C");
+      selectSite("Site C");
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Pousar neste local" }),
+        screen.getByRole("button", { name: "Land here" }),
       ).toBeEnabled();
     },
   );

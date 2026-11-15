@@ -35,7 +35,23 @@ const report = {
   requestFailures: [],
   accessibility: [],
 };
-const angle = (value) => `${value.toFixed(1).replace(".", ",")}°`;
+const angle = (value) => `${value.toFixed(1)}°`;
+
+// Continue reveals the current line if it is still typing, then advances it.
+const advanceLine = async (page) => {
+  const dialogue = page.locator(".game-dialogue-text");
+  const line = await dialogue.locator(":scope > span").first().textContent();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  if (
+    (await dialogue.count()) &&
+    (await dialogue.locator(":scope > span").first().textContent()) === line
+  ) {
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+  }
+};
+const advanceLines = async (page, count) => {
+  for (let index = 0; index < count; index++) await advanceLine(page);
+};
 
 try {
   const context = await browser.newContext({
@@ -83,59 +99,55 @@ try {
   );
   assert(
     (await page.locator(".game-dialogue-text").innerText()).includes(
-      "As missões CLPS são robóticas",
+      "CLPS missions are robotic",
     ),
   );
   await audit("briefing");
   await page.screenshot({ path: `${output}/briefing.png`, fullPage: true });
-  await page.getByRole("button", { name: /Sobre a missão/ }).click();
-  await page.getByRole("dialog", { name: "Sobre esta missão" }).waitFor();
+  await page.getByRole("button", { name: /About/ }).click();
+  await page.getByRole("dialog", { name: "About this mission" }).waitFor();
   assert(
     await page.locator(".mission-content").evaluate((element) => element.inert),
   );
   assert.equal(
     await page.locator(":focus").getAttribute("aria-label"),
-    "Fechar janela",
+    "Close dialog",
   );
   await page.keyboard.press("Shift+Tab");
-  assert((await page.locator(":focus").innerText()).includes("Baixar dados"));
+  assert((await page.locator(":focus").innerText()).includes("Download data"));
   await page.keyboard.press("Tab");
   assert.equal(
     await page.locator(":focus").getAttribute("aria-label"),
-    "Fechar janela",
+    "Close dialog",
   );
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("link", { name: /Baixar dados/ }).click();
+  await page.getByRole("link", { name: /Download data/ }).click();
   const download = await downloadEvent;
+  assert.equal(download.suggestedFilename(), "lunar-mission-audit.json");
   const downloaded = JSON.parse(await readFile(await download.path(), "utf8"));
   assert.deepEqual(downloaded.results, originalResults);
   await audit("about-dialog");
   await page.keyboard.press("Escape");
   assert.equal(await page.getByRole("dialog").count(), 0);
-  assert((await page.locator(":focus").innerText()).includes("Sobre a missão"));
+  assert((await page.locator(":focus").innerText()).includes("About"));
   report.checks.push(
     "Briefing explains robotic CLPS; dialog isolates background, traps/restores focus and downloads the exact scientific result objects.",
   );
 
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page.getByRole("button", { name: "Vamos nessa", exact: true }).click();
+  await advanceLines(page, 3);
   await page.locator(".game-scene--arrival").waitFor();
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Escolher um local", exact: true })
-    .click();
-  await page.getByRole("heading", { name: "Onde vamos pousar?" }).waitFor();
+  await advanceLines(page, 2);
+  await page.getByRole("heading", { name: "Where should we land?" }).waitFor();
   await page.locator('.mission-globe[data-status="ready"]').waitFor();
   assert.equal(await page.locator(".mission-globe-pin").count(), 4);
   assert.equal(await page.locator(".mission-globe-bonus").count(), 1);
-  const dateSelect = page.getByLabel(/Data da observação/);
+  const dateSelect = page.getByLabel(/Date/);
   for (const date of selected) {
     await dateSelect.selectOption(date.date);
     for (const site of date.sites) {
       const letter = site.site_id.slice(-1).toUpperCase();
       await page
-        .getByRole("button", { name: new RegExp(`^Local ${letter},`) })
+        .getByRole("button", { name: new RegExp(`^Site ${letter},`) })
         .click();
       for (const [index, name] of ["sun", "earth"].entries()) {
         const card = page.locator(".target-card").nth(index);
@@ -146,8 +158,8 @@ try {
         assert.equal(
           await card.locator(".target-status").innerText(),
           site[name].elevation_deg > 0
-            ? "Acima do horizonte"
-            : "Abaixo do horizonte",
+            ? "Above the horizon"
+            : "Below the horizon",
         );
         await card.click();
         assert.equal(await card.getAttribute("aria-pressed"), "true");
@@ -155,15 +167,15 @@ try {
           .locator(".mission-horizon title")
           .textContent();
         assert(
-          title.includes(site[name].elevation_deg.toFixed(2).replace(".", ",")),
+          title.includes(site[name].elevation_deg.toFixed(2)),
         );
         assert(
-          title.includes(site[name].azimuth_deg.toFixed(2).replace(".", ",")),
+          title.includes(site[name].azimuth_deg.toFixed(2)),
         );
       }
       assert.equal(
         await page
-          .getByRole("button", { name: /Pousar neste local/ })
+          .getByRole("button", { name: /Land here/ })
           .isEnabled(),
         site.meets_goal,
       );
@@ -173,40 +185,40 @@ try {
     "All 24 centre elevations, 24 diagram azimuths and 12 decisions match four scientific sites in three UTC dates; no stale result or single hard-coded winner.",
   );
   await dateSelect.selectOption("2026-03-24");
-  await page.getByRole("button", { name: /^Local A,/ }).click();
+  await page.getByRole("button", { name: /^Site A,/ }).click();
   await page.locator(".target-card").first().click();
   assert.equal(
-    await page.getByRole("button", { name: /Pousar neste local/ }).isEnabled(),
+    await page.getByRole("button", { name: /Land here/ }).isEnabled(),
     false,
   );
   await page.screenshot({ path: `${output}/selection-a.png`, fullPage: true });
-  await page.getByRole("button", { name: /^Local B,/ }).click();
+  await page.getByRole("button", { name: /^Site B,/ }).click();
   await audit("selection");
   await page.screenshot({ path: `${output}/selection-b.png`, fullPage: true });
-  await page.getByRole("button", { name: /Pousar neste local/ }).click();
-  await page.getByRole("heading", { name: "Escolha registrada." }).waitFor();
+  await page.getByRole("button", { name: /Land here/ }).click();
+  await page.getByRole("heading", { name: "Site selected." }).waitFor();
   await audit("complete");
   await page.screenshot({ path: `${output}/complete.png`, fullPage: true });
   report.checks.push(
     "Reduced-motion launches and landings advance without animation; landing succeeds before discovering the optional bonus.",
   );
-  await page.getByRole("button", { name: /Explorar outra opção/ }).click();
+  await advanceLine(page);
   await page
-    .getByRole("button", { name: /Sinal desconhecido, bônus educativo/ })
+    .getByRole("button", { name: /Unknown signal, educational bonus/ })
     .click();
   await page
-    .getByRole("dialog", { name: "Na Lua, o silêncio é diferente." })
+    .getByRole("dialog", { name: "Sound on the Moon" })
     .waitFor();
   await audit("bonus-dialog");
   await page.keyboard.press("Escape");
   assert.equal(
     await page.locator(".mission-globe-bonus").getAttribute("aria-label"),
-    "Reabrir bônus educativo",
+    "Reopen educational bonus",
   );
 
   for (const width of [320, 390, 768]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.getByRole("button", { name: /^Local D,/ }).click();
+    await page.getByRole("button", { name: /^Site D,/ }).click();
     assert(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -219,11 +231,11 @@ try {
         panel.y >= -2 && panel.y < 40,
         `Mobile selection should reveal analysis at ${width}px`,
       );
-      await page.getByRole("button", { name: "Voltar ao mapa" }).click();
+      await page.getByRole("button", { name: "Back to map" }).click();
       assert.equal(await dateSelect.inputValue(), "2026-03-24");
       assert(
         (await page.locator(":focus").innerText()).includes(
-          "Explore os locais",
+          "Explore the sites",
         ),
       );
     }
@@ -237,7 +249,7 @@ try {
       );
     assert(buttons.every((box) => box.width >= 44 && box.height >= 44));
     if (width === 390) {
-      await page.getByRole("button", { name: /^Local B,/ }).click();
+      await page.getByRole("button", { name: /^Site B,/ }).click();
       await audit("mobile-selection");
       await page.screenshot({
         path: `${output}/mobile-selection.png`,
@@ -256,17 +268,19 @@ try {
     path: `${output}/mobile-briefing.png`,
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Pular conversa" }).click();
-  await page.getByRole("button", { name: /^Local A,/ }).focus();
+  await advanceLines(page, 3);
+  await page.locator(".game-scene--arrival").waitFor();
+  await advanceLines(page, 2);
+  await page.getByRole("button", { name: /^Site A,/ }).focus();
   await page.keyboard.press("Enter");
   assert.equal(
     await page
-      .getByRole("button", { name: /^Local A,/ })
+      .getByRole("button", { name: /^Site A,/ })
       .getAttribute("aria-pressed"),
     "true",
   );
   report.checks.push(
-    "The introduction can be skipped; map selection works by keyboard.",
+    "The introduction advances with reduced motion; map selection works by keyboard.",
   );
 
   const animated = await browser.newContext({
@@ -280,14 +294,7 @@ try {
   }
   const flightPage = await animated.newPage();
   await flightPage.goto(url, { waitUntil: "networkidle" });
-  for (const label of ["Continuar", "Continuar", "Vamos nessa"]) {
-    const reveal = flightPage.getByRole("button", {
-      name: "Mostrar fala",
-      exact: true,
-    });
-    if (await reveal.count()) await reveal.click();
-    await flightPage.getByRole("button", { name: label, exact: true }).click();
-  }
+  await advanceLines(flightPage, 3);
   await flightPage.locator(".game-scene--launch").waitFor();
   await flightPage.waitForFunction(() => {
     const craft = document.querySelector(".game-scene-craft");
@@ -300,11 +307,11 @@ try {
       );
   });
   await flightPage.screenshot({ path: `${output}/launch.png`, fullPage: true });
-  await flightPage.getByRole("button", { name: "Pular decolagem" }).click();
+  await flightPage.getByRole("button", { name: "Skip launch" }).click();
   await flightPage.locator(".game-scene--arrival").waitFor();
-  await flightPage.getByRole("button", { name: "Pular conversa" }).click();
-  await flightPage.getByRole("button", { name: /^Local B,/ }).click();
-  await flightPage.getByRole("button", { name: /Pousar neste local/ }).click();
+  await advanceLines(flightPage, 2);
+  await flightPage.getByRole("button", { name: /^Site B,/ }).click();
+  await flightPage.getByRole("button", { name: /Land here/ }).click();
   await flightPage.locator(".game-scene--landing").waitFor();
   await flightPage.waitForFunction(() =>
     document
@@ -320,9 +327,9 @@ try {
     path: `${output}/landing.png`,
     fullPage: true,
   });
-  await flightPage.getByRole("button", { name: "Pular pouso" }).click();
+  await flightPage.getByRole("button", { name: "Skip landing" }).click();
   await flightPage
-    .getByRole("heading", { name: "Escolha registrada." })
+    .getByRole("heading", { name: "Site selected." })
     .waitFor();
   await animated.close();
   report.checks.push(

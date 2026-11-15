@@ -114,24 +114,12 @@ function AnimatedText({
   className?: string;
   children?: ReactNode;
 }) {
-  const { complete, visibleText, reveal } = useTypewriter(text, intervalMs);
+  const { visibleText } = useTypewriter(text, intervalMs);
 
   return (
     <div className={className} style={{ font: "inherit" }}>
       <TypewriterContent text={text} visibleText={visibleText} />
-      <div className="typewriter-controls">
-        {children}
-        <button
-          type="button"
-          style={{ font: "inherit" }}
-          aria-disabled={complete}
-          onClick={() => {
-            if (!complete) reveal();
-          }}
-        >
-          Mostrar texto inteiro
-        </button>
-      </div>
+      {children}
     </div>
   );
 }

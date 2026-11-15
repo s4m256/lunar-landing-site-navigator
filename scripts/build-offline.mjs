@@ -82,38 +82,38 @@ const fontLicense = await readFile(
   "utf8",
 );
 const html = `<!doctype html>
-<html lang="pt-BR"><head>
+<html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Uma missão lunar guiada: escolha um local e explore as direções do Sol e da Terra.">
-<title>Lunar — Uma missão, duas direções</title>
+<meta name="description" content="A guided lunar mission: choose a site and explore the directions of the Sun and Earth.">
+<title>Lunar — One mission, two directions</title>
 <style>${style.replace(/<\/style/gi, "<\\/style")}</style>
 </head><body><div id="root"></div>
-<noscript>Ative JavaScript no navegador para explorar a missão lunar.</noscript>
+<noscript>Enable JavaScript in your browser to explore the lunar mission.</noscript>
 <script type="text/plain" id="jetbrains-mono-license">${fontLicense.replace(/<\/script/gi, "<\\/script")}</script>
 <script>${script.replace(/<\/script/gi, "<\\/script")}</script>
 </body></html>`;
 await mkdir(directory, { recursive: true });
 await writeFile(output, html);
-await writeFile(
-  path.join(directory, "LEIA-ME.txt"),
-  [
-    "LUNAR — Uma missão, duas direções",
-    "",
-    "Abra Lunar-Missao.html em um navegador moderno no computador (Chrome, Edge ou Firefox).",
-    "Todos os componentes, ilustrações e dados estão incorporados. Não precisa instalar Node ou Python.",
-    "As fontes citadas em links externos exigem internet, apenas se você decidir abri-las.",
-    "Para ouvir a guia, clique em Ouvir fala. A voz vem do navegador/dispositivo e precisa de uma voz em português disponível; algumas vozes usam internet.",
-    "O texto continua disponível quando o navegador não oferece áudio. A digitação visual e a leitura em voz alta são independentes.",
-    "",
-    "Os quatro locais são hipotéticos; o critério do exercício usa o horizonte tangente idealizado.",
-    "Não calcula bloqueio por montanhas, energia gerada, enlace de rádio nem segurança de pouso.",
-    "CLPS é um programa de entregas comerciais robóticas; personagens e voos são ilustrativos.",
-    "",
-    "Para reproduzir a partir do código: npm ci, npm run typecheck, npm run build:offline.",
-    "As fontes e a proveniência estão no botão Sobre a missão.",
-    "",
-  ].join("\n"),
-);
+const readme = [
+  "LUNAR — One mission, two directions",
+  "",
+  "Open Lunar-English.html in a modern desktop browser (Chrome, Edge, or Firefox).",
+  "The app, assets, font, and science data are embedded. No installation is required.",
+  "Back returns to the previous line. Continue reveals a typing line, then advances on the next click.",
+  "Voice controls are temporarily removed. Reduced-motion preferences are respected.",
+  "External source links require internet only when opened.",
+  "",
+  "The four sites are hypothetical; the exercise compares body centers with an idealized tangent horizon.",
+  "It does not calculate mountain obstruction, generated power, radio performance, or landing safety.",
+  "CLPS missions are robotic. The guide and flights are illustrative.",
+  "",
+  "Build from source: npm ci, npm run typecheck, npm run build:offline.",
+  "Source credits and data provenance are available under About.",
+  "",
+].join("\n");
+await writeFile(path.join(directory, "README.txt"), readme);
+await writeFile(path.join(directory, "LEIA-ME.txt"), readme);
+await writeFile(path.join(directory, "Lunar-English.html"), html);
 console.log(
   `HTML autocontido: ${output} (${(Buffer.byteLength(html) / 1024 / 1024).toFixed(2)} MiB)`,
 );

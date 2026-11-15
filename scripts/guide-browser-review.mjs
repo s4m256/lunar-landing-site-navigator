@@ -1,12 +1,14 @@
-// Run with Playwright and @axe-core/playwright beside this script, as documented
-// in docs/guide-voice.md. Browser API simulations do not prove audible output.
+// Run with Playwright and @axe-core/playwright beside this script.
+// Checks the current English, text-only guide; speech is intentionally absent.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 
-const base = process.env.REVIEW_BASE || "http://127.0.0.1:4188";
-const output = process.env.REVIEW_OUTPUT || "/tmp/lunar-guide-review";
+const url =
+  process.env.REVIEW_URL || "http://127.0.0.1:4188/Lunar-English.html";
+const output =
+  process.env.REVIEW_OUTPUT || "/tmp/lunar-english-dialogue-review";
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
   executablePath:
@@ -18,201 +20,150 @@ const browser = await chromium.launch({
     "--enable-unsafe-swiftshader",
   ],
 });
-const report = {
-  audibleOutputVerified: false,
-  native: {},
-  checks: [],
-  errors: [],
-};
+const report = { checks: [], errors: [], accessibility: [] };
 try {
   const context = await browser.newContext({
-    viewport: { width: 1200, height: 800 },
-  });
-  const page = await context.newPage();
-  page.on("pageerror", (error) => report.errors.push(String(error)));
-  const preview = `${base}/Escolher-astronauta.html`;
-  await page.route(/^https?:/, (route) =>
-    route.request().url() === preview ? route.continue() : route.abort(),
-  );
-  await page.goto(preview, { waitUntil: "networkidle" });
-  const skip = page.locator(".game-dialogue-next");
-  await skip.focus();
-  await page.keyboard.press("Enter");
-  assert(await skip.evaluate((button) => button === document.activeElement));
-  assert.equal(await skip.innerText(), "Continuar");
-  assert(
-    await page
-      .locator(".game-scene-guide")
-      .evaluate(
-        (image) =>
-          image.complete &&
-          image.naturalWidth === 539 &&
-          image.naturalHeight === 1024,
-      ),
-  );
-  await page.locator(".game-voice > summary").click();
-  report.native = await page.evaluate(() => ({
-    supported: "speechSynthesis" in window,
-    voices:
-      window.speechSynthesis?.getVoices().map((voice) => voice.lang) ?? [],
-    feedback: document.querySelector(".speech-control__status")?.textContent,
-  }));
-  if (!report.native.voices.some((lang) => /^pt(?:-|$)/i.test(lang))) {
-    assert(await page.getByRole("button", { name: "Ouvir fala" }).isDisabled());
-    assert.match(
-      report.native.feedback,
-      /não está disponível|Nenhuma voz em português/,
-    );
-  }
-  assert.equal(
-    (
-      await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-        .analyze()
-    ).violations.length,
-    0,
-  );
-  await page.locator(".game-voice > summary").click();
-  await page.screenshot({ path: `${output}/guia.png`, fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  );
-  assert.equal(
-    (
-      await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-        .analyze()
-    ).violations.length,
-    0,
-  );
-  report.checks.push(
-    "Existing asset embeds without network; keyboard focus survives text completion; native speech availability is honestly reported; desktop/mobile axe checks pass.",
-  );
-  await context.close();
-
-  const simulated = await browser.newContext({
-    reducedMotion: "reduce",
     viewport: { width: 1440, height: 1000 },
+    reducedMotion: "no-preference",
   });
-  await simulated.addInitScript(() => {
-    const state = { utterances: [], cancellations: 0 };
-    window.__speechReview = state;
-    Object.defineProperty(window, "SpeechSynthesisUtterance", {
-      configurable: true,
-      value: class {
-        constructor(text) {
-          this.text = text;
-        }
-      },
-    });
+  await context.addInitScript(() => {
+    window.__speechAccesses = 0;
     Object.defineProperty(window, "speechSynthesis", {
       configurable: true,
-      value: {
-        getVoices: () => [
-          { lang: "pt-BR", name: "Test voice", localService: true },
-        ],
-        addEventListener() {},
-        removeEventListener() {},
-        speak(utterance) {
-          state.utterances.push(utterance);
-          utterance.onstart?.();
-        },
-        cancel() {
-          state.cancellations += 1;
-        },
+      get() {
+        window.__speechAccesses++;
+        return { getVoices: () => [], speak() {}, cancel() {} };
       },
     });
   });
-  const mission = await simulated.newPage();
-  mission.on("pageerror", (error) => report.errors.push(String(error)));
-  await mission.goto(`${base}/Lunar-Missao.html`, { waitUntil: "networkidle" });
-  assert.equal(
-    await mission.evaluate(() => window.__speechReview.utterances.length),
-    0,
+  if (process.env.OFFLINE_REVIEW === "1") {
+    await context.route(/^https?:/, (route) =>
+      route.request().url() === url ? route.continue() : route.abort(),
+    );
+  }
+  const page = await context.newPage();
+  page.on("pageerror", (error) => report.errors.push(String(error)));
+  await page.goto(url, { waitUntil: "networkidle" });
+  const next = page.getByRole("button", { name: "Continue", exact: true });
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  const line = () =>
+    page.locator(".game-dialogue-text > span").first().innerText();
+  const visibleLine = () =>
+    page
+      .locator(".game-dialogue-text > span[aria-hidden] > span")
+      .last()
+      .innerText();
+  async function advance() {
+    if ((await line()) !== (await visibleLine())) await next.click();
+    await next.click();
+  }
+  async function audit(name) {
+    const findings = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    report.accessibility.push({
+      name,
+      violations: findings.violations.map((item) => item.id),
+    });
+    assert.equal(findings.violations.length, 0, name);
+  }
+  assert.equal(await page.locator("html").getAttribute("lang"), "en");
+  assert.match(await line(), /CLPS missions are robotic/);
+  assert(await back.isDisabled());
+  assert.deepEqual(
+    await page.locator(".game-dialogue-actions button").allTextContents(),
+    ["Back", "Continue"],
   );
-  if (
-    !(await mission.locator(".game-voice").getAttribute("open")) &&
-    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
-  )
-    await mission.locator(".game-voice > summary").click();
-  await mission.getByRole("button", { name: "Ouvir fala" }).click();
-  assert.equal(
-    await mission.locator(".speech-control__status").innerText(),
-    "Reproduzindo fala.",
-  );
-  const spoken = await mission.evaluate(() => {
-    const utterance = window.__speechReview.utterances.at(-1);
-    return { text: utterance.text, language: utterance.lang };
+  assert.equal(await page.locator(".game-voice, .speech-control").count(), 0);
+  await next.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await next.innerText(), "Continue");
+  assert(await next.evaluate((button) => button === document.activeElement));
+  const firstLine = await line();
+  await page.keyboard.press("Enter");
+  assert.notEqual(await line(), firstLine);
+  await back.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await line(), firstLine);
+  assert(await back.isDisabled());
+  assert(await next.evaluate((button) => button === document.activeElement));
+  await next.click(); // Reveal first line for the screenshot.
+  await audit("English briefing");
+  await page.screenshot({
+    path: `${output}/dialogue-desktop.png`,
+    fullPage: true,
   });
-  assert.match(
-    spoken.text,
-    /As missões CLPS são robóticas: não levam astronautas/,
-  );
-  assert.equal(spoken.language, "pt-BR");
-  await mission.getByRole("button", { name: "Parar fala" }).click();
-  if (
-    !(await mission.locator(".game-voice").getAttribute("open")) &&
-    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
-  )
-    await mission.locator(".game-voice > summary").click();
-  await mission.getByRole("button", { name: "Ouvir fala" }).click();
-  const beforeModal = await mission.evaluate(
-    () => window.__speechReview.cancellations,
-  );
-  await mission.getByRole("button", { name: "Sobre a missão" }).click();
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    );
+    for (const control of [back, next]) {
+      const box = await control.boundingBox();
+      assert(
+        box.width >= 44 && box.height >= 44,
+        "Dialogue targets must be at least 44px",
+      );
+    }
+    if (width === 390) {
+      await audit("English briefing mobile");
+      await page.screenshot({
+        path: `${output}/dialogue-mobile.png`,
+        fullPage: true,
+      });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await advance();
+  await advance();
+  const lastOpening = await line();
+  await advance();
+  await page.getByRole("button", { name: "Skip launch" }).click();
+  const firstArrival = await line();
+  await back.click();
+  assert.equal(await line(), lastOpening);
+  await advance();
+  await page.getByRole("button", { name: "Skip launch" }).click();
+  assert.equal(await line(), firstArrival);
+  await advance();
+  await back.click();
+  assert.equal(await line(), firstArrival);
+  await advance();
+  await advance();
+  await page.getByRole("heading", { name: "Where should we land?" }).waitFor();
+  await page.locator('.mission-globe[data-status="ready"]').waitFor();
+  await page.getByRole("button", { name: /^Site B,/ }).click();
+  await page.getByRole("button", { name: "Land here" }).click();
+  await page.getByRole("button", { name: "Skip landing" }).click();
+  await page.getByRole("heading", { name: "Site selected." }).waitFor();
+  assert.equal(await page.locator(".game-dialogue-actions button").count(), 2);
+  await back.click();
   assert.equal(
-    await mission.evaluate(() => window.__speechReview.cancellations),
-    beforeModal + 1,
+    await page
+      .getByRole("button", { name: /^Site B,/ })
+      .getAttribute("aria-pressed"),
+    "true",
   );
-  assert(await mission.getByRole("link", { name: "CC BY 2.0" }).isVisible());
-  await mission.getByRole("button", { name: "Fechar janela" }).click();
-  if (
-    !(await mission.locator(".game-voice").getAttribute("open")) &&
-    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
-  )
-    await mission.locator(".game-voice > summary").click();
-  await mission.getByRole("button", { name: "Ouvir fala" }).click();
-  const beforeMap = await mission.evaluate(
-    () => window.__speechReview.cancellations,
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  assert(
+    await page.getByRole("dialog", { name: "About this mission" }).isVisible(),
   );
-  await mission.getByRole("button", { name: "Pular conversa" }).click();
-  assert.equal(
-    await mission.evaluate(() => window.__speechReview.cancellations),
-    beforeMap + 1,
+  assert(
+    await page
+      .getByRole("link", { name: "Download data and audit (JSON)" })
+      .isVisible(),
   );
-  await mission.getByRole("button", { name: /^Local B,/ }).click();
-  await mission.getByRole("button", { name: "Pousar neste local" }).click();
-  await mission.getByRole("heading", { name: "Escolha registrada." }).waitFor();
-  if (
-    !(await mission.locator(".game-voice").getAttribute("open")) &&
-    !(await mission.getByRole("button", { name: "Ouvir fala" }).isVisible())
-  )
-    await mission.locator(".game-voice > summary").click();
-  await mission.getByRole("button", { name: "Ouvir fala" }).click();
-  assert.match(
-    await mission.evaluate(() => window.__speechReview.utterances.at(-1).text),
-    /^Boa!/,
-  );
-  await mission.evaluate(() =>
-    window.__speechReview.utterances.at(-1).onerror?.(),
-  );
-  await mission
-    .getByText(
-      "Não foi possível reproduzir a fala. Leia o texto acima ou tente novamente.",
-      { exact: true },
-    )
-    .waitFor();
-  assert.match(
-    await mission.locator(".speech-control__status").innerText(),
-    /Não foi possível reproduzir/,
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  assert.equal(await page.evaluate(() => window.__speechAccesses), 0);
+  report.checks.push(
+    "Two dialogue controls, reveal-before-advance, backward navigation across scenes, keyboard focus, English copy, and no voice API access verified.",
   );
   report.checks.push(
-    "Simulated voice: explicit start/stop, complete Portuguese text, modal/navigation cancellation, final dialogue, and error recovery pass. This checks the API integration, not sound.",
+    "Mobile widths 320/390/768 fit without horizontal overflow; controls retain 44px touch targets; completion returns to the selected site.",
   );
-  await simulated.close();
+  await context.close();
   assert.deepEqual(report.errors, []);
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

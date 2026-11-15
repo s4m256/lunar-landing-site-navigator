@@ -9,7 +9,11 @@ import { MissionGlobe } from "./globe/MissionGlobe";
 import { HorizonDiagram } from "./HorizonDiagram";
 import { GameDialogue } from "./GameDialogue";
 import { GameScene, CINEMATIC_DURATION_MS } from "./GameScene";
-import { SpeechControl } from "./SpeechControl";
+import {
+  openingDialogue,
+  arrivalDialogue,
+  completionDialogue,
+} from "./mission-copy";
 import {
   DEFAULT_MISSION_DATE,
   MISSION_AUDIT,
@@ -27,17 +31,7 @@ import type {
 import "./mission.css";
 import "./game-shell.css";
 
-const openingDialogue = [
-  "Oi! Eu sou a Lua, sua guia fictícia. As missões CLPS são robóticas: não levam astronautas.",
-  "A NASA contrata empresas para levar equipamentos científicos até a Lua. Nosso trabalho é ajudar a escolher onde pousar.",
-  "Bora acompanhar a viagem? Depois vamos procurar um lugar com Sol à vista e caminho livre na direção da Terra.",
-];
-const arrivalDialogue = [
-  "Chegamos! Para os painéis solares, faz diferença onde o Sol aparece no céu. Uma sombra pode mudar tudo.",
-  "E para falar com a Terra, precisamos olhar na direção dela. Escolha um ponto e vamos investigar as duas direções.",
-];
-
-const targetLabels: Record<TargetName, string> = { sun: "Sol", earth: "Terra" };
+const targetLabels: Record<TargetName, string> = { sun: "Sun", earth: "Earth" };
 
 function Arrow({
   direction = "up-right",
@@ -69,7 +63,7 @@ function Arrow({
 }
 
 function formatAngle(value: number) {
-  return `${value.toFixed(1).replace(".", ",")}°`;
+  return `${value.toFixed(1)}°`;
 }
 
 function validDirection(direction: MissionDirection) {
@@ -90,9 +84,9 @@ function validDirection(direction: MissionDirection) {
 }
 
 function directionLabel(direction: MissionDirection) {
-  if (direction.elevationDeg > 0) return "Acima do horizonte";
-  if (direction.elevationDeg < 0) return "Abaixo do horizonte";
-  return "No horizonte";
+  if (direction.elevationDeg > 0) return "Above the horizon";
+  if (direction.elevationDeg < 0) return "Below the horizon";
+  return "On the horizon";
 }
 
 function useReducedMotion() {
@@ -146,13 +140,12 @@ export function MissionApp() {
         analysis.site.id !== selectedSiteId ||
         !analysis.utc.startsWith(date)
       ) {
-        throw new Error("Dados indisponíveis");
+        throw new Error("Data unavailable");
       }
       return { analysis };
     } catch {
       return {
-        error:
-          "Não foi possível carregar os dados deste local e desta data. Escolha outra opção para continuar.",
+        error: "We could not load this site and date. Try another option.",
       };
     }
   }, [selectedSiteId, date]);
@@ -270,34 +263,20 @@ export function MissionApp() {
     setDialog("bonus");
   }
 
-  const spokenText =
-    stage === "briefing"
-      ? openingDialogue[dialogueIndex]
-      : stage === "arrival"
-        ? arrivalDialogue[arrivalIndex]
-        : "Boa! Você encontrou o Sol e a Terra acima do horizonte do exercício. Num pouso real, ainda precisamos estudar o relevo, a energia e a comunicação.";
-
-  const voiceControl = !dialog && (
-    <details className="game-voice" key={spokenText}>
-      <summary>Voz</summary>
-      <SpeechControl text={spokenText} />
-    </details>
-  );
-
   return (
     <main className={`lunar-mission game-experience stage-${stage}`}>
       <div className="mission-content" inert={dialog !== null}>
         <header className="mission-header">
           <div className="mission-brand">
             <span aria-hidden="true">◒</span> LUNAR{" "}
-            <span className="mission-tagline">Missão lunar</span>
+            <span className="mission-tagline">Lunar mission</span>
           </div>
           <div className="mission-header-actions">
             <button
               className="mission-button mission-button-quiet"
               onClick={() => setDialog("about")}
             >
-              Sobre a missão <Arrow />
+              About <Arrow />
             </button>
           </div>
         </header>
@@ -305,25 +284,22 @@ export function MissionApp() {
         {stage === "briefing" && (
           <GameScene phase="briefing">
             <h1 className="game-scene-heading" ref={headingRef} tabIndex={-1}>
-              Missão lunar
+              Lunar mission
             </h1>
             <GameDialogue
               text={openingDialogue[dialogueIndex]}
               active={!dialog}
-              nextLabel={
-                dialogueIndex === openingDialogue.length - 1
-                  ? "Vamos nessa"
-                  : "Continuar"
+              onBack={
+                dialogueIndex > 0
+                  ? () => setDialogueIndex((index) => index - 1)
+                  : undefined
               }
               onNext={() => {
                 if (dialogueIndex < openingDialogue.length - 1)
                   setDialogueIndex((index) => index + 1);
                 else setStage("launch");
               }}
-              onSkip={() => setStage("selection")}
-            >
-              {voiceControl}
-            </GameDialogue>
+            />
           </GameScene>
         )}
 
@@ -332,17 +308,17 @@ export function MissionApp() {
             <div className="game-cinematic-caption">
               <h1 ref={headingRef} tabIndex={-1}>
                 {stage === "launch"
-                  ? "Rumo à Lua"
-                  : "Aproximando da superfície"}
+                  ? "On our way to the Moon"
+                  : "Approaching the surface"}
               </h1>
-              <p>Viagem ilustrativa</p>
+              <p>Illustrative flight</p>
               <button
                 className="game-dialogue-skip"
                 onClick={() =>
                   setStage(stage === "launch" ? "arrival" : "complete")
                 }
               >
-                {stage === "launch" ? "Pular decolagem" : "Pular pouso"}
+                {stage === "launch" ? "Skip launch" : "Skip landing"}
               </button>
             </div>
           </GameScene>
@@ -351,25 +327,24 @@ export function MissionApp() {
         {stage === "arrival" && (
           <GameScene phase="arrival">
             <h1 className="game-scene-heading" ref={headingRef} tabIndex={-1}>
-              Chegamos à Lua
+              Welcome to the Moon
             </h1>
             <GameDialogue
               text={arrivalDialogue[arrivalIndex]}
               active={!dialog}
-              nextLabel={
-                arrivalIndex === arrivalDialogue.length - 1
-                  ? "Escolher um local"
-                  : "Continuar"
-              }
+              onBack={() => {
+                if (arrivalIndex > 0) setArrivalIndex((index) => index - 1);
+                else {
+                  setDialogueIndex(openingDialogue.length - 1);
+                  setStage("briefing");
+                }
+              }}
               onNext={() => {
                 if (arrivalIndex < arrivalDialogue.length - 1)
                   setArrivalIndex((index) => index + 1);
                 else setStage("selection");
               }}
-              onSkip={() => setStage("selection")}
-            >
-              {voiceControl}
-            </GameDialogue>
+            />
           </GameScene>
         )}
 
@@ -381,35 +356,32 @@ export function MissionApp() {
             >
               <div className="mission-section-heading">
                 <div>
-                  <p className="mission-eyebrow">Você está no comando</p>
+                  <p className="mission-eyebrow">Your mission</p>
                   <h1
                     id="mission-heading"
                     className="mission-title"
                     ref={headingRef}
                     tabIndex={-1}
                   >
-                    Onde vamos pousar?
+                    Where should we land?
                   </h1>
                 </div>
                 <p>
-                  Neste exercício, procure Sol e Terra acima do horizonte
-                  idealizado.
+                  Find a site and date with the Sun and Earth above an idealized
+                  horizon.
                 </p>
               </div>
               <div className="mission-workspace">
                 <div className="mission-map-panel" id="mission-map-panel">
                   <div className="map-heading">
                     <h2 tabIndex={-1} ref={mapHeadingRef}>
-                      Explore os locais
+                      Explore the sites
                     </h2>
                     <span className="mission-map-counter">
-                      {visitedSiteIds.length} de {MISSION_SITES.length}{" "}
-                      explorados
+                      {visitedSiteIds.length} of {MISSION_SITES.length} explored
                     </span>
                   </div>
-                  <p className="map-caption">
-                    Selecione um dos quatro pontos para investigar.
-                  </p>
+                  <p className="map-caption">Choose a point to explore.</p>
                   <MissionGlobe
                     sites={MISSION_SITES}
                     selectedSiteId={selectedSiteId}
@@ -426,12 +398,12 @@ export function MissionApp() {
                       aria-controls="mission-map-panel"
                       onClick={returnToMap}
                     >
-                      Voltar ao mapa
+                      Back to map
                     </button>
                   )}
                   <div className="mission-date-control">
                     <label htmlFor="mission-date">
-                      Data da observação <span>· 00:00 UTC</span>
+                      Date <span>· 00:00 UTC</span>
                     </label>
                     <select
                       id="mission-date"
@@ -450,32 +422,31 @@ export function MissionApp() {
                       <span aria-hidden="true">
                         <Arrow direction="up-left" />
                       </span>
-                      <h2>Sua descoberta começa no mapa.</h2>
+                      <h2>Pick a point on the Moon.</h2>
                       <p>
-                        Escolha um local para comparar o Sol e a Terra. Você
-                        pode experimentar quantas opções quiser.
+                        Compare the Sun and Earth at one site, then try another.
                       </p>
                     </div>
                   )}
                   {result.error && (
                     <div role="alert" className="mission-error">
-                      <h2>Dados indisponíveis</h2>
+                      <h2>Data unavailable</h2>
                       <p>{result.error}</p>
                     </div>
                   )}
                   {analysis && (
                     <div className="analysis-content">
                       <div className="mission-site-heading">
-                        <p className="mission-eyebrow">Local em análise</p>
+                        <p className="mission-eyebrow">Selected site</p>
                         <h2>{analysis.site.label}</h2>
                         <p>
-                          {analysis.site.latitudeDeg}° de latitude ·{" "}
-                          {analysis.site.longitudeDeg}° de longitude
+                          {analysis.site.latitudeDeg}° latitude ·{" "}
+                          {analysis.site.longitudeDeg}° longitude
                         </p>
                       </div>
                       <div
                         className="target-cards"
-                        aria-label="Direção para explicar"
+                        aria-label="Direction to explore"
                       >
                         {(["sun", "earth"] as const).map((name) => (
                           <button
@@ -508,13 +479,13 @@ export function MissionApp() {
                       >
                         <h3>
                           {meetsGoal
-                            ? "As duas direções estão acima."
-                            : "Este ponto ainda não atende ao objetivo."}
+                            ? "Both are above the horizon."
+                            : "Try another site or date."}
                         </h3>
                         <p>
                           {meetsGoal
-                            ? "Os centros do Sol e da Terra estão acima do horizonte idealizado nesta data. Você encontrou uma opção para concluir o exercício."
-                            : `${analysis.sun.elevationDeg <= 0 && analysis.earth.elevationDeg <= 0 ? "O Sol e a Terra estão" : analysis.sun.elevationDeg <= 0 ? "O Sol está" : "A Terra está"} no horizonte ou abaixo dele nesta data. Experimente outro ponto ou outra data e compare.`}
+                            ? "The centers of the Sun and Earth are above the idealized horizon at this time. This meets the goal of the exercise."
+                            : `${analysis.sun.elevationDeg <= 0 && analysis.earth.elevationDeg <= 0 ? "The centers of the Sun and Earth are" : analysis.sun.elevationDeg <= 0 ? "The Sun’s center is" : "Earth’s center is"} on or below the horizon at this time. Try another site or date.`}
                         </p>
                       </div>
                       <div className="mission-actions">
@@ -525,21 +496,20 @@ export function MissionApp() {
                             if (meetsGoal) setStage("landing");
                           }}
                         >
-                          Pousar neste local <Arrow direction="down" />
+                          Land here <Arrow direction="down" />
                         </button>
                         {!meetsGoal && (
                           <button
                             className="mission-button mission-button-secondary"
                             onClick={returnToMap}
                           >
-                            Escolher outro ponto
+                            Choose another point
                           </button>
                         )}
                       </div>
                       <p className="mission-footnote">
-                        Ângulos dos centros dos astros. Esta comparação não
-                        determina energia, comunicação ou segurança de um pouso
-                        real.
+                        Center angles only. This exercise does not calculate
+                        power, radio performance, or landing safety.
                       </p>
                     </div>
                   )}
@@ -553,26 +523,24 @@ export function MissionApp() {
           <GameScene phase="complete">
             <div className="game-result-caption">
               <h1 ref={headingRef} tabIndex={-1}>
-                Escolha registrada.
+                Site selected.
               </h1>
               <h2>{analysis.site.label}</h2>
               <p>{dateLabel}</p>
               <p>
-                Sol {formatAngle(analysis.sun.elevationDeg)} · Terra{" "}
+                Sun {formatAngle(analysis.sun.elevationDeg)} · Earth{" "}
                 {formatAngle(analysis.earth.elevationDeg)}
               </p>
               <p className="mission-footnote">
-                Pouso ilustrativo em um local hipotético.
+                Illustrative landing at a hypothetical site.
               </p>
             </div>
             <GameDialogue
-              text={spokenText}
+              text={completionDialogue}
               active={!dialog}
-              nextLabel="Explorar outra opção"
+              onBack={() => setStage("selection")}
               onNext={() => setStage("selection")}
-            >
-              {voiceControl}
-            </GameDialogue>
+            />
           </GameScene>
         )}
       </div>
@@ -594,101 +562,98 @@ export function MissionApp() {
           >
             <button
               className="dialog-close mission-button mission-button-quiet"
-              aria-label="Fechar janela"
+              aria-label="Close dialog"
               onClick={() => setDialog(null)}
             >
-              Fechar <span aria-hidden="true">×</span>
+              Close <span aria-hidden="true">×</span>
             </button>
             <p className="mission-eyebrow">
               {dialog === "about"
-                ? "Contexto e fontes"
-                : "Uma descoberta extra"}
+                ? "Context and sources"
+                : "A little discovery"}
             </p>
             <h2 id="mission-dialog-title">
-              {dialog === "about"
-                ? "Sobre esta missão"
-                : "Na Lua, o silêncio é diferente."}
+              {dialog === "about" ? "About this mission" : "Sound on the Moon"}
             </h2>
             {dialog === "about" ? (
               <>
                 <p>
-                  Esta é uma experiência educativa com uma guia fictícia e uma
-                  nave robótica. A iniciativa CLPS da NASA contrata entregas
-                  comerciais de cargas científicas e tecnológicas à Lua.
+                  This is an educational experience with a fictional guide and a
+                  robotic spacecraft. NASA’s Commercial Lunar Payload Services
+                  (CLPS) program buys commercial deliveries of science and
+                  technology to the Moon.
                 </p>
                 <p>
-                  Os quatro locais são hipotéticos. As datas são amostras
-                  selecionadas, todas às 00:00 UTC; não representam uma
-                  simulação contínua.
+                  The four sites are hypothetical. Dates are selected samples at
+                  00:00 UTC, not a continuous simulation.
                 </p>
                 <p>
-                  O objetivo é comparar os centros do Sol e da Terra com um
-                  horizonte lunar idealizado. As ilustrações de crateras, relevo
-                  e voo não medem obstruções por montanhas.
+                  We compare the centers of the Sun and Earth with an idealized
+                  lunar horizon. Terrain and flight illustrations do not measure
+                  mountain obstruction.
                 </p>
                 <p>
-                  Estar acima do horizonte não garante energia, enlace de
-                  comunicação ou segurança de pouso.
+                  An object above the horizon does not guarantee power, a
+                  working radio link, or a safe landing.
                 </p>
                 <dl className="mission-provenance">
                   <div>
-                    <dt>Dados</dt>
+                    <dt>Data</dt>
                     <dd>{MISSION_PROVENANCE.summary}</dd>
                   </div>
                   <div>
-                    <dt>Modelo</dt>
+                    <dt>Model</dt>
                     <dd>{MISSION_PROVENANCE.model}</dd>
                   </div>
                   <div>
-                    <dt>Fontes e auditoria</dt>
+                    <dt>Sources and audit</dt>
                     <dd>{MISSION_PROVENANCE.source}</dd>
                   </div>
                   <div>
-                    <dt>Limites</dt>
+                    <dt>Limitations</dt>
                     <dd>{MISSION_PROVENANCE.limitation}</dd>
                   </div>
                 </dl>
                 <p className="mission-asset-credit">
-                  Seleção na Lua: visualização reaproveitada da{" "}
+                  Moon selection adapts the existing{" "}
                   <a href="https://github.com/s4m256/lunar-landing-site-navigator/blob/343d31f/frontend/src/landing-guide/LunarViewport.tsx">
-                    visualização 3D do repositório
+                    repository’s 3D view
                   </a>
-                  , com o mosaico LROC e a camada polar LOLA já incluídos nessa
-                  versão. O sombreamento mostra o relevo; não representa a
-                  iluminação da data escolhida nem calcula obstruções por
-                  relevo. O terreno é uma referência visual: a fonte usa MOON_ME
-                  e os cálculos usam IAU_MOON, sem transformação entre esses
-                  referenciais.
+                  , with its LROC mosaic and LOLA polar layer. Shading shows
+                  relief, not lighting on the selected date or mountain
+                  obstruction. The terrain is an approximate visual reference:
+                  its source uses MOON_ME, while calculations use IAU_MOON,
+                  without a frame transformation.
                 </p>
                 <p className="mission-asset-credit">
-                  Cenário: ilustração de terreno lunar do acervo{" "}
+                  Scenery: lunar terrain illustration from{" "}
                   <a href="https://github.com/nasa/NASA-3D-Resources/blob/11ebb4ee043715aefbba6aeec8a61746fad67fa7/Images%20and%20Textures/Moon%20-%20Lunar%20Terrain/Moon%20-%20Lunar%20Terrain.jpg">
                     NASA 3D Resources
                   </a>
-                  . Não representa o local escolhido nem um horizonte calculado.
+                  . It does not depict the selected site or a calculated
+                  horizon.
                 </p>
                 <p className="mission-asset-credit">
-                  Astronauta:{" "}
+                  Astronaut:{" "}
                   <a href="https://poly.google.com/view/dLHpzNdygsg">
-                    Astronaut, de Poly
+                    Astronaut by Poly
                   </a>
-                  , licença{" "}
+                  , licensed under{" "}
                   <a href="https://creativecommons.org/licenses/by/2.0/">
                     CC BY 2.0
                   </a>
-                  . Imagem existente, sem alterações além do tamanho de
-                  exibição, disponível no{" "}
+                  . Existing image, resized for display, available in{" "}
                   <a href="https://github.com/google/model-viewer/blob/9c6fea9ac579e618bf2932456d3308309017df00/packages/modelviewer.dev/assets/poster-astronaut.webp">
                     model-viewer
                   </a>
                   .
                 </p>
                 <p className="mission-asset-credit">
-                  Fonte do diálogo:{" "}
+                  Dialogue font:{" "}
                   <a href="https://github.com/JetBrains/JetBrainsMono/tree/v2.304">
                     JetBrains Mono
                   </a>
-                  , sob{" "}
+                  , under the{" "}
                   <a href="https://github.com/JetBrains/JetBrainsMono/blob/v2.304/OFL.txt">
                     SIL Open Font License 1.1
                   </a>
@@ -698,29 +663,29 @@ export function MissionApp() {
                   <a
                     className="mission-button mission-button-secondary"
                     href={auditUrl}
-                    download="auditoria-missao-lunar.json"
+                    download="lunar-mission-audit.json"
                   >
-                    Baixar dados e auditoria (JSON)
+                    Download data and audit (JSON)
                   </a>
                 ) : (
-                  <p>O arquivo de auditoria está indisponível.</p>
+                  <p>The audit file is unavailable.</p>
                 )}
               </>
             ) : (
               <>
                 <p>
-                  O som precisa de um meio para se propagar. No vácuo da Lua,
-                  ele não viaja como no ar da Terra.
+                  Sound needs a medium to travel through. In the Moon’s vacuum,
+                  it cannot travel as it does through air on Earth.
                 </p>
                 <p>
-                  Os astronautas conversam por rádio. Você descobriu um bônus —
-                  e pode continuar sua missão quando quiser.
+                  Astronauts use radio to talk to each other. You found a
+                  bonus—keep exploring whenever you’re ready.
                 </p>
                 <button
                   className="mission-button mission-button-primary"
                   onClick={() => setDialog(null)}
                 >
-                  Voltar à exploração
+                  Back to exploring
                 </button>
               </>
             )}

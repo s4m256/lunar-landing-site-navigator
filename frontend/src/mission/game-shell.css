@@ -38,9 +38,8 @@
 .game-cinematic-caption {
   width: fit-content;
   max-width: 100%;
-  padding: 18px 22px;
-  background: #070b12df;
-  border: 1px solid #6a7481;
+  padding: 0;
+  text-shadow: 0 1px 4px #000;
 }
 .lunar-mission .game-cinematic-caption h1 {
   font-size: clamp(22px, 3vw, 32px);
@@ -51,46 +50,12 @@
 }
 .game-cinematic-caption button {
   min-height: 44px;
-  padding: 10px 16px;
+  padding: 10px 4px;
   color: #f3f5f8;
-  background: #111923;
-  border: 1px solid #8994a3;
-  border-radius: 3px;
-}
-.game-voice {
-  font-size: 14px;
-}
-.game-voice summary {
-  cursor: pointer;
-  padding: 10px 12px;
-  min-height: 44px;
-  border: 1px solid transparent;
-}
-.game-voice summary:focus-visible {
-  outline: 3px solid #edc384;
-  outline-offset: 3px;
-}
-.game-voice[open] {
-  flex: 1 0 100%;
-}
-.game-voice .speech-control {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-}
-.game-voice .speech-toggle {
-  min-height: 44px;
-  padding: 8px 12px;
-  color: #f3f5f8;
-  background: #111923;
-  border: 1px solid #8994a3;
-  border-radius: 3px;
-}
-.game-voice .speech-control__status {
-  max-width: 600px;
-  font-size: 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
 }
 .game-result-caption {
   position: absolute;

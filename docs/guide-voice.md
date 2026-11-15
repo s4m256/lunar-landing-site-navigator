@@ -1,25 +1,25 @@
-# Guia escolhida, texto e voz
+# Guide and voice status
 
-O usuário escolheu a opção C, imagem existente Astronaut, de Poly. A aplicação utiliza a prévia original, incorporada também ao HTML autocontido. Os créditos estão em “Sobre a missão” e em [assets/astronaut.md](assets/astronaut.md). A apresentação explica que a astronauta é fictícia e as missões CLPS não levam astronautas.
+The selected guide remains the existing Astronaut image by Poly (CC BY 2.0). [Asset credits](assets/astronaut.md) are also available in About. The first English line explains that Lua is fictional and CLPS missions carry no astronauts.
 
-Na caixa de diálogo do jogo, abrir “Voz” e acionar “Ouvir fala” inicia a leitura do texto completo pela Web Speech API, com preferência por uma voz pt-BR e alternativa em português. Não há reprodução automática. “Parar fala”, abrir o contexto, sair da etapa ou mudar o texto cancela a leitura. Erros, ausência de voz em português e falta de início após dez segundos produzem mensagem visível. A interface não afirma estar reproduzindo antes do evento de início do navegador.
+Voice is temporarily removed from the active application. Neither `GameDialogue` nor the legacy `MissionDialogue` mounts `SpeechControl`. The speech implementation remains in source for a later, explicit accessibility decision; the active app does not access the Web Speech API.
 
-A voz depende do navegador e do dispositivo; algumas usam serviço remoto/internet. O projeto não inclui arquivos de áudio, um serviço externo próprio ou garantia de disponibilidade offline da voz. Não há sincronização palavra a palavra entre voz e digitação. Leitores de tela recebem uma cópia completa do texto, sem anúncios a cada caractere. Movimento reduzido mostra tudo imediatamente. O botão principal da conversa alterna entre “Mostrar fala” e “Continuar” (ou a próxima ação) sem desmontar o elemento focado. O componente de texto independente conserva seu botão “Mostrar texto inteiro”.
+The current interaction is text only: Back revisits a line; Continue completes a typing line, then advances on the next click. Reduced motion presents the full text immediately. Screen readers receive one complete accessible copy. See the [script and navigation](mission-dialogue.md).
 
-Para gerar a missão e atualizar o link de teste anteriormente enviado:
+Generate the standalone preview:
 
 ```sh
 node scripts/build-guide-preview.mjs /tmp/lunar-delivery
 python -m http.server 4188 --bind 127.0.0.1 --directory /tmp/lunar-delivery
 ```
 
-O endereço `http://127.0.0.1:4188/Escolher-astronauta.html` agora contém a mesma missão completa de `Lunar-Missao.html`. Não há uma demonstração separada do personagem: o link anterior foi atualizado para a experiência de jogo.
+Open `http://127.0.0.1:4188/Lunar-English.html`. Previous filenames remain aliases of the same application.
 
-Para reproduzir a revisão automatizada, instale Playwright e Axe conforme [guided-mission.md](guided-mission.md), copie o runner para o diretório dessas dependências e execute a partir da raiz do projeto:
+After installing Playwright and Axe as documented in [guided-mission.md](guided-mission.md), run:
 
 ```sh
 cp scripts/guide-browser-review.mjs /tmp/lunar-review-browser/guide-browser-review.mjs
-node /tmp/lunar-review-browser/guide-browser-review.mjs
+REVIEW_URL=http://127.0.0.1:4188/Lunar-English.html OFFLINE_REVIEW=1 node /tmp/lunar-review-browser/guide-browser-review.mjs
 ```
 
-O runner separa a disponibilidade real do navegador dos testes com uma API de voz simulada. Confere imagem incorporada, foco por teclado, layouts desktop/celular, verificações Axe, início explícito, cancelamento e erros. A simulação não demonstra som audível. O Chromium gerenciado utilizado nesta entrega não oferece vozes instaladas; a saída sonora não foi certificada. A abertura `file://` também é bloqueada nesse ambiente; os HTMLs são verificados via HTTP local, incluindo a missão completa com requisições externas bloqueadas.
+The runner checks English text, two controls, reveal/advance, backward navigation, keyboard focus, mobile sizing, selected Axe rules, and zero speech API access. It does not test audible output because voice is not part of this version.

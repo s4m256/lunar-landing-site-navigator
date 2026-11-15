@@ -14,28 +14,28 @@ import type {
 } from "./types";
 
 export const MISSION_SITES: MissionSite[] = [
-  { id: "mission-a", label: "Local A", latitudeDeg: -85, longitudeDeg: 0 },
-  { id: "mission-b", label: "Local B", latitudeDeg: -85, longitudeDeg: 90 },
-  { id: "mission-c", label: "Local C", latitudeDeg: -85, longitudeDeg: 180 },
-  { id: "mission-d", label: "Local D", latitudeDeg: -85, longitudeDeg: 270 },
+  { id: "mission-a", label: "Site A", latitudeDeg: -85, longitudeDeg: 0 },
+  { id: "mission-b", label: "Site B", latitudeDeg: -85, longitudeDeg: 90 },
+  { id: "mission-c", label: "Site C", latitudeDeg: -85, longitudeDeg: 180 },
+  { id: "mission-d", label: "Site D", latitudeDeg: -85, longitudeDeg: 270 },
 ];
 
 export const MISSION_DATES: MissionDate[] = [
-  { value: "2026-03-24", label: "24 de março de 2026 — 00h UTC" },
-  { value: "2026-04-28", label: "28 de abril de 2026 — 00h UTC" },
-  { value: "2026-09-08", label: "8 de setembro de 2026 — 00h UTC" },
+  { value: "2026-03-24", label: "March 24, 2026 — 00:00 UTC" },
+  { value: "2026-04-28", label: "April 28, 2026 — 00:00 UTC" },
+  { value: "2026-09-08", label: "September 8, 2026 — 00:00 UTC" },
 ];
 export const DEFAULT_MISSION_DATE = MISSION_DATES[0].value;
 
 export const MISSION_PROVENANCE: MissionProvenance = {
   summary:
-    "Direções aparentes dos centros do Sol e da Terra calculadas com SPICE, em três datas de 2026 às 00h UTC.",
+    "Apparent directions to the centers of the Sun and Earth, calculated with SPICE for three dates in 2026 at 00:00 UTC.",
   model:
-    "IAU_MOON · CN+S · esfera de raio 1.737.400 m · altura radial 0 m · horizonte tangente 0°.",
+    "IAU_MOON · CN+S · sphere radius 1,737,400 m · radial height 0 m · tangent horizon 0°.",
   source:
-    "JPL DE421 via pacote skyfield-data 7.0.0; PCK/LSK via espelho SpiceyPy. Arquivos conferidos por SHA-256.",
+    "JPL DE421 via skyfield-data 7.0.0; PCK/LSK via a SpiceyPy mirror. Files checked by SHA-256.",
   limitation:
-    "Locais hipotéticos. Sem relevo, discos dos astros, eclipses, garantia de energia ou comunicação. Sem validação independente pelo Horizons; precisão física e atualização do LSK não confirmadas.",
+    "Hypothetical sites. No terrain, body disks, eclipses, or guarantee of power or communication. No independent Horizons validation; physical accuracy and LSK currency are unconfirmed.",
 };
 
 const validate = new Ajv({
@@ -49,21 +49,21 @@ const expectedTimes = Array.from({ length: 365 }, (_, day) =>
 /** Validate the unchanged scientific contract and the exact four-site mission grid. */
 export function parseMissionResults(input: unknown): DemoResult[] {
   const fail = (detail: string): never => {
-    throw new Error(`Dados científicos da missão inválidos: ${detail}.`);
+    throw new Error(`Invalid mission scientific data: ${detail}.`);
   };
   if (!Array.isArray(input) || input.length !== 2)
-    return fail("esperados dois lotes");
+    return fail("expected two batches");
   const results: DemoResult[] = [];
   const seenSites = new Set<string>();
   for (const candidate of input) {
-    if (!validate(candidate)) return fail("contrato analysis-result 1.0.0");
+    if (!validate(candidate)) return fail("analysis-result 1.0.0 contract");
     const { request, series, provenance } = candidate;
     if (
       request.start_utc !== "2026-01-01T00:00:00Z" ||
       request.end_utc !== "2027-01-01T00:00:00Z" ||
       request.step_seconds !== 86400
     )
-      return fail("intervalo ou cadência incompatível");
+      return fail("incompatible interval or cadence");
     const localIds = new Set<string>();
     for (const actual of request.sites) {
       const expected = MISSION_SITES.find((site) => site.id === actual.id);
@@ -74,7 +74,7 @@ export function parseMissionResults(input: unknown): DemoResult[] {
         actual.longitude_east_deg !== expected.longitudeDeg ||
         actual.height_m !== 0
       )
-        return fail("observador ausente, repetido ou incompatível");
+        return fail("missing, duplicate, or incompatible observer");
       localIds.add(actual.id);
       seenSites.add(actual.id);
     }
@@ -82,10 +82,10 @@ export function parseMissionResults(input: unknown): DemoResult[] {
     for (const row of series) {
       const pair = `${row.site_id}/${row.target}`;
       if (!localIds.has(row.site_id) || pairs.has(pair))
-        return fail("par local/astro incompatível");
+        return fail("incompatible site/target pair");
       pairs.add(pair);
       if (row.samples.length !== expectedTimes.length)
-        return fail("série incompleta");
+        return fail("incomplete series");
       row.samples.forEach((sample, index) => {
         if (
           sample.utc !== expectedTimes[index] ||
@@ -93,11 +93,11 @@ export function parseMissionResults(input: unknown): DemoResult[] {
           sample.azimuth_deg >= 360 ||
           !Number.isFinite(sample.elevation_deg)
         )
-          fail("amostra, instante ou ângulo incompatível");
+          fail("incompatible sample, time, or angle");
       });
     }
     if (provenance.kernels.length !== manifest.kernels.length)
-      return fail("conjunto de kernels incompatível");
+      return fail("incompatible kernel set");
     for (const expected of manifest.kernels) {
       const matching = provenance.kernels.filter(
         (kernel) => kernel.filename === expected.filename,
@@ -107,12 +107,12 @@ export function parseMissionResults(input: unknown): DemoResult[] {
         matching[0].sha256 !== expected.sha256 ||
         matching[0].url !== expected.url
       )
-        return fail("origem ou hash de kernel incompatível");
+        return fail("incompatible kernel source or hash");
     }
     results.push(candidate);
   }
   if (seenSites.size !== MISSION_SITES.length)
-    return fail("cobertura dos quatro locais incompleta");
+    return fail("incomplete coverage of the four sites");
   return results;
 }
 
@@ -130,7 +130,7 @@ const loaded = (() => {
         error instanceof Error
           ? error
           : new Error(
-              "Dados científicos da missão inválidos: falha de leitura.",
+              "Invalid mission scientific data: read failure.",
             ),
     };
   }
@@ -145,7 +145,7 @@ export const MISSION_AUDIT = loaded.results
 export function classifyMissionElevation(elevationDeg: number): DirectionState {
   if (!Number.isFinite(elevationDeg) || Math.abs(elevationDeg) > 90)
     throw new Error(
-      "Dados científicos da missão inválidos: elevação fora do intervalo.",
+      "Invalid mission scientific data: elevation out of range.",
     );
   return elevationDeg > 0 ? "above" : elevationDeg < 0 ? "below" : "on-horizon";
 }
