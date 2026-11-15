@@ -1,4 +1,22 @@
-"""Verified NASA PDS LOLA topography and NAIF SPICE kernel registry."""
+"""Registry of the NASA PDS LOLA DEM, the NAIF SPICE kernels and the candidate sites.
+
+Each remote asset has a pinned SHA-256 that ``ensure_assets`` checks on download and on reuse.
+What has been checked about the pins themselves (SPA-10, 2026-11-15; NAIF and PDS hosts are
+blocked in the agents' environment):
+
+* ``moon_080317.tf``, ``moon_assoc_me.tf`` and ``moon_pa_de421_1900-2050.bpc``: the copies
+  bundled in the PyPI wheel ``lunarsky==1.0.1.post2`` have exactly these SHA-256 values.
+* ``de421.bsp``: the copy in PyPI ``skyfield-data==7.0.0`` has a different SHA-256
+  (``a20a7139...``), yet CSPICE with that file plus the three files above reproduces the
+  committed ``spice_*`` Horizons-comparison columns within their 1e-5 deg rounding.
+* ``naif0012.tls``, ``pck00010.tpc`` and both LOLA files: not checked (no copy available).
+
+Site coordinates: the nine ``artemis_candidate`` names are the Artemis III candidate regions
+announced by NASA on 2024-10-28 ("NASA Provides Update on Artemis III Moon Landing Regions"),
+which publishes regions, not point coordinates. The latitude/longitude of every site below is a
+representative point chosen by the original author, without a cited source; ``shackleton_ridge``
+and ``shackleton_psr_floor`` are extra reference points, not Artemis regions.
+"""
 
 from __future__ import annotations
 
@@ -131,7 +149,7 @@ DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
         category="artemis_candidate",
         latitude_deg=-83.678,
         longitude_east_deg=55.553,
-        description="Setor leste plano da borda de Nobile (Artemis III), combinando declividade segura CLPS e visibilidade orbital.",
+        description="Ponto representativo (coordenadas sem fonte) no setor leste da borda da cratera Nobile, região Artemis III 'Nobile Rim 2'.",
     ),
     CandidateSiteSpec(
         site_id="peak_near_cabeus_b",
@@ -139,7 +157,7 @@ DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
         category="artemis_candidate",
         latitude_deg=-82.800,
         longitude_east_deg=318.378,
-        description="Terraço adjacente à região de Cabeus B (Artemis III), setor histórico de detecção de gelo pelo experimento LCROSS.",
+        description="Ponto representativo (coordenadas sem fonte) perto da região Artemis III 'Peak near Cabeus B'; no DEM o ponto não fica em um pico (ver elevation_m), então as coordenadas precisam de revisão.",
     ),
     CandidateSiteSpec(
         site_id="haworth_rim",
@@ -155,7 +173,7 @@ DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
         category="artemis_candidate",
         latitude_deg=-88.161,
         longitude_east_deg=287.389,
-        description="Borda elevada e plana da cratera de Gerlache (Artemis III), combinando alta latitude polar e acesso ao interior sombreado.",
+        description="Ponto representativo (coordenadas sem fonte) na borda da cratera de Gerlache, região Artemis III 'de Gerlache Rim 2'.",
     ),
     CandidateSiteSpec(
         site_id="slater_plain",
@@ -163,7 +181,7 @@ DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
         category="artemis_candidate",
         latitude_deg=-88.589,
         longitude_east_deg=108.347,
-        description="Planície elevada adjacente à cratera Slater (Artemis III), no hemisfério oculto próximo ao polo sul.",
+        description="Ponto representativo (coordenadas sem fonte) perto da cratera Slater, região Artemis III 'Slater Plain', no lado oculto próximo ao polo sul; não é um ponto elevado no DEM (ver elevation_m).",
     ),
     CandidateSiteSpec(
         site_id="shackleton_psr_floor",
@@ -171,7 +189,7 @@ DEFAULT_SOUTH_POLE_SITES: tuple[CandidateSiteSpec, ...] = (
         category="psr_contrast",
         latitude_deg=-89.625,
         longitude_east_deg=118.82,
-        description="Fundo da cratera Shackleton (Região Permanentemente Sombreada); demonstra bloqueio DTE e valor crítico de satélites relay.",
+        description="Fundo da cratera Shackleton (ponto de contraste em PSR, coordenadas sem fonte); ilustra o bloqueio da linha de visada direta à Terra e o ganho que um relay hipotético traria.",
     ),
 )
 
