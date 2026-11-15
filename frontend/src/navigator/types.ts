@@ -210,6 +210,8 @@ export interface EngineeringConfig {
   panelMode: PanelMode;
   survivalLoadW: number;
   antennaMaskDeg: number;
+  /** Maximum range for the primary relay satellite, from the file's preset. */
+  elfoMaxRangeKm: number;
   dteMarginMode: 'full_disk' | 'center';
   relayEnabled: boolean;
   weights: ScoreWeightsConfig;
