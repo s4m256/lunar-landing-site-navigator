@@ -339,8 +339,14 @@ def test_relay_presets_obey_kepler_third_law(dataset: dict) -> None:
         assert preset["apolune_alt_km"] == pytest.approx(preset["a_km"] * (1 + preset["e"]) - radius_km, abs=0.1)
         assert preset["perilune_alt_km"] == pytest.approx(preset["a_km"] * (1 - preset["e"]) - radius_km, abs=0.1)
         assert preset["perilune_alt_km"] > 0.0
+    # Orbital elements only: the preset *names* were relabeled "Hypothetical ..." by SPA-10 and the
+    # committed dataset predates that; the label debt is tracked once, by
+    # test_navigator.py::test_committed_dataset_carries_current_honesty_labels.
+    def _elements(spec: dict) -> dict:
+        return {k: v for k, v in spec.items() if k != "name"}
+
     for key, obj in (("lro", LRO_PRESET), ("elfo_pathfinder", ELFO_PATHFINDER_PRESET), ("elfo_constellation", ELFO_CONSTELLATION_PRESET)):
-        assert dataset["relay_presets"][key] == obj.to_contract_dict()
+        assert _elements(dataset["relay_presets"][key]) == _elements(obj.to_contract_dict())
 
 
 def test_published_scores_are_reproducible_from_published_inputs(dataset: dict) -> None:
@@ -431,16 +437,13 @@ def test_psr_distance_is_never_the_search_fallback(dataset: dict) -> None:
     assert not offenders, offenders[:5]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "ACHADO SPA-13 (confirma auditoria SPA-9 §6.2): max_solar_elevation_curve, documentada como limite "
-        "superior em 18,6 anos e usada em is_site_psr e na máscara PSR local, fixa a latitude subsolar em "
-        "-1,543 deg; as elevações do Sol publicadas a excedem em até ~0,014 deg nos 10 sítios (~130 de 721 "
-        "amostras, início da janela). Derivar a envoltória da efeméride e regenerar o dataset."
-    ),
-)
 def test_solar_envelope_upper_bounds_published_sun_elevations(dataset: dict) -> None:
+    """ACHADO SPA-13 / auditoria SPA-9 §6.2, corrigido na SPA-10.
+
+    A envoltória antiga fixava a latitude subsolar em -1,543° e era excedida em ~0,014° no início da
+    janela. A SPA-10 passou a usar o extremo do DE421 em 1900-2050 (dem_horizon.py); a derivação da
+    constante é conferida em test_psr_criterion.py. Este teste confere o efeito nos dados publicados.
+    """
     offenders = []
     for site in _sites(dataset):
         sky = site["sky_series"]
@@ -523,13 +526,9 @@ def test_smooth_sphere_horizon_equals_analytical_dip(
     assert np.ptp(horizon) < 1e-9
 
 
-def test_max_solar_elevation_envelope_known_values() -> None:
-    az = np.array([0.0, 90.0, 180.0, 270.0])
-    assert np.allclose(max_solar_elevation_curve(-90.0, az), 1.543, atol=1e-9)
-    curve = max_solar_elevation_curve(-85.0, az)
-    assert curve[0] == pytest.approx(5.0 + 1.543, abs=1e-6)  # towards the equator
-    assert curve[2] == pytest.approx(1.543 - 5.0, abs=1e-6)  # across the pole
-    assert curve[1] == pytest.approx(curve[3])
+# The analytic shape of max_solar_elevation_curve (formerly checked here against the fixed
+# 1.543 deg constant) is covered once, against an ENU projection, by
+# test_psr_criterion.py::test_solar_envelope_formula_matches_enu_projection.
 
 
 def test_solar_disk_fraction_analytical_values() -> None:
